@@ -23,7 +23,13 @@ export async function runMigrations(
   const canonicalMigrations = JSON.parse(
     await readFile(manifestPath, "utf8"),
   ) as Array<[string, string]>;
-  const client = new pg.Client({ connectionString });
+  const client = new pg.Client({
+    connectionString,
+    ssl:
+      process.env.DATABASE_SSL === "true"
+        ? { rejectUnauthorized: false }
+        : false,
+  });
   const applied: string[] = [];
   try {
     await client.connect();
