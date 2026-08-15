@@ -1,0 +1,14 @@
+{
+  "name": "storesync-qa",
+  "private": true,
+  "scripts": {
+    "qa:up": "docker compose -f docker-compose.qa.yml up -d --build",
+    "qa:down": "docker compose -f docker-compose.qa.yml down --remove-orphans",
+    "qa:reset": "docker compose -f docker-compose.qa.yml down --volumes --remove-orphans && docker compose -f docker-compose.qa.yml up -d --build",
+    "qa:restart": "docker compose -f docker-compose.qa.yml restart && npm run qa:verify",
+    "qa:status": "docker compose -f docker-compose.qa.yml ps",
+    "qa:logs": "docker compose -f docker-compose.qa.yml logs --tail=200",
+    "qa:verify": "node scripts/qa-verify.mjs",
+    "qa:release": "node scripts/qa-release.mjs"
+  }
+}

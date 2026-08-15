@@ -1,0 +1,19 @@
+[
+  ["001_public_content", "src/database/schema.sql"],
+  ["002_customer_loyalty", "../database/phase2_schema.sql"],
+  ["003_ecommerce", "../database/phase4_ecommerce_schema.sql"],
+  ["004_analytics", "../database/phase3_schema.sql"],
+  ["005_payment_expansion", "../database/expansion_phase2_schema.sql"],
+  ["006_commerce_expansion", "../database/expansion_phase3_schema.sql"],
+  ["007_offline_devices", "../database/phase4_schema.sql"],
+  ["008_operations", "../database/phase4_operational_schema.sql"],
+  ["009_pos_offline", "../database/expansion_phase3_pos_schema.sql"],
+  ["010_compliance", "../database/expansion_phase5_compliance_schema.sql"],
+  ["011_capability_scope", "../database/wp1_capability_scope_schema.sql"],
+  ["012_organization_market_configuration", "../database/wp0_organization_config_schema.sql"],
+  ["013_storefront_catalog", "../database/013_storefront_catalog.sql"],
+  ["014_phase07_integration_safety", "../database/014_phase07_integration_safety.sql"],
+  ["015_phase08_analytics_audit", "../database/015_phase08_analytics_audit.sql"],
+  ["016_nepal_market_configuration", "../database/016_nepal_market_configuration.sql"],
+  ["017_order_events", "../database/017_order_events.sql"]
+]

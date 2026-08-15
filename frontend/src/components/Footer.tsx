@@ -1,0 +1,6 @@
+import Link from 'next/link';
+import { AtSign, BriefcaseBusiness, Camera, MessageCircle } from 'lucide-react';
+
+const cols = { Shop: ['Grocery', 'Fresh food', 'Home & kitchen', 'Electronics', 'Fashion', 'Today’s deals'], 'Customer Service': ['Help centre', 'Track an order', 'Delivery & pickup', 'Returns & refunds', 'Contact us'], 'About NOVA MART': ['Our story', 'Sustainability', 'Quality promise', 'NOVA Foundation'], Corporate: ['Investors', 'Newsroom', 'Suppliers', 'Real estate'], 'Work With Us': ['Careers', 'Sell with us', 'Franchise', 'Partner portal'], Policies: ['Privacy', 'Terms of use', 'Accessibility', 'Cookie choices'] };
+
+export default function Footer() { return <footer><div className="footer-top shell"><Link href="/" className="logo light"><i>N</i><span>NOVA<b>MART</b></span></Link><p>Everyday value. Modern retail.<br />Built for every home.</p><div className="socials" role="group" aria-label="Social media"><MessageCircle /><Camera /><AtSign /><BriefcaseBusiness /></div></div><div className="footer-grid shell">{Object.entries(cols).map(([heading, links]) => <div key={heading}><h3>{heading}</h3>{links.map((item) => <Link href="/shop" key={item}>{item}</Link>)}</div>)}</div><div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Ltd.</span><span>Nepal · English</span><span>eSewa · Khalti · Cash</span></div></footer>; }

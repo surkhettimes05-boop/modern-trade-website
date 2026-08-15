@@ -1,0 +1,38 @@
+name: Quality gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend
+        run: npm ci --prefix backend
+      - name: Install frontend
+        run: npm ci --prefix frontend
+      - name: Backend type-check
+        run: npm run type-check --prefix backend
+      - name: Backend tests
+        run: npm run test:ci --prefix backend
+      - name: Backend lint baseline
+        run: npm run lint:ci --prefix backend
+      - name: Frontend type-check
+        run: npm run type-check --prefix frontend
+      - name: Frontend lint
+        run: npm run lint --prefix frontend
+      - name: Frontend build
+        run: npm run build --prefix frontend
+      - name: Dependency audit
+        run: npm audit --prefix backend --audit-level=high --omit=dev && npm audit --prefix frontend --audit-level=high --omit=dev

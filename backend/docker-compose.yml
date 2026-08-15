@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: storesync-db
+    environment:
+      POSTGRES_DB: storesync
+      POSTGRES_USER: storesync
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storesync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - storesync-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: storesync-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - storesync-network
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: storesync-backend
+    environment:
+      DATABASE_URL: postgresql://storesync:${DB_PASSWORD:-changeme}@postgres:5432/storesync
+      REDIS_URL: redis://redis:6379
+      REDIS_NAMESPACE: storesync
+      PORT: 3001
+      HOST: 0.0.0.0
+      NODE_ENV: ${NODE_ENV:-production}
+      JWT_SECRET: ${JWT_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SIGNATURE_SECRET: ${SIGNATURE_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      STRAPI_API_URL: ${STRAPI_API_URL}
+      STRAPI_API_TOKEN: ${STRAPI_API_TOKEN}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
+      CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID}
+      ESEWA_API_KEY: ${ESEWA_API_KEY}
+      ESEWA_SECRET_KEY: ${ESEWA_SECRET_KEY}
+      ESEWA_BASE_URL: ${ESEWA_BASE_URL}
+      ESEWA_MERCHANT_CODE: ${ESEWA_MERCHANT_CODE}
+      KHALTI_API_KEY: ${KHALTI_API_KEY}
+      KHALTI_SECRET_KEY: ${KHALTI_SECRET_KEY}
+      KHALTI_BASE_URL: ${KHALTI_BASE_URL}
+      FONEPAY_MERCHANT_ID: ${FONEPAY_MERCHANT_ID}
+      FONEPAY_SECRET_KEY: ${FONEPAY_SECRET_KEY}
+      FONEPAY_BASE_URL: ${FONEPAY_BASE_URL}
+      PAYMENT_ENCRYPTION_KEY: ${PAYMENT_ENCRYPTION_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SIGNATURE_SECRET: ${SIGNATURE_SECRET}
+      BAATO_API_KEY: ${BAATO_API_KEY}
+      BAATO_BASE_URL: ${BAATO_BASE_URL}
+      GALLI_API_KEY: ${GALLI_API_KEY}
+      GALLI_BASE_URL: ${GALLI_BASE_URL}
+      DEFAULT_MAP_PROVIDER: ${DEFAULT_MAP_PROVIDER:-}
+      ENABLE_ADMIN_API: true
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - storesync-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      args:
+        API_URL: http://backend:3001
+    container_name: storesync-frontend
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - storesync-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  storesync-network:
+    driver: bridge

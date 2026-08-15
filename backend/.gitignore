@@ -1,0 +1,5 @@
+.test-postgres-data/
+.test-postgres.log
+test-lifecycle.log
+baseline-third-pass.txt
+full-db-pass*.txt

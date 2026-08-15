@@ -1,0 +1,8 @@
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/.git
+**/*.log
+implementation/*.docx
+StoreSync_*.docx

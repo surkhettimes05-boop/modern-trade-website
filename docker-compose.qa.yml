@@ -1,0 +1,136 @@
+name: storesync-qa
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  environment:
+    NODE_ENV: qa
+    DATABASE_URL: postgresql://storesync_qa:${QA_DB_PASSWORD:-storesync_qa_password}@postgres:5432/storesync_qa
+    REDIS_URL: redis://redis:6379
+    REDIS_NAMESPACE: storesync-qa
+    PORT: 3001
+    HOST: 0.0.0.0
+    CORS_ORIGIN: http://localhost:53000
+    JWT_SECRET: ${QA_JWT_SECRET:-qa-only-jwt-secret-change-me}
+    COOKIE_SECRET: ${QA_COOKIE_SECRET:-qa-only-cookie-secret-change-me}
+    ENCRYPTION_KEY: ${QA_ENCRYPTION_KEY:-qa-only-encryption-key-32-bytes!}
+    SIGNATURE_SECRET: ${QA_SIGNATURE_SECRET:-qa-only-signature-secret-32!}
+    PAYMENT_ENCRYPTION_KEY: ${QA_PAYMENT_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+    ENABLE_ADMIN_API: "true"
+    ENABLE_ELECTRONIC_PAYMENTS: "false"
+    DEFAULT_COUNTRY_CODE: NP
+    DEFAULT_CURRENCY_CODE: NPR
+    DEFAULT_LOCALE: en-NP
+    DEFAULT_TIMEZONE: Asia/Kathmandu
+    DEFAULT_TAX_REGIME: IRD
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: storesync_qa
+      POSTGRES_USER: storesync_qa
+      POSTGRES_PASSWORD: ${QA_DB_PASSWORD:-storesync_qa_password}
+    ports:
+      - "55432:5432"
+    volumes:
+      - storesync_qa_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storesync_qa -d storesync_qa"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+    networks: [storesync-qa]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "56379:6379"
+    volumes:
+      - storesync_qa_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+    networks: [storesync-qa]
+
+  qa-migrate:
+    <<: *backend
+    command: ["node", "dist/database/migrate.js"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [storesync-qa]
+
+  qa-seed:
+    <<: *backend
+    command: ["node", "dist/database/seed.js"]
+    restart: "no"
+    depends_on:
+      qa-migrate:
+        condition: service_completed_successfully
+    networks: [storesync-qa]
+
+  backend:
+    <<: *backend
+    ports:
+      - "53001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qa-seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks: [storesync-qa]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        API_URL: http://backend:3001
+    environment:
+      NODE_ENV: production
+    ports:
+      - "53000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks: [storesync-qa]
+
+volumes:
+  storesync_qa_postgres_data:
+  storesync_qa_redis_data:
+
+networks:
+  storesync-qa:
+    driver: bridge
