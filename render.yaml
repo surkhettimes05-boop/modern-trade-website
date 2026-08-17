@@ -2,7 +2,7 @@ services:
   - type: keyvalue
     name: storesync-redis
     region: singapore
-    plan: starter
+    plan: free
     ipAllowList: []
     maxmemoryPolicy: noeviction
 
@@ -12,7 +12,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     region: singapore
-    plan: starter
+    plan: free
     healthCheckPath: /api/health/ready
     envVars:
       - key: NODE_ENV

@@ -54,3 +54,8 @@ See `git diff --stat`; the main areas are backend authentication/authorization/c
 ## Next action
 
 Run the Compose-backed authenticated checkout/order flow and Docker smoke checks in CI, then complete the remaining consent-route customer authorization migration and server-minted MFA step-up flow.
+## 2026-08-17 — Render no-card deployment path
+
+- Changed both Render Blueprint services from the paid `starter` plan to `free` in `render.yaml` so the backend can be created without payment information.
+- The free path is suitable for testing/preview only: the backend may spin down after inactivity, and free Render Key Value is in-memory and may lose Redis data after restarts.
+- Render documentation confirms that free Web Services and Key Value instances are available without payment details.
