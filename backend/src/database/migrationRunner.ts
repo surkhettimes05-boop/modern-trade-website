@@ -36,6 +36,44 @@ export async function runMigrations(
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       migration_id text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    const migrationState = await client.query(
+      `SELECT COUNT(*)::int AS count,
+              to_regtype('public.publication_status') IS NOT NULL AS has_legacy_schema
+       FROM schema_migrations`,
+    );
+    if (
+      migrationState.rows[0].count === 0 &&
+      migrationState.rows[0].has_legacy_schema
+    ) {
+      // This project was initialized before schema_migrations existed. The
+      // schema marker proves the numbered baseline is already present, so
+      // record checksums and continue with any future migrations.
+      for (const [id, relativePath] of canonicalMigrations) {
+        const sqlPath = relativePath.startsWith("../database/")
+          ? resolve(
+              process.cwd(),
+              "..",
+              "database",
+              relativePath.replace("../database/", ""),
+            )
+          : relativePath.startsWith("src/database/") &&
+              manifestPath.includes(`${resolve(process.cwd(), "dist")}`)
+            ? resolve(
+                process.cwd(),
+                "dist/database",
+                relativePath.replace("src/database/", ""),
+              )
+            : resolve(process.cwd(), relativePath);
+        const sql = await readFile(sqlPath, "utf8");
+        const checksum = crypto.createHash("sha256").update(sql).digest("hex");
+        await client.query(
+          "INSERT INTO schema_migrations (migration_id, checksum) VALUES ($1, $2)",
+          [id, checksum],
+        );
+        applied.push(id);
+      }
+    }
     for (const [id, relativePath] of canonicalMigrations) {
       const sqlPath = relativePath.startsWith("../database/")
         ? resolve(
