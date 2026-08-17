@@ -4,6 +4,7 @@ WORKDIR /app/frontend
 
 ARG API_URL=http://backend:3001
 ENV API_URL=${API_URL}
+ENV NEXT_STANDALONE=1
 
 COPY frontend/package*.json ./
 RUN npm ci
@@ -16,6 +17,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ARG API_URL=http://backend:3001
+ENV API_URL=${API_URL}
 
 COPY --from=builder /app/frontend/public ./public
 COPY --from=builder /app/frontend/.next/standalone ./

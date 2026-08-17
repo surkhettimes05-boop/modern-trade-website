@@ -1,10 +1,20 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { WebOrderService } from "../services/webOrderService.js";
+import { authenticateStaff } from "../middleware/authentication.js";
 
 const webOrderService = new WebOrderService();
 
 export async function webOrderRoutes(fastify: FastifyInstance) {
+  fastify.addHook("onRequest", authenticateStaff);
+  fastify.addHook("preHandler", async (request, reply) => {
+    const user = request.user as { roleKey?: string; capabilities?: string[] };
+    const privileged = user.roleKey === "platform_admin" || user.capabilities?.includes("system.manage");
+    const capability = request.method === "GET" ? "orders.read" : "orders.write";
+    if (!privileged && !user.capabilities?.includes(capability)) {
+      return reply.status(403).send({ error: "Order permission required" });
+    }
+  });
   // Web Order: Create order from cart
   fastify.post("/web-orders", async (request, reply) => {
     const schema = z.object({

@@ -179,7 +179,9 @@ describe("Authorization", () => {
   });
 
   test("modified token signature is rejected", async () => {
-    const modified = `${tokens.user.slice(0, -1)}${tokens.user.endsWith("a") ? "b" : "a"}`;
+    const [header, payload, signature] = tokens.user.split(".");
+    const replacement = signature[0] === "a" ? "b" : "a";
+    const modified = `${header}.${payload}.${replacement}${signature.slice(1)}`;
     expect(
       (
         await app.inject({
@@ -403,7 +405,7 @@ describe("Authorization", () => {
     ).toBe(403);
   });
 
-  test("step-up route accepts a recent authentication timestamp", async () => {
+  test("step-up route rejects a client-controlled authentication timestamp", async () => {
     expect(
       (
         await app.inject({
@@ -412,7 +414,7 @@ describe("Authorization", () => {
           headers: { ...auth("admin"), "x-auth-time": String(Date.now()) },
         })
       ).statusCode,
-    ).toBe(200);
+    ).toBe(403);
   });
 
   test("step-up route rejects a stale authentication timestamp", async () => {

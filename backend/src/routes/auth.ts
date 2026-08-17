@@ -7,6 +7,8 @@ import { validatePhone } from "../utils/phoneNormalization.js";
 import { query } from "../database/connection.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { AuthenticatedUser } from "../plugins/authorization.js";
+import crypto from "node:crypto";
+import { CUSTOMER_CSRF_COOKIE, CUSTOMER_SESSION_COOKIE } from "../middleware/customerAuthentication.js";
 
 const otpService = new OTPService();
 const sessionService = new SessionService();
@@ -143,10 +145,24 @@ export async function authRoutes(fastify: FastifyInstance) {
           user_agent: request.headers["user-agent"],
         });
 
+        const csrfToken = crypto.randomBytes(32).toString("hex");
+        reply.setCookie(CUSTOMER_SESSION_COOKIE, session.session_token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
+        reply.setCookie(CUSTOMER_CSRF_COOKIE, csrfToken, {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
         return {
           success: true,
           message: "Login successful",
-          session_token: session.session_token,
           customer: {
             id: customer.id,
             phone_masked: customer.phone_masked,
@@ -174,10 +190,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // Public: Validate session
   fastify.get("/session/validate", async (request, reply) => {
-    const sessionToken = request.headers["authorization"]?.replace(
-      "Bearer ",
-      "",
-    );
+    const sessionToken = request.cookies?.[CUSTOMER_SESSION_COOKIE];
 
     if (!sessionToken) {
       reply.status(401);
@@ -218,18 +231,19 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // Public: Logout (revoke session)
   fastify.post("/logout", async (request, reply) => {
-    const sessionToken = request.headers["authorization"]?.replace(
-      "Bearer ",
-      "",
-    );
+    const sessionToken = request.cookies?.[CUSTOMER_SESSION_COOKIE];
 
     if (!sessionToken) {
       reply.status(401);
       return { error: "No session token provided" };
     }
 
+    if (request.headers["x-csrf-token"] !== request.cookies?.[CUSTOMER_CSRF_COOKIE])
+      return reply.status(403).send({ error: "CSRF validation failed" });
     try {
       await sessionService.revokeSession(sessionToken, "User logout");
+      reply.clearCookie(CUSTOMER_SESSION_COOKIE, { path: "/" });
+      reply.clearCookie(CUSTOMER_CSRF_COOKIE, { path: "/" });
       return { success: true, message: "Logged out successfully" };
     } catch {
       reply.status(500);
@@ -239,15 +253,14 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // Public: Revoke all sessions (for security)
   fastify.post("/logout-all", async (request, reply) => {
-    const sessionToken = request.headers["authorization"]?.replace(
-      "Bearer ",
-      "",
-    );
+    const sessionToken = request.cookies?.[CUSTOMER_SESSION_COOKIE];
 
     if (!sessionToken) {
       reply.status(401);
       return { error: "No session token provided" };
     }
+    if (request.headers["x-csrf-token"] !== request.cookies?.[CUSTOMER_CSRF_COOKIE])
+      return reply.status(403).send({ error: "CSRF validation failed" });
 
     try {
       const session = await sessionService.validateSession(sessionToken);
@@ -270,10 +283,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // Public: Get active sessions
   fastify.get("/sessions", async (request, reply) => {
-    const sessionToken = request.headers["authorization"]?.replace(
-      "Bearer ",
-      "",
-    );
+    const sessionToken = request.cookies?.[CUSTOMER_SESSION_COOKIE];
 
     if (!sessionToken) {
       reply.status(401);

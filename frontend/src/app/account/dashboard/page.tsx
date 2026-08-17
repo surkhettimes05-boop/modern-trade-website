@@ -36,25 +36,15 @@ export default function AccountDashboard() {
   const router = useRouter();
 
   const fetchAccountData = useCallback(async () => {
-    const sessionToken = localStorage.getItem('session_token');
-    if (!sessionToken) {
-      router.push('/account');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
     try {
       // Fetch customer profile
       const customerResponse = await fetch('/api/auth/session/validate', {
-        headers: {
-          Authorization: `Bearer ${sessionToken}`,
-        },
       });
 
       if (!customerResponse.ok) {
-        localStorage.removeItem('session_token');
         router.push('/account');
         return;
       }
@@ -84,18 +74,14 @@ export default function AccountDashboard() {
   }, [fetchAccountData]);
 
   const handleLogout = async () => {
-    const sessionToken = localStorage.getItem('session_token');
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${sessionToken}`,
-        },
+        headers: { 'x-csrf-token': document.cookie.match(/(?:^|; )customer_csrf=([^;]+)/)?.[1] || '' },
       });
     } catch (err) {
       console.error('Logout error:', err);
     }
-    localStorage.removeItem('session_token');
     router.push('/account');
   };
 

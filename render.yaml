@@ -1,0 +1,66 @@
+services:
+  - type: keyvalue
+    name: storesync-redis
+    region: singapore
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+
+  - type: web
+    name: storesync-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    region: singapore
+    plan: free
+    healthCheckPath: /api/health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: ENABLE_ADMIN_API
+        value: "true"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: storesync-redis
+          property: connectionString
+      - key: REDIS_NAMESPACE
+        value: storesync-production
+      - key: CORS_ORIGIN
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: SIGNATURE_SECRET
+        generateValue: true
+      - key: PAYMENT_ENCRYPTION_KEY
+        sync: false
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "900000"
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: "100"
+      - key: ENABLE_ELECTRONIC_PAYMENTS
+        value: "false"
+      - key: SMS_PROVIDER
+        sync: false
+      - key: SMS_PROVIDER_API_KEY
+        sync: false
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: EMAIL_PROVIDER_API_KEY
+        sync: false

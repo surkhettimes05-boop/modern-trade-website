@@ -178,9 +178,7 @@ function checkStoreAccess(
 
   // ORGANIZATION users can access stores in their organization
   if (user.scopeType === "ORGANIZATION") {
-    // Would need to check if store belongs to organization
-    // For now, assume organization-scoped users can access any store
-    return { authorized: true };
+    return { authorized: false, reason: "Organization store membership must be verified", scopeMismatch: true };
   }
 
   // STORE users can only access their assigned stores
@@ -242,11 +240,8 @@ function checkStepUpAuth(
     return { authorized: false, reason: "User not authenticated" };
   }
 
-  // Check if user recently authenticated (within last 5 minutes)
-  const lastAuthTime = request.headers["x-auth-time"] as string;
-  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-
-  if (!lastAuthTime || parseInt(lastAuthTime) < fiveMinutesAgo) {
+  const stepUpUntil = (user as AuthenticatedUser & { stepUpUntil?: number }).stepUpUntil;
+  if (!stepUpUntil || stepUpUntil < Date.now()) {
     return {
       authorized: false,
       reason: "Step-up authentication required",

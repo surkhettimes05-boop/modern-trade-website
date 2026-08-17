@@ -119,8 +119,8 @@ export class ShoppingCartService {
     cart_id: string;
     product_id: string;
     quantity: number;
-    unit_price: number;
-    discount_amount?: number;
+    unit_price?: number;
+    discount_amount?: never;
     metadata?: any;
   }): Promise<CartItem> {
     const product = await query(
@@ -149,8 +149,7 @@ export class ShoppingCartService {
       [itemData.cart_id, itemData.product_id],
     );
 
-    const lineTotal =
-      itemData.quantity * authoritativePrice - (itemData.discount_amount || 0);
+    const lineTotal = itemData.quantity * authoritativePrice;
 
     if (existing.rows.length > 0) {
       // Update existing item
@@ -166,7 +165,7 @@ export class ShoppingCartService {
         [
           itemData.quantity,
           authoritativePrice,
-          itemData.discount_amount || 0,
+          0,
           existing.rows[0].id,
         ],
       );
@@ -183,7 +182,7 @@ export class ShoppingCartService {
         itemData.product_id,
         itemData.quantity,
         authoritativePrice,
-        itemData.discount_amount || 0,
+        0,
         lineTotal,
         JSON.stringify(itemData.metadata || {}),
       ],
@@ -199,8 +198,8 @@ export class ShoppingCartService {
     itemId: string,
     updates: {
       quantity?: number;
-      unit_price?: number;
-      discount_amount?: number;
+      unit_price?: never;
+      discount_amount?: never;
     },
   ): Promise<CartItem> {
     const current = await query(
@@ -221,18 +220,6 @@ export class ShoppingCartService {
     if (updates.quantity !== undefined) {
       fields.push(`quantity = $${paramIndex}`);
       values.push(updates.quantity);
-      paramIndex++;
-    }
-
-    if (updates.unit_price !== undefined) {
-      fields.push(`unit_price = $${paramIndex}`);
-      values.push(updates.unit_price);
-      paramIndex++;
-    }
-
-    if (updates.discount_amount !== undefined) {
-      fields.push(`discount_amount = $${paramIndex}`);
-      values.push(updates.discount_amount);
       paramIndex++;
     }
 

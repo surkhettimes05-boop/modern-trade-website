@@ -9,6 +9,7 @@
     "qa:status": "docker compose -f docker-compose.qa.yml ps",
     "qa:logs": "docker compose -f docker-compose.qa.yml logs --tail=200",
     "qa:verify": "node scripts/qa-verify.mjs",
-    "qa:release": "node scripts/qa-release.mjs"
+    "qa:release": "node scripts/qa-release.mjs",
+    "qa:local": "node scripts/qa-local.mjs"
   }
 }

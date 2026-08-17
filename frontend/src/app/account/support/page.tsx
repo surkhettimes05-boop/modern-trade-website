@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function SupportPage() {
   const [requestType, setRequestType] = useState<'missing_points' | 'general'>('missing_points');
@@ -12,22 +11,14 @@ export default function SupportPage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const sessionToken = localStorage.getItem('session_token');
-    if (!sessionToken) {
-      router.push('/account');
-      return;
-    }
-
     try {
       const customerResponse = await fetch('/api/auth/session/validate', {
-        headers: { Authorization: `Bearer ${sessionToken}` },
       });
       const customerData = await customerResponse.json();
 

@@ -58,7 +58,7 @@ try {
       username,
       passwordHash,
       role.rows[0].id,
-      role.rows[0].capabilities,
+      JSON.stringify(role.rows[0].capabilities || []),
       organization.rows[0].id,
     ],
   );
