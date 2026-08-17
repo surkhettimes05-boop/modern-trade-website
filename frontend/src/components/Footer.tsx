@@ -1,6 +1,54 @@
 import Link from 'next/link';
 import { AtSign, BriefcaseBusiness, Camera, MessageCircle } from 'lucide-react';
 
-const cols = { Shop: ['Grocery', 'Fresh food', 'Home & kitchen', 'Electronics', 'Fashion', 'Today’s deals'], 'Customer Service': ['Help centre', 'Track an order', 'Delivery & pickup', 'Returns & refunds', 'Contact us'], 'About NOVA MART': ['Our story', 'Sustainability', 'Quality promise', 'NOVA Foundation'], Corporate: ['Investors', 'Newsroom', 'Suppliers', 'Real estate'], 'Work With Us': ['Careers', 'Sell with us', 'Franchise', 'Partner portal'], Policies: ['Privacy', 'Terms of use', 'Accessibility', 'Cookie choices'] };
+type FooterLink = { label: string; href: string };
 
-export default function Footer() { return <footer><div className="footer-top shell"><Link href="/" className="logo light"><i>N</i><span>NOVA<b>MART</b></span></Link><p>Everyday value. Modern retail.<br />Built for every home.</p><div className="socials" role="group" aria-label="Social media"><MessageCircle /><Camera /><AtSign /><BriefcaseBusiness /></div></div><div className="footer-grid shell">{Object.entries(cols).map(([heading, links]) => <div key={heading}><h3>{heading}</h3>{links.map((item) => <Link href="/shop" key={item}>{item}</Link>)}</div>)}</div><div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Ltd.</span><span>Nepal · English</span><span>eSewa · Khalti · Cash</span></div></footer>; }
+const cols: Record<string, FooterLink[]> = {
+  Shop: [
+    { label: 'Grocery', href: '/shop' }, { label: 'Fresh food', href: '/shop' },
+    { label: 'Home & kitchen', href: '/shop' }, { label: 'Electronics', href: '/shop' },
+    { label: 'Fashion', href: '/shop' }, { label: 'Today’s deals', href: '/offers' },
+  ],
+  'Customer Service': [
+    { label: 'Help centre', href: '/faq' }, { label: 'Track an order', href: '/account/orders' },
+    { label: 'Delivery & pickup', href: '/services' }, { label: 'Returns & refunds', href: '/services' },
+    { label: 'Contact us', href: '/contact' },
+  ],
+  'About NOVA MART': [
+    { label: 'Our story', href: '/about' }, { label: 'Sustainability', href: '/about' },
+    { label: 'Quality promise', href: '/about' }, { label: 'NOVA Foundation', href: '/about' },
+  ],
+  Corporate: [
+    { label: 'Investors', href: '/about' }, { label: 'Newsroom', href: '/about' },
+    { label: 'Suppliers', href: '/contact' }, { label: 'Real estate', href: '/contact' },
+  ],
+  'Work With Us': [
+    { label: 'Careers', href: '/about' }, { label: 'Sell with us', href: '/contact' },
+    { label: 'Franchise', href: '/contact' }, { label: 'Partner portal', href: '/contact' },
+  ],
+  Policies: [
+    { label: 'Privacy', href: '/privacy' }, { label: 'Terms of use', href: '/terms' },
+    { label: 'Accessibility', href: '/about#accessibility' }, { label: 'Cookie choices', href: '/privacy#cookies' },
+  ],
+};
+
+const socialLinks = [
+  { label: 'Contact NOVA MART', href: '/contact', icon: MessageCircle },
+  { label: 'Find a NOVA MART store', href: '/stores', icon: Camera },
+  { label: 'Open your NOVA MART account', href: '/account', icon: AtSign },
+  { label: 'Work with NOVA MART', href: '/about', icon: BriefcaseBusiness },
+];
+
+export default function Footer() {
+  return <footer>
+    <div className="footer-top shell">
+      <Link href="/" className="logo light" aria-label="NOVA MART home"><i>N</i><span>NOVA<b>MART</b></span></Link>
+      <p>Everyday value. Modern retail.<br />Built for every home.</p>
+      <nav className="socials" aria-label="NOVA MART links">
+        {socialLinks.map(({ label, href, icon: Icon }) => <Link href={href} key={label} aria-label={label} title={label}><Icon aria-hidden="true" /></Link>)}
+      </nav>
+    </div>
+    <div className="footer-grid shell">{Object.entries(cols).map(([heading, links]) => <div key={heading}><h3>{heading}</h3>{links.map(({ label, href }) => <Link href={href} key={label}>{label}</Link>)}</div>)}</div>
+    <div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Ltd.</span><span>Nepal · English</span><span>eSewa · Khalti · Cash</span></div>
+  </footer>;
+}
