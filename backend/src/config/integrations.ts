@@ -22,7 +22,11 @@ export function getIntegrationSnapshot(
   env: NodeJS.ProcessEnv = process.env,
 ): IntegrationSnapshot {
   const email = present(env, "EMAIL_PROVIDER_API_KEY");
-  const sms = present(env, "SMS_PROVIDER_API_KEY");
+  const sms =
+    env.SMS_PROVIDER === "twilio" &&
+    present(env, "TWILIO_ACCOUNT_SID") &&
+    present(env, "TWILIO_AUTH_TOKEN") &&
+    present(env, "TWILIO_FROM_NUMBER");
   const mapProvider = env.DEFAULT_MAP_PROVIDER?.trim() || null;
   const mapKey =
     mapProvider === "Baato"
@@ -81,9 +85,18 @@ export function validateProductionIntegrations(
       "EMAIL_PROVIDER and EMAIL_PROVIDER_API_KEY must be configured together",
     );
   }
-  if (present(env, "SMS_PROVIDER_API_KEY") !== present(env, "SMS_PROVIDER")) {
-    throw new Error(
-      "SMS_PROVIDER and SMS_PROVIDER_API_KEY must be configured together",
-    );
+  if (env.SMS_PROVIDER) {
+    if (env.SMS_PROVIDER !== "twilio") {
+      throw new Error("SMS_PROVIDER must be twilio");
+    }
+    for (const key of [
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "TWILIO_FROM_NUMBER",
+    ]) {
+      if (!present(env, key)) {
+        throw new Error(`${key} is required when SMS_PROVIDER=twilio`);
+      }
+    }
   }
 }

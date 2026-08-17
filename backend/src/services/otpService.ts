@@ -23,6 +23,38 @@ const MAX_ATTEMPTS = 3;
 const RESEND_LIMIT_MINUTES = 1;
 const MAX_RESENDS_PER_HOUR = 5;
 
+async function sendTwilioSms(toLocalNumber: string, otpCode: string): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_FROM_NUMBER;
+
+  if (!accountSid || !authToken || !fromNumber) {
+    throw new Error("Twilio SMS is not configured");
+  }
+
+  const form = new URLSearchParams({
+    To: `+977${toLocalNumber}`,
+    From: fromNumber,
+    Body: `Your StoreSync login code is ${otpCode}. It expires in 5 minutes.`,
+  });
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form,
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Twilio SMS failed (${response.status}): ${detail.slice(0, 300)}`);
+  }
+}
+
 export class OTPService {
   /**
    * Generate a secure OTP code
@@ -58,16 +90,14 @@ export class OTPService {
       ],
     );
 
-    if (
-      process.env.NODE_ENV === "production" &&
-      !process.env.SMS_PROVIDER_API_KEY
-    ) {
-      throw new Error("SMS provider is unavailable; OTP delivery is disabled");
-    }
     if (process.env.NODE_ENV !== "production") {
       console.log(
         `OTP for ${phoneNormalized}: ${otpCode} (expires at ${expiresAt})`,
       );
+    } else if (process.env.SMS_PROVIDER === "twilio") {
+      await sendTwilioSms(phoneNormalized, otpCode);
+    } else {
+      throw new Error("SMS provider is unavailable; OTP delivery is disabled");
     }
 
     return otpCode;
