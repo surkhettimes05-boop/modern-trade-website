@@ -19,22 +19,14 @@ export default function ConsentPage() {
   const router = useRouter();
 
   const fetchConsents = useCallback(async () => {
-    const sessionToken = localStorage.getItem('session_token');
-    if (!sessionToken) {
-      router.push('/account');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
     try {
       const customerResponse = await fetch('/api/auth/session/validate', {
-        headers: { Authorization: `Bearer ${sessionToken}` },
       });
 
       if (!customerResponse.ok) {
-        localStorage.removeItem('session_token');
         router.push('/account');
         return;
       }
@@ -57,16 +49,14 @@ export default function ConsentPage() {
   }, [fetchConsents]);
 
   const handleGrantConsent = async (consentType: string, channel?: string) => {
-    const sessionToken = localStorage.getItem('session_token');
     try {
       const customerResponse = await fetch('/api/auth/session/validate', {
-        headers: { Authorization: `Bearer ${sessionToken}` },
       });
       const customerData = await customerResponse.json();
 
       const response = await fetch('/api/consent/grant', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': document.cookie.match(/(?:^|; )customer_csrf=([^;]+)/)?.[1] || '' },
         body: JSON.stringify({
           customer_id: customerData.customer.id,
           consent_type: consentType,

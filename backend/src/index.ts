@@ -51,7 +51,9 @@ validateProductionEnvironment();
 
 const fastify = Fastify({
   logger: true,
-  trustProxy: true,
+  trustProxy: process.env.TRUST_PROXY_HOPS
+    ? Number.parseInt(process.env.TRUST_PROXY_HOPS, 10)
+    : false,
 });
 
 // Register plugins
@@ -79,12 +81,12 @@ await fastify.register(rateLimit, {
 });
 
 await fastify.register(jwt, {
-  secret: process.env.JWT_SECRET || "dev-secret-change-in-production",
+  secret: process.env.JWT_SECRET || (() => { throw new Error("JWT_SECRET is required"); })(),
   cookie: { cookieName: "ops_session", signed: false },
 });
 
 await fastify.register(cookie, {
-  secret: process.env.COOKIE_SECRET || "cookie-secret",
+  secret: process.env.COOKIE_SECRET || (() => { throw new Error("COOKIE_SECRET is required"); })(),
   hook: "onRequest",
 });
 

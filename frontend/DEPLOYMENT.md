@@ -3,8 +3,12 @@
 ## Environment Variables
 
 ```bash
-NEXT_PUBLIC_API_URL=https://api.storesync.com
+API_URL=https://api.storesync.com
 ```
+
+`API_URL` must be the absolute public URL of the separately deployed Fastify
+backend. The Next.js `/api/*` route proxies browser requests server-side, so
+the backend URL does not need to be exposed as a browser API base URL.
 
 ## Docker Deployment
 
@@ -20,15 +24,40 @@ docker build -t storesync-frontend .
 docker run -d \
   --name storesync-frontend \
   -p 3000:3000 \
-  -e NEXT_PUBLIC_API_URL=https://api.storesync.com \
+  -e API_URL=https://api.storesync.com \
   storesync-frontend
 ```
 
 ## Vercel Deployment
 
-1. Connect repository to Vercel
-2. Configure environment variables
-3. Deploy automatically on push to main branch
+The repository contains a root `vercel.json` for the `frontend/` Next.js
+application. Connect the repository to Vercel and configure either the project
+Root Directory as `frontend` or use the root configuration as-is.
+
+Required Vercel environment variable:
+
+```text
+API_URL=https://api.your-domain.example
+```
+
+Set it for Preview and Production. Do not use `http://127.0.0.1`, `localhost`,
+or a private Docker hostname in Vercel.
+
+The Fastify backend must be deployed separately because it requires persistent
+PostgreSQL and Redis connections. Set its `CORS_ORIGIN` to the exact Vercel
+production URL (and any approved preview URL), and configure all required
+production secrets described in `backend/.env.example` and
+`backend/.env.production.example` and `docs/DEPLOYMENT_ENVIRONMENT.md`.
+
+Recommended release order:
+
+1. Provision managed PostgreSQL and Redis.
+2. Deploy the backend and run `npm run build` followed by the migration process
+   from `backend/DEPLOYMENT.md`.
+3. Verify `https://api.your-domain.example/api/health/ready` returns HTTP 200.
+4. Set Vercel `API_URL` to that backend URL and deploy the frontend.
+5. Verify the Vercel site, `/api/health/ready` proxy, customer authentication,
+   checkout, and staff capabilities before promoting the deployment.
 
 ## Static Export
 

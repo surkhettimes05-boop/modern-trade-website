@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
+    "test:unit": "jest --config jest.unit.config.js --runInBand --detectOpenHandles --verbose",
     "test:ci": "jest --runInBand --forceExit",
     "test:coverage": "jest --runInBand --forceExit --coverage",
     "lint": "eslint src --ext .ts",

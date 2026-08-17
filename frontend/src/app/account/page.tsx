@@ -3,6 +3,21 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+async function readApiResponse(response: Response): Promise<Record<string, unknown>> {
+  const body = await response.text();
+  if (!body) return {};
+
+  try {
+    return JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return {
+      error: response.ok
+        ? 'The backend returned an invalid response'
+        : `Backend request failed (HTTP ${response.status})`,
+    };
+  }
+}
+
 export default function AccountPage() {
   const [phone, setPhone] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -23,10 +38,10 @@ export default function AccountPage() {
         body: JSON.stringify({ phone, purpose: 'LOGIN' }),
       });
 
-      const data = await response.json();
+      const data = await readApiResponse(response);
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send OTP');
+        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send OTP');
       }
 
       setOtpSent(true);
@@ -49,18 +64,13 @@ export default function AccountPage() {
         body: JSON.stringify({ phone, otp_code: otp, purpose: 'LOGIN' }),
       });
 
-      const data = await response.json();
+      const data = await readApiResponse(response);
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to verify OTP');
+        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to verify OTP');
       }
 
-      // Store session token
-      if (data.session_token) {
-        localStorage.setItem('session_token', data.session_token);
-        // Redirect to dashboard
-        router.push('/account/dashboard');
-      }
+      router.push('/account/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify OTP');
     } finally {

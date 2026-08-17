@@ -36,6 +36,9 @@ export function validateProductionEnvironment(
   if (env.NODE_ENV !== "production") return;
   const required = [
     "DATABASE_URL",
+    "REDIS_URL",
+    "CORS_ORIGIN",
+    "APP_URL",
     "JWT_SECRET",
     "COOKIE_SECRET",
     "ENCRYPTION_KEY",
@@ -47,6 +50,16 @@ export function validateProductionEnvironment(
     throw new Error(
       `Missing required production configuration: ${missing.join(", ")}`,
     );
+  for (const name of ["DATABASE_URL", "REDIS_URL", "CORS_ORIGIN", "APP_URL"] as const) {
+    try {
+      const value = new URL(env[name]!);
+      if (name === "CORS_ORIGIN" && !["http:", "https:"].includes(value.protocol)) {
+        throw new Error("CORS_ORIGIN must use http or https");
+      }
+    } catch {
+      throw new Error(`${name} must be a valid absolute URL`);
+    }
+  }
   if (!/^[a-f0-9]{64}$/i.test(env.PAYMENT_ENCRYPTION_KEY!)) {
     throw new Error(
       "PAYMENT_ENCRYPTION_KEY must be exactly 64 hexadecimal characters",

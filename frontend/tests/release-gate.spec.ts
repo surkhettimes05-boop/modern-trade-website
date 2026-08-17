@@ -18,9 +18,16 @@ test.describe("release browser gate", () => {
     const pageErrors: string[] = [];
     const failedRequests: string[] = [];
     const serverErrors: string[] = [];
+    let expectedAuthFailure = false;
 
     page.on("console", (message) => {
-      if (message.type() === "error") consoleErrors.push(message.text());
+      if (message.type() === "error") {
+        if (message.text().includes("Failed to load resource") && expectedAuthFailure) {
+          expectedAuthFailure = false;
+        } else {
+          consoleErrors.push(message.text());
+        }
+      }
     });
     page.on("pageerror", (error) => pageErrors.push(error.message));
     page.on("requestfailed", (request) => {
@@ -28,6 +35,7 @@ test.describe("release browser gate", () => {
     });
     page.on("response", (response) => {
       if (response.status() >= 500) serverErrors.push(`${response.status()} ${response.url()}`);
+      if ([401, 403].includes(response.status()) && /\/api\/(auth|customer)\//.test(response.url())) expectedAuthFailure = true;
     });
 
     for (const route of criticalRoutes) {

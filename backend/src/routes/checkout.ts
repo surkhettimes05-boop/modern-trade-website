@@ -1,45 +1,28 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { SessionService } from "../services/sessionService.js";
+import { authenticateCustomer, customerId } from "../middleware/customerAuthentication.js";
 import { CheckoutService } from "../services/checkoutService.js";
 
-const sessions = new SessionService();
 const checkout = new CheckoutService();
 export async function checkoutRoutes(fastify: FastifyInstance) {
-  async function customer(request: any, reply: any) {
-    const token = request.headers.authorization?.replace("Bearer ", "");
-    if (!token) {
-      reply.status(401).send({ error: "Customer login required" });
-      return null;
-    }
-    const session = await sessions.validateSession(token);
-    if (!session) {
-      reply.status(401).send({ error: "Customer session expired" });
-      return null;
-    }
-    return session;
-  }
-  fastify.get("/customer/orders", async (request, reply) => {
-    const session = await customer(request, reply);
-    if (!session) return;
+  fastify.addHook("onRequest", authenticateCustomer);
+  fastify.get("/customer/orders", async (request) => {
     const result = await (
       await import("../database/connection.js")
     ).query(
       "SELECT * FROM web_orders WHERE customer_id = $1 ORDER BY order_date DESC",
-      [session.customer_id],
+      [customerId(request)],
     );
     return result.rows;
   });
   fastify.get("/customer/orders/:orderId", async (request, reply) => {
-    const session = await customer(request, reply);
-    if (!session) return;
     const { orderId } = z
       .object({ orderId: z.string().uuid() })
       .parse(request.params);
     const db = await import("../database/connection.js");
     const order = await db.query(
       "SELECT * FROM web_orders WHERE id = $1 AND customer_id = $2",
-      [orderId, session.customer_id],
+      [orderId, customerId(request)],
     );
     if (!order.rows[0])
       return reply.status(404).send({ error: "Order not found" });
@@ -54,8 +37,6 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     return { ...order.rows[0], items: items.rows, events: events.rows };
   });
   fastify.post("/customer/orders/:orderId/cancel", async (request, reply) => {
-    const session = await customer(request, reply);
-    if (!session) return;
     const { orderId } = z
       .object({ orderId: z.string().uuid() })
       .parse(request.params);
@@ -65,7 +46,7 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       "UPDATE web_orders SET status = 'CANCELLED', cancellation_reason = $1, cancelled_at = NOW(), cancelled_by = $2 WHERE id = $3 AND customer_id = $2 AND status IN ('PENDING_PAYMENT','CONFIRMED') RETURNING *",
       [
         (request.body as any)?.reason || "Cancelled by customer",
-        session.customer_id,
+        customerId(request),
         orderId,
       ],
     );
@@ -74,12 +55,6 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     return result.rows[0];
   });
   fastify.post("/checkout/cod", async (request, reply) => {
-    const token = request.headers.authorization?.replace("Bearer ", "");
-    if (!token)
-      return reply.status(401).send({ error: "Customer login required" });
-    const session = await sessions.validateSession(token);
-    if (!session)
-      return reply.status(401).send({ error: "Customer session expired" });
     const body = z
       .object({
         cart_id: z.string().uuid(),
@@ -100,7 +75,7 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       return reply.status(201).send(
         await checkout.createCodOrder({
           ...body,
-          customerId: session.customer_id,
+          customerId: customerId(request),
           storeId: body.store_id,
           cartId: body.cart_id,
           idempotencyKey: body.idempotency_key,
