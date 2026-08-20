@@ -23,6 +23,7 @@ async function fetchPublic<T>(path: string): Promise<T[]> {
     const response = await fetch(new URL(`/api/public/${path}`, base), {
       next: { revalidate: 300 },
       headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) return [];
     const value: unknown = await response.json();
@@ -57,4 +58,3 @@ export const getCategoryBySlug = cache(async (slug: string) => {
   const { categories } = await getCatalog();
   return categories.find((category) => category.slug === slug) || null;
 });
-

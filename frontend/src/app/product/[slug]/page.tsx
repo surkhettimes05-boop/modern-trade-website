@@ -16,7 +16,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return buildMetadata({ title: 'Product not found', description: 'The requested product could not be found.', path: `/product/${slug}`, noIndex: true });
-  return buildMetadata({ title: product.name, description: product.description || `Shop ${product.name} from ${product.brand} at NOVA MART Nepal.`, path: `/product/${product.slug}`, image: product.image });
+  const description = product.description.trim();
+  const metaDescription = description.length >= 70 ? description : `${description}${description ? ' ' : ''}Shop ${product.name} from ${product.brand} at NOVA MART Nepal with current pricing and store-based availability.`;
+  return buildMetadata({ title: product.name, description: metaDescription, path: `/product/${product.slug}`, image: product.image });
 }
 
 export default async function ProductPage({ params }: Props) {
