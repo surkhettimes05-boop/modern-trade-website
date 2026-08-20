@@ -9,6 +9,7 @@ import {
   RefundResponse,
   ReconciliationData,
 } from "./baseProvider.js";
+import { MARKET } from "../../config/market.js";
 
 export class FonePayProvider extends BasePaymentProvider {
   private merchantId: string;
@@ -31,7 +32,7 @@ export class FonePayProvider extends BasePaymentProvider {
   ): Promise<PaymentIntentResponse> {
     this.rejectIncompleteProductionCapability("payment initiation");
     this.validateAmount(request.amount);
-    this.validateCurrency(request.currency || "NPR");
+    this.validateCurrency(request.currency || MARKET.currencyCode);
 
     const intentId = this.generateIdempotencyKey();
 
@@ -69,7 +70,7 @@ export class FonePayProvider extends BasePaymentProvider {
       intent_id: providerIntentId,
       provider_intent_id: providerIntentId,
       amount: 0,
-      currency: "NPR",
+      currency: MARKET.currencyCode,
       status: "PENDING",
       payment_method: "FonePay",
       provider: "FonePay",
@@ -127,7 +128,7 @@ export class FonePayProvider extends BasePaymentProvider {
       intent_id: verification.intent_id || "",
       provider_intent_id: payload.provider_webhook_id,
       amount: verification.amount || 0,
-      currency: "NPR",
+      currency: MARKET.currencyCode,
       status:
         (verification.status as
           | "PENDING"

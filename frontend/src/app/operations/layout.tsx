@@ -4,6 +4,9 @@
 import { OperationsSidebar } from '@/components/operations/OperationsSidebar';
 import { OperationsTopbar } from '@/components/operations/OperationsTopbar';
 import { StaffSessionProvider } from '@/components/StaffSessionProvider';
+import { privateMetadata } from '@/lib/seo';
+
+export const metadata = privateMetadata('Store operations', '/operations');
 
 export default function OperationsLayout({
   children,
@@ -35,4 +38,3 @@ export default function OperationsLayout({
     </StaffSessionProvider>
   );
 }
-

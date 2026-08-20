@@ -5,13 +5,13 @@ type FooterLink = { label: string; href: string };
 
 const cols: Record<string, FooterLink[]> = {
   Shop: [
-    { label: 'Grocery', href: '/shop' }, { label: 'Fresh food', href: '/shop' },
-    { label: 'Home & kitchen', href: '/shop' }, { label: 'Electronics', href: '/shop' },
-    { label: 'Fashion', href: '/shop' }, { label: 'Today’s deals', href: '/offers' },
+    { label: 'All products', href: '/shop' }, { label: 'Rice', href: '/category/rice' },
+    { label: 'Dal & pulses', href: '/category/dal-pulses' }, { label: 'Milk & dairy', href: '/category/milk-dairy' },
+    { label: 'Household cleaning', href: '/category/household-cleaning' }, { label: 'Today’s deals', href: '/offers' },
   ],
   'Customer Service': [
-    { label: 'Help centre', href: '/faq' }, { label: 'Track an order', href: '/account/orders' },
-    { label: 'Delivery & pickup', href: '/services' }, { label: 'Returns & refunds', href: '/services' },
+    { label: 'Help centre', href: '/faq' }, { label: 'Shopping guides', href: '/guides' }, { label: 'Track an order', href: '/account/orders' },
+    { label: 'Delivery & pickup', href: '/services' },
     { label: 'Contact us', href: '/contact' },
   ],
   'About NOVA MART': [
@@ -27,7 +27,7 @@ const cols: Record<string, FooterLink[]> = {
     { label: 'Franchise', href: '/contact' }, { label: 'Partner portal', href: '/contact' },
   ],
   Policies: [
-    { label: 'Privacy', href: '/privacy' }, { label: 'Terms of use', href: '/terms' },
+    { label: 'Privacy', href: '/privacy' }, { label: 'Terms of use', href: '/terms' }, { label: 'Editorial policy', href: '/editorial-policy' },
     { label: 'Accessibility', href: '/about#accessibility' }, { label: 'Cookie choices', href: '/privacy#cookies' },
   ],
 };
@@ -49,6 +49,6 @@ export default function Footer() {
       </nav>
     </div>
     <div className="footer-grid shell">{Object.entries(cols).map(([heading, links]) => <div key={heading}><h3>{heading}</h3>{links.map(({ label, href }) => <Link href={href} key={label}>{label}</Link>)}</div>)}</div>
-    <div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Ltd.</span><span>Nepal · English</span><span>eSewa · Khalti · Cash</span></div>
+    <div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Nepal Pvt. Ltd.</span><span>Nepal · English</span><span>Cash on delivery · Cash at POS</span></div>
   </footer>;
 }

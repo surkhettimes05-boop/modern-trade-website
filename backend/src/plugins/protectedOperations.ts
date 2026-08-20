@@ -2,7 +2,6 @@ import { FastifyInstance } from "fastify";
 import { adminRoutes } from "../routes/admin.js";
 import { customerRoutes } from "../routes/customers.js";
 import { consentRoutes } from "../routes/consent.js";
-import { ledgerRoutes } from "../routes/ledger.js";
 import { ruleRoutes } from "../routes/rules.js";
 import { posRoutes } from "../routes/pos.js";
 import { offlineRoutes } from "../routes/offline.js";
@@ -25,6 +24,7 @@ import { posDeviceRoutes } from "../routes/posDevices.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
 import { requireStoreAccess } from "./authorization.js";
+import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
 
 const roleAccess: Record<string, string[]> = {
   CASHIER: ["/pos", "/shifts", "/payments"],
@@ -208,16 +208,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
   await fastify.register(adminRoutes, { prefix: "/admin" });
   await fastify.register(customerRoutes, { prefix: "/customers" });
   await fastify.register(consentRoutes, { prefix: "/consent" });
-  await fastify.register(ledgerRoutes, { prefix: "/ledger" });
-  await fastify.register(ruleRoutes, { prefix: "/rules" });
   await fastify.register(posRoutes, { prefix: "/pos" });
-  await fastify.register(offlineRoutes, { prefix: "/offline" });
-  await fastify.register(alertRoutes, { prefix: "/alerts" });
-  await fastify.register(metricRoutes, { prefix: "/metrics" });
-  await fastify.register(kpiRoutes);
-  await fastify.register(offlineSyncRoutes);
-  await fastify.register(syncStatusRoutes);
-  await fastify.register(paymentRoutes);
   await fastify.register(supplierRoutes);
   await fastify.register(purchaseOrderRoutes);
   await fastify.register(receivingRoutes);
@@ -225,7 +216,25 @@ export async function protectedOperations(fastify: FastifyInstance) {
   await fastify.register(transferRoutes);
   await fastify.register(shiftRoutes);
   await fastify.register(tenderReconciliationRoutes);
-  await fastify.register(posDeviceRoutes);
   await fastify.register(staffRoutes);
   await fastify.register(auditReportRoutes);
+  if (deferredFeatureEnabled("ENABLE_PROMOTION_ENGINE")) {
+    await fastify.register(ruleRoutes, { prefix: "/rules" });
+  }
+  if (deferredFeatureEnabled("ENABLE_OFFLINE_SYNC")) {
+    await fastify.register(offlineRoutes, { prefix: "/offline" });
+    await fastify.register(offlineSyncRoutes);
+    await fastify.register(syncStatusRoutes);
+  }
+  if (deferredFeatureEnabled("ENABLE_ADVANCED_ANALYTICS")) {
+    await fastify.register(alertRoutes, { prefix: "/alerts" });
+    await fastify.register(metricRoutes, { prefix: "/metrics" });
+    await fastify.register(kpiRoutes);
+  }
+  if (deferredFeatureEnabled("ENABLE_ELECTRONIC_PAYMENTS")) {
+    await fastify.register(paymentRoutes);
+  }
+  if (deferredFeatureEnabled("ENABLE_HARDWARE_DEVICES")) {
+    await fastify.register(posDeviceRoutes);
+  }
 }

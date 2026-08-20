@@ -40,19 +40,23 @@ export const query = async (
   params?: unknown[],
 ): Promise<pg.QueryResult> => {
   const start = Date.now();
+  const operation = text.trimStart().match(/^([A-Za-z]+)/)?.[1]?.toUpperCase() || "UNKNOWN";
   try {
     const result = await getPool().query(text, params);
     const duration = Date.now() - start;
     logger.debug("Executed query", {
-      query: text,
+      operation,
       duration,
       rows: result.rowCount,
     });
     return result;
   } catch (error) {
     logger.error("Query error", {
-      query: text,
-      error: error instanceof Error ? error.message : String(error),
+      operation,
+      errorCode:
+        error && typeof error === "object" && "code" in error
+          ? String(error.code)
+          : "DATABASE_ERROR",
     });
     throw error;
   }

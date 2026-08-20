@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useStaffSession } from '@/components/StaffSessionProvider';
+import { MARKET } from '@/lib/market';
 
 type RecordValue = Record<string, unknown>;
 type Resource = { title: string; endpoint?: string; capability?: string; fields?: string[]; unavailable?: string };
@@ -12,14 +13,9 @@ const resources: Record<string, Resource> = {
   dashboard: { title: 'Dashboard', endpoint: '/api/admin/dashboard', capability: 'dashboard.read' },
   'catalog/products': { title: 'Products', endpoint: '/api/admin/products', capability: 'catalog.read', fields: ['sku', 'name_en', 'description_en'] },
   'catalog/categories': { title: 'Categories', endpoint: '/api/public/categories', capability: 'catalog.read', unavailable: 'Category management is read-only until the category CRUD API is enabled.' },
-  'catalog/media': { title: 'Media', endpoint: '/api/admin/products', capability: 'catalog.read', unavailable: 'Media management is not enabled yet; product media remains managed on product records.' },
   'content/pages': { title: 'Content Pages', endpoint: '/api/admin/pages', capability: 'content.read', fields: ['slug', 'title_en', 'content_en'] },
-  'merchandising/promotions': { title: 'Promotions', endpoint: '/api/promotions', capability: 'promotions.read' },
   'commerce/orders': { title: 'Orders', endpoint: '/api/web-orders', capability: 'orders.read' },
-  'commerce/returns': { title: 'Returns', endpoint: '/api/returns', capability: 'orders.read' },
-  'commerce/payments': { title: 'Payments', endpoint: '/api/payments/intents', capability: 'payments.read' },
   customers: { title: 'Customers', endpoint: '/api/customers', capability: 'customers.read' },
-  'customers/loyalty': { title: 'Customer Loyalty', endpoint: '/api/loyalty', capability: 'loyalty.manage' },
   stores: { title: 'Stores', endpoint: '/api/admin/stores', capability: 'stores.read', fields: ['name_en', 'address_en', 'phone', 'email'] },
   inventory: { title: 'Inventory', endpoint: '/api/batches', capability: 'inventory.read' },
   'procurement/suppliers': { title: 'Suppliers', endpoint: '/api/suppliers', capability: 'procurement.read' },
@@ -27,7 +23,6 @@ const resources: Record<string, Resource> = {
   'procurement/receiving': { title: 'Receiving', endpoint: '/api/receiving', capability: 'procurement.read' },
   'organization/staff': { title: 'Staff', endpoint: '/api/staff', capability: 'staff.read' },
   'organization/roles': { title: 'Roles', endpoint: '/api/roles', capability: 'roles.manage', unavailable: 'Role management is currently read-only through the capability seed.' },
-  reports: { title: 'Reports', endpoint: '/api/analytics/sales', capability: 'reports.sales' },
   audit: { title: 'Audit', endpoint: '/api/audit-reports', capability: 'audit.read' },
   settings: { title: 'Settings', endpoint: '/api/operations-auth/session', capability: 'settings.manage' },
 };
@@ -82,7 +77,7 @@ export function AdminWorkbench() {
   if (resource.capability && !hasCapability(resource.capability)) return <div className="rounded-xl border border-red-200 bg-red-50 p-8"><h1 className="text-xl font-semibold text-red-900">Forbidden</h1><p className="mt-2 text-sm text-red-700">Your role does not include {resource.capability}.</p><Link className="mt-4 inline-block text-sm font-semibold text-red-900 underline" href="/admin/dashboard">Return to dashboard</Link></div>;
 
   return <section className="space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm font-medium text-blue-600">NOVA MART ADMIN</p><h1 className="mt-1 text-3xl font-bold text-gray-950">{resource.title}</h1><p className="mt-2 text-sm text-gray-600">{session?.organization?.name || 'Nepal organization'} · {session?.organization?.currencyCode || 'NPR'} · {session?.organization?.locale || 'en-NP'}</p></div><Link href="/admin/dashboard" className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold hover:bg-gray-50">Dashboard</Link></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm font-medium text-blue-600">NOVA MART ADMIN</p><h1 className="mt-1 text-3xl font-bold text-gray-950">{resource.title}</h1><p className="mt-2 text-sm text-gray-600">{session?.organization?.name || `${MARKET.countryName} organization`} · {session?.organization?.currencyCode || MARKET.currencyCode} · {session?.organization?.locale || MARKET.locale}</p></div><Link href="/admin/dashboard" className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold hover:bg-gray-50">Dashboard</Link></div>
     {notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
     {resource.unavailable && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{resource.unavailable}</div>}
     {key === 'dashboard' && Boolean(dashboard?.metrics) && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(dashboard?.metrics as RecordValue).map(([metric, value]) => <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm" key={metric}><p className="text-sm text-gray-500">{label(metric)}</p><p className="mt-2 text-3xl font-bold text-gray-950">{String(value)}</p></div>)}</div>}

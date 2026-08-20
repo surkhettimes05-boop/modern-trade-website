@@ -71,9 +71,9 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Content Placeholder</h2>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Terms status</h2>
             <p className="text-gray-600">
-              These terms of service will be managed through the content management system. The actual terms should be reviewed by legal counsel to ensure compliance with applicable laws and regulations.
+              These draft terms are excluded from search indexing until legal counsel approves the final version. Contact NOVA MART for the current terms that apply to a purchase or service.
             </p>
           </section>
         </div>

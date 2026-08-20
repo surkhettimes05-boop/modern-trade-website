@@ -37,10 +37,8 @@ export default function AboutPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-8">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Content Placeholder</h2>
-          <p className="text-gray-600">
-            This page content will be managed through the content management system. The actual company story, values, and additional information will be editable by authorized administrators.
-          </p>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">How we serve shoppers</h2>
+          <p className="text-gray-600">NOVA MART combines a focused 642-SKU opening assortment with store-based availability, clear Nepalese-rupee pricing, pickup and eligible Kathmandu delivery. The range is organized across 29 practical departments so everyday essentials remain easy to find.</p>
         </div>
       </div>
     </div>

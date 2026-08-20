@@ -11,4 +11,4 @@ Fresh local setup:
 3. Run `npm run db:migrate` from `backend/`.
 4. Run `npm run seed` from `backend/`.
 
-The seed is repeatable and intended only for local development. It creates India organization/store configuration, roles from the canonical capability migration, local staff, products, inventory, supplier, content, and a sample customer. The local administrator password is documented only in the seed source and must never be used outside local development.
+The seed is repeatable and intended only for local development. It creates Nepal organization/store configuration, the Nepal loyalty pilot program, roles from the canonical capability migration, local staff, products, inventory, supplier, content, and a sample customer. Local credentials in the seed must never be used outside local development.

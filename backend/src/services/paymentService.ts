@@ -1,5 +1,6 @@
 import { query } from "../database/connection.js";
 import crypto from "crypto";
+import { MARKET } from "../config/market.js";
 
 interface PaymentIntent {
   id: string;
@@ -63,9 +64,10 @@ export class PaymentService {
     if (paymentData.amount_npr > 1_000_000) {
       throw new Error("Amount exceeds maximum limit");
     }
-    if (paymentData.currency && paymentData.currency !== "NPR") {
-      throw new Error("Only NPR currency is supported");
+    if (paymentData.currency && paymentData.currency !== MARKET.currencyCode) {
+      throw new Error(`Only ${MARKET.currencyCode} currency is supported`);
     }
+    this.assertProviderAvailable(paymentData.provider);
     // Check idempotency
     if (paymentData.idempotency_key) {
       const existing = await query(
@@ -118,7 +120,7 @@ export class PaymentService {
         intentNumber,
         paymentData.provider,
         paymentData.amount_npr,
-        paymentData.currency || "NPR",
+        paymentData.currency || MARKET.currencyCode,
         "CREATED",
         paymentData.order_reference || null,
         paymentData.customer_id || null,
@@ -373,7 +375,7 @@ export class PaymentService {
         `${provider} reconciliation requires a provider report contract`,
       );
     }
-    const storeFilter = storeId ? `AND store_id = '${storeId}'` : "";
+    const storeFilter = storeId ? "AND store_id = $3" : "";
 
     // Get StoreSync data
     const storesyncResult = await query(
@@ -390,12 +392,12 @@ export class PaymentService {
       WHERE provider = $1
         AND DATE(created_at) = $2
         ${storeFilter}`,
-      [provider, date],
+      storeId ? [provider, date, storeId] : [provider, date],
     );
 
     const storesyncData = storesyncResult.rows[0];
 
-    // Get provider data (mocked - would call provider API in production)
+    // Provider data is unavailable until a provider report contract is supplied.
     let providerData = { count: 0, amount: 0 };
     if (this.ESEWA_MERCHANT_CODE || this.KHALTI_SECRET_KEY) {
       providerData = await this.fetchProviderReconciliation(
@@ -460,11 +462,7 @@ export class PaymentService {
     _orderReference?: string,
   ): Promise<any> {
     if (!this.ESEWA_MERCHANT_CODE || !this.ESEWA_SECRET_KEY) {
-      // Mock response for sandbox/testing
-      return {
-        paymentUrl: `${this.ESEWA_API_URL}/epay/main?amt=${amount}&txAmt=0&tAmt=0&psc=0&pdc=0&scd=${this.ESEWA_MERCHANT_CODE}&pid=${intentNumber}&su=${encodeURIComponent("https://storesync.com/payment/esewa/success")}&fu=${encodeURIComponent("https://storesync.com/payment/esewa/fail")}`,
-        metadata: { sandbox: true, note: "eSewa credentials not configured" },
-      };
+      throw new Error("eSewa is unavailable: merchant credentials are missing");
     }
 
     if (!this.APP_URL && !this.ESEWA_SUCCESS_URL) {
@@ -568,8 +566,7 @@ export class PaymentService {
     _amount: number,
   ): Promise<string> {
     if (!this.ESEWA_MERCHANT_CODE || !this.ESEWA_SECRET_KEY) {
-      // Mock refund
-      return `REF-ESEWA-${Date.now()}`;
+      throw new Error("eSewa refund is unavailable: credentials are missing");
     }
 
     throw new Error(
@@ -614,11 +611,9 @@ export class PaymentService {
     metadata?: any,
   ): Promise<any> {
     if (!this.KHALTI_SECRET_KEY || !this.KHALTI_PUBLIC_KEY) {
-      // Mock response for sandbox/testing
-      return {
-        paymentUrl: `https://khalti.com/payment/${intentNumber}`,
-        metadata: { sandbox: true, note: "Khalti credentials not configured" },
-      };
+      throw new Error(
+        "Khalti is unavailable: merchant credentials are missing",
+      );
     }
 
     const payload = {
@@ -737,12 +732,12 @@ export class PaymentService {
     _amount: number,
   ): Promise<string> {
     if (!this.KHALTI_SECRET_KEY) {
-      // Mock refund
-      return `REF-KHALTI-${Date.now()}`;
+      throw new Error("Khalti refund is unavailable: credentials are missing");
     }
 
-    // Production implementation would call Khalti refund API
-    return `REF-KHALTI-${Date.now()}`;
+    throw new Error(
+      "Khalti refund API is not defined by the current integration contract",
+    );
   }
 
   // ============================================
@@ -856,5 +851,31 @@ export class PaymentService {
     throw new Error(
       `${provider} reconciliation API is not defined by the current integration contract`,
     );
+  }
+
+  private assertProviderAvailable(
+    provider: "ESEWA" | "KHALTI" | "CASH" | "CARD",
+  ): void {
+    if (provider === "CASH") return;
+    if (process.env.ENABLE_ELECTRONIC_PAYMENTS !== "true") {
+      throw new Error("Electronic payments are disabled for the Nepal pilot");
+    }
+    if (provider === "CARD") {
+      throw new Error("Card payments have no certified provider contract");
+    }
+    if (
+      provider === "ESEWA" &&
+      (!this.ESEWA_MERCHANT_CODE || !this.ESEWA_SECRET_KEY)
+    ) {
+      throw new Error("eSewa is unavailable: merchant credentials are missing");
+    }
+    if (
+      provider === "KHALTI" &&
+      (!this.KHALTI_SECRET_KEY || !this.KHALTI_PUBLIC_KEY)
+    ) {
+      throw new Error(
+        "Khalti is unavailable: merchant credentials are missing",
+      );
+    }
   }
 }

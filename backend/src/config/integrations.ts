@@ -5,6 +5,7 @@ export interface IntegrationSnapshot {
     mode: "COD_ONLY";
     status: IntegrationStatus;
     providers: string[];
+    deferredProviders: Record<"esewa" | "khalti" | "fonepay", IntegrationStatus>;
   };
   notifications: {
     mode: "OUTBOX_ONLY";
@@ -21,7 +22,14 @@ const present = (env: NodeJS.ProcessEnv, key: string) =>
 export function getIntegrationSnapshot(
   env: NodeJS.ProcessEnv = process.env,
 ): IntegrationSnapshot {
-  const email = present(env, "EMAIL_PROVIDER_API_KEY");
+  const emailConfigured =
+    present(env, "EMAIL_PROVIDER") || present(env, "EMAIL_PROVIDER_API_KEY");
+  const email =
+    present(env, "EMAIL_PROVIDER") && present(env, "EMAIL_PROVIDER_API_KEY");
+  const smsConfigured = present(env, "SMS_PROVIDER") ||
+    present(env, "TWILIO_ACCOUNT_SID") ||
+    present(env, "TWILIO_AUTH_TOKEN") ||
+    present(env, "TWILIO_FROM_NUMBER");
   const sms =
     env.SMS_PROVIDER === "twilio" &&
     present(env, "TWILIO_ACCOUNT_SID") &&
@@ -34,18 +42,42 @@ export function getIntegrationSnapshot(
       : mapProvider === "Galli"
         ? present(env, "GALLI_API_KEY")
         : false;
+  const providerStatus = (keys: string[]): IntegrationStatus => {
+    const count = keys.filter((key) => present(env, key)).length;
+    return count === 0
+      ? "DISABLED"
+      : count === keys.length && env.ENABLE_ELECTRONIC_PAYMENTS === "true"
+        ? "ENABLED"
+        : "MISCONFIGURED";
+  };
   return {
-    payments: { mode: "COD_ONLY", status: "ENABLED", providers: ["CASH"] },
+    payments: {
+      mode: "COD_ONLY",
+      status: "ENABLED",
+      providers: ["COD", "CASH"],
+      deferredProviders: {
+        esewa: providerStatus(["ESEWA_MERCHANT_CODE", "ESEWA_SECRET_KEY"]),
+        khalti: providerStatus(["KHALTI_SECRET_KEY", "KHALTI_PUBLIC_KEY"]),
+        fonepay: providerStatus(["FONEPAY_MERCHANT_ID", "FONEPAY_SECRET_KEY"]),
+      },
+    },
     notifications: {
       mode: "OUTBOX_ONLY",
-      status: email || sms ? "MISCONFIGURED" : "DISABLED",
+      status:
+        !emailConfigured && !smsConfigured
+          ? "DISABLED"
+          : emailConfigured && !email
+            ? "MISCONFIGURED"
+            : smsConfigured && !sms
+              ? "MISCONFIGURED"
+              : "ENABLED",
       email,
       sms,
     },
     maps: {
       status: mapProvider
         ? mapKey
-          ? "MISCONFIGURED"
+          ? "ENABLED"
           : "MISCONFIGURED"
         : "DISABLED",
       provider: mapProvider,

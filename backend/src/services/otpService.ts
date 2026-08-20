@@ -90,14 +90,22 @@ export class OTPService {
       ],
     );
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log(
-        `OTP for ${phoneNormalized}: ${otpCode} (expires at ${expiresAt})`,
+    try {
+      if (process.env.NODE_ENV === "test") {
+        // Unit/integration tests receive the returned code through the test harness.
+      } else if (process.env.SMS_PROVIDER === "twilio") {
+        await sendTwilioSms(phoneNormalized, otpCode);
+      } else {
+        throw new Error("SMS provider is unavailable; OTP delivery is disabled");
+      }
+    } catch (error) {
+      await query(
+        `UPDATE customer_otp
+         SET used_at = CURRENT_TIMESTAMP
+         WHERE phone_normalized = $1 AND otp_code = $2 AND used_at IS NULL`,
+        [phoneNormalized, otpCode],
       );
-    } else if (process.env.SMS_PROVIDER === "twilio") {
-      await sendTwilioSms(phoneNormalized, otpCode);
-    } else {
-      throw new Error("SMS provider is unavailable; OTP delivery is disabled");
+      throw error;
     }
 
     return otpCode;

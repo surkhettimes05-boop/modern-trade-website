@@ -1,3 +1,5 @@
+import { MARKET } from "../../config/market.js";
+
 export interface PaymentIntent {
   intent_id: string;
   order_id?: string;
@@ -167,17 +169,15 @@ export abstract class BasePaymentProvider {
    * Validate currency
    */
   protected validateCurrency(currency: string): void {
-    if (currency !== "NPR") {
-      throw new Error("Only NPR currency is supported");
+    if (currency !== MARKET.currencyCode) {
+      throw new Error(`Only ${MARKET.currencyCode} currency is supported`);
     }
   }
 
   protected rejectIncompleteProductionCapability(capability: string): void {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        `${this.providerName} ${capability} is not production-ready`,
-      );
-    }
+    throw new Error(
+      `${this.providerName} ${capability} is disabled: provider contract is not certified`,
+    );
   }
 
   /**

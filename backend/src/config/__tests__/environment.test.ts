@@ -2,6 +2,7 @@ import {
   getDatabaseUrl,
   validateProductionEnvironment,
 } from "../environment.js";
+import { getActiveMarket } from "../market.js";
 
 describe("environment safety", () => {
   it("requires an explicit test database URL", () => {
@@ -22,6 +23,29 @@ describe("environment safety", () => {
   it("requires stable production encryption and signing keys", () => {
     expect(() =>
       validateProductionEnvironment({ NODE_ENV: "production" }),
-    ).toThrow("Missing required production configuration");
+    ).toThrow("Missing explicit production market configuration");
+  });
+
+  it("uses Nepal as the only certified pilot market", () => {
+    expect(getActiveMarket({ ACTIVE_MARKET: "NP" })).toMatchObject({
+      countryCode: "NP",
+      currencyCode: "NPR",
+      locale: "en-NP",
+      timezone: "Asia/Kathmandu",
+      taxRegime: "IRD",
+    });
+    expect(() => getActiveMarket({ ACTIVE_MARKET: "IN" })).toThrow(
+      "is not certified",
+    );
+  });
+
+  it("rejects a conflicting India default on the Nepal path", () => {
+    expect(() =>
+      getActiveMarket({
+        ACTIVE_MARKET: "NP",
+        DEFAULT_COUNTRY_CODE: "IN",
+        DEFAULT_CURRENCY_CODE: "INR",
+      }),
+    ).toThrow("conflicts with ACTIVE_MARKET=NP");
   });
 });

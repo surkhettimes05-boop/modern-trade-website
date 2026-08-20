@@ -1,4 +1,5 @@
 import { query } from "../database/connection.js";
+import { MARKET } from "../config/market.js";
 
 interface WebOrder {
   id: string;
@@ -87,7 +88,7 @@ export class WebOrderService {
       subtotal += parseFloat(item.line_total);
     });
 
-    const taxAmount = subtotal * 0.13; // 13% VAT
+    const taxAmount = subtotal * MARKET.standardTaxRate;
     const shippingAmount = orderData.delivery_type === "DELIVERY" ? 100 : 0;
     const discountAmount = 0;
     const totalAmount = subtotal + taxAmount + shippingAmount - discountAmount;
@@ -155,8 +156,8 @@ export class WebOrderService {
           item.unit_price,
           item.discount_amount,
           item.line_total,
-          item.line_total * 0.13,
-          item.line_total * 1.13,
+          item.line_total * MARKET.standardTaxRate,
+          item.line_total * (1 + MARKET.standardTaxRate),
           null,
         ],
       );

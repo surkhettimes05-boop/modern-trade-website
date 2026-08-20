@@ -4,11 +4,13 @@ import { once } from "node:events";
 const root = process.cwd();
 const backend = `${root}/backend`;
 const frontend = `${root}/frontend`;
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const npm = "__NPM__";
+const npmCli = process.env.npm_execpath;
+if (!npmCli) throw new Error("npm_execpath is required; run this script through npm run qa:local");
 const databaseName = process.env.LOCAL_QA_DATABASE || "storesync_local_qa";
 const databaseUrl = process.env.LOCAL_QA_DATABASE_URL || `postgresql://postgres@127.0.0.1:5432/${databaseName}`;
-const backendPort = 3001;
-const frontendPort = 3032;
+const backendPort = Number(process.env.LOCAL_QA_BACKEND_PORT || "43031");
+const frontendPort = Number(process.env.LOCAL_QA_FRONTEND_PORT || "43032");
 
 if (!/^[a-z_][a-z0-9_]*$/i.test(databaseName)) {
   throw new Error(`Invalid LOCAL_QA_DATABASE name: ${databaseName}`);
@@ -33,11 +35,11 @@ const localEnv = {
 };
 
 function run(command, args, cwd, env = localEnv, options = {}) {
-  execFileSync(command, args, {
+  execFileSync(command === npm ? process.execPath : command, command === npm ? [npmCli, ...args] : args, {
     cwd,
     env,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: false,
     ...options,
   });
 }
@@ -66,7 +68,7 @@ async function waitFor(url, label, timeoutMs = 60_000) {
 }
 
 function start(command, args, cwd, env) {
-  const child = spawn(command, args, { cwd, env, stdio: "inherit", windowsHide: true, shell: process.platform === "win32" });
+  const child = spawn(command === npm ? process.execPath : command, command === npm ? [npmCli, ...args] : args, { cwd, env, stdio: "inherit", windowsHide: true, shell: false });
   child.on("error", (error) => console.error(`${command} failed:`, error));
   return child;
 }
@@ -74,9 +76,15 @@ function start(command, args, cwd, env) {
 const children = [];
 const cleanup = async () => {
   for (const child of children.reverse()) {
-    if (!child.killed) child.kill();
+    if (child.exitCode === null && !child.killed) child.kill();
   }
-  await Promise.all(children.map((child) => once(child, "exit").catch(() => undefined)));
+  await Promise.all(
+    children.map((child) =>
+      child.exitCode === null
+        ? once(child, "exit").catch(() => undefined)
+        : Promise.resolve(),
+    ),
+  );
 };
 
 try {
@@ -97,17 +105,17 @@ try {
   run(npm, ["run", "db:migrate"], backend, localEnv);
   run(npm, ["run", "seed"], backend, localEnv);
 
-  children.push(start(npm, ["run", "dev"], backend, localEnv));
+  children.push(start(process.execPath, ["node_modules/tsx/dist/cli.mjs", "src/index.ts"], backend, localEnv));
   await waitFor(`http://127.0.0.1:${backendPort}/api/health/ready`, "Backend readiness");
 
   const frontendEnv = { ...process.env, API_URL: `http://127.0.0.1:${backendPort}`, NODE_ENV: "production", NEXT_LOCAL_QA: "1" };
-  run(npm, ["run", "build"], frontend, frontendEnv, { timeout: 180_000 });
-  children.push(start(npm, ["run", "start:next", "--", "-p", String(frontendPort)], frontend, frontendEnv));
+  run(npm, ["run", "build"], frontend, frontendEnv, { timeout: 300_000 });
+  children.push(start(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(frontendPort)], frontend, frontendEnv));
   await waitFor(`http://127.0.0.1:${frontendPort}/`, "Frontend");
   await waitFor(`http://127.0.0.1:${frontendPort}/api/health/ready`, "Frontend-to-backend proxy");
 
   const browserEnv = { ...process.env, PLAYWRIGHT_BASE_URL: `http://127.0.0.1:${frontendPort}` };
-  run(npm, ["exec", "--", "playwright", "test", "--project=chromium-desktop", "--reporter=line"], frontend, browserEnv, { timeout: 180_000 });
+  run(npm, ["exec", "--", "playwright", "test", "tests/release-gate.spec.ts", "--project=chromium-desktop", "--project=chromium-mobile", "--project=firefox-desktop", "--project=webkit-desktop", "--workers=1", "--reporter=line"], frontend, browserEnv, { timeout: 600_000 });
   run(npm, ["exec", "--", "playwright", "test", "tests/accessibility.spec.ts", "--project=chromium-desktop", "--reporter=line"], frontend, browserEnv, { timeout: 180_000 });
   console.log("Native QA verification passed");
 } finally {

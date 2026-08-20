@@ -27,17 +27,9 @@ The existing customer storefront must remain independent and stable. Reuse the i
 - Many mature API domains already exist: content pages, stores, products, customers, consent, POS, inventory/batches, suppliers, purchasing, receiving, transfers, shifts, tender reconciliation, staff, audit reports, web orders, delivery, promotions, loyalty, segmentation, analytics, notifications, support, devices, offline sync, observability, tax, compliance, and security incidents.
 - Administrative APIs are enabled only when `ENABLE_ADMIN_API=true`.
 
-## 3. Mandatory Product Decision Before Coding
+## 3. Product decision
 
-The storefront is targeted at India and displays INR. Existing backend logic contains Nepal-specific assumptions including NPR, IRD tax, eSewa, Khalti, and Kathmandu defaults.
-
-Before implementing financial, payment, tax, or address interfaces, establish one of these explicitly:
-
-1. India-only launch: introduce India/INR/GST/payment-provider configuration and disable Nepal-only modules.
-2. Multi-country platform: add country, currency, locale, tax regime, timezone, and payment configuration at organization/store level.
-3. Nepal launch: change the storefront requirements back to Nepal/NPR.
-
-Recommended approach: build multi-country foundations, configure the initial NOVA MART tenant as India, and feature-flag country-specific modules. Do not hardcode currency or tax labels in the admin UI.
+Nepal is the active production pilot: `NP`, `NPR`, `en-NP`, `Asia/Kathmandu`, IRD/VAT labels, Nepal phone/address rules, COD checkout and cash POS. India remains a future configurable market but is not activatable for this release. Financial, tax, payment and address interfaces must derive labels and behavior from the validated market contract and production feature controls.
 
 ## 4. Target Application Structure
 

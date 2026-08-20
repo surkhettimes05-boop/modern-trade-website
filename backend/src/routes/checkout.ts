@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticateCustomer, customerId } from "../middleware/customerAuthentication.js";
 import { CheckoutService } from "../services/checkoutService.js";
+import { MARKET, NepalPhoneSchema, NepalPostalCodeSchema } from "../contracts/platform.js";
 
 const checkout = new CheckoutService();
 export async function checkoutRoutes(fastify: FastifyInstance) {
@@ -62,12 +63,12 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         idempotency_key: z.string().min(8).max(100),
         delivery_type: z.enum(["DELIVERY", "PICKUP"]),
         shipping_name: z.string().min(1),
-        shipping_phone: z.string().min(7),
+        shipping_phone: NepalPhoneSchema,
         shipping_address: z.string().min(1),
         shipping_city: z.string().min(1),
         shipping_state: z.string().min(1),
-        shipping_postal_code: z.string().min(1),
-        shipping_country: z.string().min(2),
+        shipping_postal_code: NepalPostalCodeSchema,
+        shipping_country: z.literal(MARKET.countryCode),
         notes: z.string().optional(),
       })
       .parse(request.body);

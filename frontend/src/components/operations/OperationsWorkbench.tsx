@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useStaffSession } from '@/components/StaffSessionProvider';
+import { MARKET } from '@/lib/market';
 
 type Row = Record<string, unknown>;
 type Module = { title: string; endpoint?: string; capability: string; description: string; create?: { endpoint: string; label: string; fields: Array<{ name: string; label: string; type?: string; defaultValue?: string }> } };
@@ -61,7 +62,7 @@ export function OperationsWorkbench({ route }: { route: string }) {
     try {
       const payload: Row = { store_id: session?.storeAssignment?.id, created_by: session?.user?.id, opened_by: session?.user?.id };
       data.forEach((value, key) => { payload[key] = value === '' ? undefined : Number.isNaN(Number(value)) ? value : Number(value); });
-      if (route === 'pos') { payload.sale_number = `OPS-${Date.now()}`; payload.total_amount = Number(payload.quantity) * Number(payload.price); payload.currency = session?.organization?.currencyCode || 'NPR'; payload.payment_method = 'CASH'; payload.items = [{ quantity: Number(payload.quantity), unit_price: Number(payload.price), line_total: Number(payload.total_amount) }]; }
+      if (route === 'pos') { payload.sale_number = `OPS-${Date.now()}`; payload.total_amount = Number(payload.quantity) * Number(payload.price); payload.currency = session?.organization?.currencyCode || MARKET.currencyCode; payload.payment_method = 'CASH'; payload.items = [{ quantity: Number(payload.quantity), unit_price: Number(payload.price), line_total: Number(payload.total_amount) }]; }
       await request(moduleConfig.create!.endpoint, { method: 'POST', body: JSON.stringify(payload) });
       setNotice('Action completed successfully.'); event.currentTarget.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Action failed'); }

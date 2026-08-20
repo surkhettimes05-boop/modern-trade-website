@@ -1,13 +1,9 @@
 const TEST_DATABASE_PATTERN = /(^|[_-])test($|[_-])/i;
 import { validateProductionIntegrations } from "./integrations.js";
+import { MARKET, validateMarketEnvironment } from "./market.js";
+import { validatePilotFeatureEnvironment } from "./releaseFeatures.js";
 
-export const DEFAULT_MARKET = {
-  countryCode: "NP",
-  currencyCode: "NPR",
-  locale: "en-NP",
-  timezone: "Asia/Kathmandu",
-  taxRegime: "IRD",
-} as const;
+export const DEFAULT_MARKET = MARKET;
 
 export function getDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   if (env.NODE_ENV === "test") {
@@ -33,6 +29,8 @@ export function getDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string {
 export function validateProductionEnvironment(
   env: NodeJS.ProcessEnv = process.env,
 ): void {
+  validateMarketEnvironment(env);
+  validatePilotFeatureEnvironment(env);
   if (env.NODE_ENV !== "production") return;
   const required = [
     "DATABASE_URL",

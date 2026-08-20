@@ -20,7 +20,6 @@ import { codPolicyRoutes } from "./routes/codPolicies.js";
 import { orderLifecycleRoutes } from "./routes/orderLifecycle.js";
 import { productSearchRoutes } from "./routes/productSearch.js";
 import { deliveryRoutes } from "./routes/deliveries.js";
-import { loyaltyRoutes } from "./routes/loyalty.js";
 import { promotionRoutes } from "./routes/promotions.js";
 import { customerSegmentRoutes } from "./routes/customerSegments.js";
 import { analyticsRoutes } from "./routes/analytics.js";
@@ -28,7 +27,6 @@ import { notificationRoutes } from "./routes/notifications.js";
 import { supportRoutes } from "./routes/support.js";
 import { hardwarePeripheralRoutes } from "./routes/hardwarePeripherals.js";
 import { offlineDataRoutes } from "./routes/offlineData.js";
-import { unifiedLoyaltyRoutes } from "./routes/unifiedLoyalty.js";
 import { strapiRoutes } from "./routes/strapi.js";
 import { cloudflareRoutes } from "./routes/cloudflare.js";
 import { productionCacheRoutes } from "./routes/productionCache.js";
@@ -44,6 +42,8 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { logger } from "./utils/logger.js";
 import { validateProductionEnvironment } from "./config/environment.js";
 import { redisService } from "./services/redisService.js";
+import { deferredFeatureEnabled } from "./config/releaseFeatures.js";
+import { loyaltyMvpRoutes } from "./routes/loyaltyMvp.js";
 
 dotenv.config();
 
@@ -51,6 +51,7 @@ validateProductionEnvironment();
 
 const fastify = Fastify({
   logger: true,
+  requestIdHeader: "x-request-id",
   trustProxy: process.env.TRUST_PROXY_HOPS
     ? Number.parseInt(process.env.TRUST_PROXY_HOPS, 10)
     : false,
@@ -115,25 +116,40 @@ if (process.env.ENABLE_ADMIN_API === "true") {
   await fastify.register(orderLifecycleRoutes, { prefix: "/api" });
   await fastify.register(productSearchRoutes, { prefix: "/api" });
   await fastify.register(deliveryRoutes, { prefix: "/api" });
-  await fastify.register(loyaltyRoutes, { prefix: "/api" });
-  await fastify.register(promotionRoutes, { prefix: "/api" });
-  await fastify.register(customerSegmentRoutes, { prefix: "/api" });
-  await fastify.register(analyticsRoutes, { prefix: "/api" });
+  await fastify.register(loyaltyMvpRoutes, { prefix: "/api" });
   await fastify.register(notificationRoutes, { prefix: "/api" });
   await fastify.register(supportRoutes, { prefix: "/api" });
-  await fastify.register(hardwarePeripheralRoutes, { prefix: "/api" });
-  await fastify.register(offlineDataRoutes, { prefix: "/api" });
-  await fastify.register(unifiedLoyaltyRoutes, { prefix: "/api" });
-  await fastify.register(strapiRoutes, { prefix: "/api" });
-  await fastify.register(cloudflareRoutes, { prefix: "/api" });
   await fastify.register(productionCacheRoutes, { prefix: "/api" });
   await fastify.register(observabilityRoutes, { prefix: "/api" });
-  await fastify.register(irdTaxRoutes, { prefix: "/api" });
   await fastify.register(auditTrailRoutes, { prefix: "/api" });
-  await fastify.register(fiscalSignatureRoutes, { prefix: "/api" });
   await fastify.register(securityIncidentRoutes, { prefix: "/api" });
   await fastify.register(encryptionRoutes, { prefix: "/api" });
-  await fastify.register(complianceReportRoutes, { prefix: "/api" });
+  if (deferredFeatureEnabled("ENABLE_PROMOTION_ENGINE")) {
+    await fastify.register(promotionRoutes, { prefix: "/api" });
+  }
+  if (deferredFeatureEnabled("ENABLE_CUSTOMER_SEGMENTS")) {
+    await fastify.register(customerSegmentRoutes, { prefix: "/api" });
+  }
+  if (deferredFeatureEnabled("ENABLE_ADVANCED_ANALYTICS")) {
+    await fastify.register(analyticsRoutes, { prefix: "/api" });
+  }
+  if (deferredFeatureEnabled("ENABLE_HARDWARE_DEVICES")) {
+    await fastify.register(hardwarePeripheralRoutes, { prefix: "/api" });
+  }
+  if (deferredFeatureEnabled("ENABLE_OFFLINE_SYNC")) {
+    await fastify.register(offlineDataRoutes, { prefix: "/api" });
+  }
+  if (deferredFeatureEnabled("ENABLE_EXTERNAL_CMS_CDN")) {
+    await fastify.register(strapiRoutes, { prefix: "/api" });
+    await fastify.register(cloudflareRoutes, { prefix: "/api" });
+  }
+  if (deferredFeatureEnabled("ENABLE_EXTERNAL_TAX_INTEGRATION")) {
+    await fastify.register(irdTaxRoutes, { prefix: "/api" });
+  }
+  if (deferredFeatureEnabled("ENABLE_FISCAL_COMPLIANCE_INTEGRATION")) {
+    await fastify.register(fiscalSignatureRoutes, { prefix: "/api" });
+    await fastify.register(complianceReportRoutes, { prefix: "/api" });
+  }
 }
 
 // Error handler

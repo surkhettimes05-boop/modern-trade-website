@@ -4,6 +4,9 @@
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
 import { StaffSessionProvider } from '@/components/StaffSessionProvider';
+import { privateMetadata } from '@/lib/seo';
+
+export const metadata = privateMetadata('Administration', '/admin');
 
 export default function AdminLayout({
   children,

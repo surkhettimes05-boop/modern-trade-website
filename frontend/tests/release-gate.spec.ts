@@ -5,6 +5,7 @@ const criticalRoutes = [
   "/shop",
   "/products",
   "/offers",
+  "/loyalty",
   "/cart",
   "/checkout",
   "/account",
@@ -17,39 +18,44 @@ test.describe("release browser gate", () => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
     const failedRequests: string[] = [];
+    const unexpectedClientErrors: string[] = [];
     const serverErrors: string[] = [];
-    let expectedAuthFailure = false;
 
     page.on("console", (message) => {
-      if (message.type() === "error") {
-        if (message.text().includes("Failed to load resource") && expectedAuthFailure) {
-          expectedAuthFailure = false;
-        } else {
-          consoleErrors.push(message.text());
-        }
+      if (message.type() === "error" && !message.text().includes("Failed to load resource")) {
+        consoleErrors.push(message.text());
       }
     });
     page.on("pageerror", (error) => pageErrors.push(error.message));
     page.on("requestfailed", (request) => {
-      failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || "failed"}`);
+      const errorText = request.failure()?.errorText || "failed";
+      const isCancelledNextPrefetch = errorText.includes("ERR_ABORTED") && request.url().includes("_rsc=");
+      if (!isCancelledNextPrefetch) failedRequests.push(`${request.method()} ${request.url()} ${errorText}`);
     });
     page.on("response", (response) => {
       if (response.status() >= 500) serverErrors.push(`${response.status()} ${response.url()}`);
-      if ([401, 403].includes(response.status()) && /\/api\/(auth|customer)\//.test(response.url())) expectedAuthFailure = true;
+      if (
+        response.status() >= 400 &&
+        response.status() < 500 &&
+        !([401, 403].includes(response.status()) && /\/api\/(auth|customer)\/|\/api\/loyalty\/me/.test(response.url()))
+      ) {
+        unexpectedClientErrors.push(`${response.status()} ${response.url()}`);
+      }
     });
 
     for (const route of criticalRoutes) {
-      await page.goto(route, { waitUntil: "domcontentloaded" });
+      await page.goto(route, { waitUntil: "networkidle" });
       await expect(page.locator("body")).toBeVisible();
     }
 
     await test.info().attach("runtime-issues", {
-      body: JSON.stringify({ consoleErrors, pageErrors, failedRequests, serverErrors }, null, 2),
+      body: JSON.stringify({ consoleErrors, pageErrors, failedRequests, unexpectedClientErrors, serverErrors }, null, 2),
       contentType: "application/json",
     });
     expect(consoleErrors, "browser console errors").toEqual([]);
     expect(pageErrors, "uncaught page exceptions").toEqual([]);
     expect(failedRequests, "failed network requests").toEqual([]);
+    expect(unexpectedClientErrors, "unexpected HTTP 400 responses").toEqual([]);
     expect(serverErrors, "HTTP 500+ responses").toEqual([]);
   });
 
@@ -61,9 +67,9 @@ test.describe("release browser gate", () => {
     const productHref = await firstProduct.locator("a").first().getAttribute("href");
     expect(productHref).toMatch(/^\/product\//);
     await firstProduct.getByRole("button", { name: /add to cart/i }).click();
-    await expect(page.getByRole("button", { name: /cart with 1 item/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /cart.*1/i })).toBeVisible();
     await page.goto("/cart");
-    await expect(page.getByRole("heading", { name: "Your cart" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your cart", exact: true })).toBeVisible();
     await page.getByRole("button", { name: /increase quantity/i }).click();
     await page.reload();
     await expect(page.getByRole("button", { name: /decrease quantity/i })).toBeVisible();
@@ -89,5 +95,25 @@ test.describe("release browser gate", () => {
     await page.goto("/account");
     await page.getByLabel(/phone/i).focus();
     await expect(page.getByLabel(/phone/i)).toBeFocused();
+  });
+
+  test("loyalty is active and fails closed without a verified customer session", async ({ page }) => {
+    await page.goto("/loyalty", { waitUntil: "networkidle" });
+    await expect(page.getByRole("heading", { name: "StoreSync Rewards" })).toBeVisible();
+    await expect(page.getByText("Sign in with your Nepal mobile number and OTP to view loyalty.", { exact: true })).toBeVisible();
+    await expect(page.getByText(/coming soon/i)).toHaveCount(0);
+  });
+
+  test("staff can sign in, access scoped operations, and sign out", async ({ page }) => {
+    await page.goto("/staff-login");
+    await page.getByLabel("Username").fill("admin");
+    await page.getByLabel("Password").fill("StoreSync@2026");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/operations/);
+    const accountMenu = page.getByRole("button", { name: /staff account menu/i });
+    await expect(accountMenu).toContainText("Local Administrator");
+    await accountMenu.click();
+    await page.getByRole("button", { name: /logout/i }).click();
+    await expect(page).toHaveURL(/\/staff-login/);
   });
 });

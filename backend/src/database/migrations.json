@@ -17,5 +17,7 @@
   ["016_nepal_market_configuration", "../database/016_nepal_market_configuration.sql"],
   ["017_order_events", "../database/017_order_events.sql"],
   ["018_enable_public_rls", "../database/018_enable_public_rls.sql"],
-  ["020_explicit_deny_supabase_api", "../database/020_explicit_deny_supabase_api.sql"]
+  ["020_explicit_deny_supabase_api", "../database/020_explicit_deny_supabase_api.sql"],
+  ["021_platform_admin_operations_capabilities", "../database/021_platform_admin_operations_capabilities.sql"],
+  ["022_nepal_loyalty_mvp", "../database/022_nepal_loyalty_mvp.sql"]
 ]

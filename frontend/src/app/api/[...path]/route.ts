@@ -4,7 +4,11 @@ function getApiUrl(): string {
   const value = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
   if (!value) throw new Error("API_URL is not configured");
   const url = new URL(value);
-  if (process.env.NODE_ENV === "production" && ["localhost", "127.0.0.1"].includes(url.hostname)) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_LOCAL_QA !== "1" &&
+    ["localhost", "127.0.0.1"].includes(url.hostname)
+  ) {
     throw new Error("API_URL must be a public backend URL in production");
   }
   return url.toString();

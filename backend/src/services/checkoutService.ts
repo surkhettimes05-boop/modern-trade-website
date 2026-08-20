@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getPool } from "../database/connection.js";
+import { MARKET } from "../config/market.js";
 
 export class CheckoutService {
   async createCodOrder(input: {
@@ -64,11 +65,11 @@ export class CheckoutService {
         subtotal += Number(item.authoritative_price) * Number(item.quantity);
       }
       const shipping = input.deliveryType === "DELIVERY" ? 100 : 0;
-      const tax = subtotal * 0.13;
+      const tax = subtotal * MARKET.standardTaxRate;
       const total = subtotal + tax + shipping;
       const order = await client.query(
         `INSERT INTO web_orders (order_number, customer_id, store_id, cart_id, idempotency_key, status, subtotal, tax_amount, shipping_amount, discount_amount, total_amount, currency, payment_method, payment_status, shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_postal_code, shipping_country, delivery_type, notes)
-        VALUES ('WO-' || TO_CHAR(NOW(), 'YYYYMMDDHH24MISS') || '-' || SUBSTRING($1, 1, 8), $2, $3, $4, $1, 'PENDING_PAYMENT', $5, $6, $7, 0, $8, 'NPR', 'COD', 'PENDING', $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
+        VALUES ('WO-' || TO_CHAR(NOW(), 'YYYYMMDDHH24MISS') || '-' || SUBSTRING($1, 1, 8), $2, $3, $4, $1, 'PENDING_PAYMENT', $5, $6, $7, 0, $8, '${MARKET.currencyCode}', 'COD', 'PENDING', $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
         [
           input.idempotencyKey,
           input.customerId,
@@ -99,8 +100,12 @@ export class CheckoutService {
             item.quantity,
             item.authoritative_price,
             Number(item.authoritative_price) * Number(item.quantity),
-            Number(item.authoritative_price) * Number(item.quantity) * 0.13,
-            Number(item.authoritative_price) * Number(item.quantity) * 1.13,
+            Number(item.authoritative_price) *
+              Number(item.quantity) *
+              MARKET.standardTaxRate,
+            Number(item.authoritative_price) *
+              Number(item.quantity) *
+              (1 + MARKET.standardTaxRate),
           ],
         );
         await client.query(

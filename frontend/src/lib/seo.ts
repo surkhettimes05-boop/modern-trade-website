@@ -1,51 +1,54 @@
-interface SEOProps {
-  title?: string;
-  description?: string;
-  canonical?: string;
-  ogImage?: string;
-  noIndex?: boolean;
+import type { Metadata } from 'next';
+
+export const SITE = {
+  name: 'NOVA MART',
+  legalName: 'NOVA MART Retail Nepal Pvt. Ltd.',
+  description: 'Shop groceries, fresh food and home essentials at dependable everyday prices across Nepal.',
+  locale: 'en_NP',
+  language: 'en-NP',
+  country: 'NP',
+  currency: 'NPR',
+  url: (process.env.NEXT_PUBLIC_SITE_URL || 'https://storesync.com').replace(/\/$/, ''),
+} as const;
+
+export function absoluteUrl(path = '/') {
+  return new URL(path, `${SITE.url}/`).toString();
 }
 
-export function generateMetadata({
-  title,
-  description,
-  canonical,
-  ogImage,
-  noIndex = false,
-}: SEOProps) {
-  const baseUrl = 'https://storesync.com';
-  const defaultTitle = 'StoreSync - Modern Trade Platform';
-  const defaultDescription = 'Your trusted local mini-mart with quality products and great service across Nepal';
-  
+type PageMetadata = {
+  title: string;
+  description: string;
+  path: string;
+  image?: string;
+  noIndex?: boolean;
+};
+
+export function buildMetadata({ title, description, path, image, noIndex = false }: PageMetadata): Metadata {
+  const canonical = absoluteUrl(path);
+  const images = image ? [{ url: absoluteUrl(image), width: 1200, height: 630, alt: title }] : undefined;
   return {
-    title: title ? `${title} | StoreSync` : defaultTitle,
-    description: description || defaultDescription,
-    canonical: canonical ? `${baseUrl}${canonical}` : baseUrl,
-    openGraph: {
-      title: title || defaultTitle,
-      description: description || defaultDescription,
-      url: canonical ? `${baseUrl}${canonical}` : baseUrl,
-      siteName: 'StoreSync',
-      locale: 'en_IN',
-      type: 'website',
-      images: ogImage ? [
-        {
-          url: ogImage,
-          width: 1200,
-          height: 630,
-          alt: title || defaultTitle,
-        },
-      ] : [],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: title || defaultTitle,
-      description: description || defaultDescription,
-      images: ogImage ? [ogImage] : [],
-    },
-    robots: {
-      index: !noIndex,
-      follow: !noIndex,
-    },
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: { title, description, url: canonical, siteName: SITE.name, locale: SITE.locale, type: 'website', images },
+    twitter: { card: 'summary_large_image', title, description, images: images?.map(({ url }) => url) },
+    robots: noIndex ? { index: false, follow: false, nocache: true } : { index: true, follow: true },
+  };
+}
+
+export function privateMetadata(title: string, path = '/'): Metadata {
+  return buildMetadata({ title, description: `${title} for NOVA MART customers and staff.`, path, noIndex: true });
+}
+
+export function breadcrumbSchema(items: Array<{ name: string; path: string }>) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: absoluteUrl(item.path),
+    })),
   };
 }

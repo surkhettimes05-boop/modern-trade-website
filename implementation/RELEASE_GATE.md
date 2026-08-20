@@ -1,39 +1,43 @@
-# Production release gate
+# Nepal pilot production release gate
 
-Decision: **NOT READY**  
-Reviewed: 2026-08-14  
-Scope: Nepal / NPR / `en-NP` MVP with COD customer checkout and cash POS.
+Decision: **NOT READY**
 
-## Gate evidence
+Reviewed: 2026-08-19
 
-| Area | Result | Evidence / blocker |
+Scope: Nepal (`NP`) / NPR / `en-NP` / `Asia/Kathmandu`; customer COD and staff cash POS only.
+
+## Verified evidence
+
+| Area | Result | Evidence |
 |---|---|---|
-| Functional routes | Partial | Clean frontend smoke returns HTTP 200 for `/`, and the clean backend returns HTTP 200 for `/api/health`; catalog API and full browser navigation still require a running PostgreSQL-backed staging environment. |
-| COD checkout | Partial | Authenticated checkout, idempotency, price/stock revalidation, reservations, order events, and order history are implemented; live DB concurrency and browser evidence are open. |
-| Authentication/security | Partial | Staff sessions, lockout, revocation, CSRF, capability checks, store-scope boundaries, and production secret validation exist; complete mutation matrix and browser denial tests are open. |
-| Payments | Pass for launch scope | COD/cash only; electronic providers fail closed and are not part of this release. |
-| Migrations/data | Partial | Canonical manifest, checksum tracking, backup-before-migration, and repeat-safe migration design exist; staging clean/repeat and restore evidence are open. |
-| Audit/compliance | Partial | Hash-linked audit records, search/export, retention policy, and provisional tax labels exist; professional Nepal VAT/IRD review and deployment-level immutability are open. |
-| Quality | Partial | Backend/frontend typechecks, builds, lint baselines, and dependency audits pass; backend has 474 warnings, frontend 18 warnings, and full E2E/accessibility coverage is open. |
-| Operations | Partial | Readiness health, JSON logs, immutable image workflow, and runbooks exist; Docker image/Compose, alert, rollback, and restore drills require staging infrastructure. |
+| Market configuration | Pass | Nepal is the only launch market. Production startup rejects India, conflicting locale/currency/timezone/tax settings, and enabled deferred features. India remains a future registry entry only. |
+| Launch scope | Pass | COD/cash core paths remain registered. Electronic payments, loyalty, advanced analytics, returns, promotions, segments, offline sync, hardware, CMS/CDN, and fiscal integration are disabled by default and fail closed in production. |
+| Native dependencies | Pass | Local PostgreSQL accepted all 20 migrations, the Nepal seed, application queries, and readiness checks. The Redis-compatible local service returned `PONG`; backend readiness included database, migration, and Redis checks. |
+| Backend quality | Pass | Full Jest suite, TypeScript, lint, and production build complete without forced Jest exit. Focused auth, payment, market, health, error-envelope, and redaction tests pass. |
+| Frontend quality | Pass | TypeScript, lint, and production build pass. All 16 release journeys passed across Chromium desktop, Chromium mobile, Firefox, and WebKit; all 9 Chromium axe scans reported no serious or critical violations. |
+| Staff authentication | Pass for tested scope | Seeded platform admin login, session lookup, scoped operations entry, and CSRF-protected logout passed in every browser engine. The role migration restores required shift/reconciliation/device capabilities. |
+| Payment safety | Pass for COD/cash scope | Electronic initiation, callback, reconciliation, and refund paths reject unavailable or uncertified provider contracts. No mock success URL or refund ID is returned. |
+| Recovery/operations | Implemented, drill open | Backup/migrate/restore/rollback and dependency-failure procedures are documented; readiness fails when a required dependency fails. Docker drill evidence is unavailable on this host. |
 
 ## Release blockers
 
-The release must not be promoted until risks R-021, R-023, R-025, and R-026 are closed, and R-022 receives professional approval. R-004 is mitigated by the duplicate-route fix. R-018–R-020 remain deferred capabilities and must stay disabled or visibly unavailable.
+1. Docker and Docker Compose are not installed on the certification host. The Docker QA topology, dependency stop/start drill, backup, restore, rollback, and immutable-image deployment therefore remain unverified.
+2. No real SMS provider is configured. Customer OTP delivery and the complete authenticated COD order/tracking browser journey cannot be certified. The backend now fails delivery closed and invalidates an undelivered OTP.
+3. No Nepal-approved electronic payment provider credentials or certified callback/refund contract are available. Electronic payment features must remain disabled; see `docs/PAYMENT_EXTERNAL_REQUIREMENTS.md`.
+4. Staff POS sale, purchase receiving, stock adjustment/transfer, cash reconciliation, and admin publication still need end-to-end browser evidence against a production-equivalent deployment.
+5. Nepal VAT/IRD interpretation and receipt/invoice content require professional review before any claim of fiscal compliance.
+6. Restore/rollback, alert delivery, centralized log retention, TLS/domain, secrets manager, and production backup retention require deployment-environment evidence.
 
 ## Required approval evidence
 
-1. Seeded staging run covering customer OTP, catalog/search/cart, COD checkout/tracking, staff login, POS cash sale, receiving, transfer, shift reconciliation, admin publication, and role/store isolation.
-2. Clean migration, repeated migration, backup restore, and rollback evidence using immutable image tags.
-3. Security review of authentication, authorization, CSRF, cookies, secrets, audit immutability, and sensitive mutation coverage.
-4. Source-to-projection reconciliation for orders, payments, inventory, returns, and dashboard metrics.
-5. Accessibility and performance results for primary customer and staff routes.
-6. Alert simulations for readiness, database, queue, inventory, payment, notification, and sync failures.
-7. Professional Nepal VAT/IRD tax review and sign-off.
+1. Run `npm run qa:certify` on a host with Docker Compose; retain the already passing Chromium, Firefox, WebKit, and axe results in the deployment evidence bundle.
+2. Execute and retain a successful database backup/restore and application rollback drill using immutable image tags.
+3. Configure an approved Nepal SMS provider and pass valid, invalid, expired, reused, rate-limited, and delivery-failure OTP journeys without logging PII or codes.
+4. Complete seeded customer, staff, and admin journeys, including denied cross-role and cross-store attempts.
+5. Record alert simulations, centralized log/redaction review, TLS/domain verification, and professional Nepal VAT/IRD sign-off.
 
-## Decision record
+## Approval record
 
 - Approver: Unassigned
-- Date: 2026-08-14
-- Decision: NOT READY
-- Accepted residual risks: None approved; open risks remain release blockers.
+- Decision: **NOT READY**
+- Accepted residual risks: None
