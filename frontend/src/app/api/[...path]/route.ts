@@ -40,6 +40,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("host");
   requestHeaders.delete("content-length");
+  requestHeaders.delete("accept-encoding");
 
   try {
     const upstream = await fetch(target, {
@@ -61,10 +62,12 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const responseHeaders = new Headers(upstream.headers);
     responseHeaders.delete("set-cookie");
     responseHeaders.delete("content-length");
+    responseHeaders.delete("content-encoding");
     responseHeaders.delete("transfer-encoding");
     responseHeaders.delete("connection");
 
-    const response = new NextResponse(upstream.body, {
+    const responseBody = await upstream.arrayBuffer();
+    const response = new NextResponse(responseBody, {
       status: upstream.status,
       statusText: upstream.statusText,
       headers: responseHeaders,

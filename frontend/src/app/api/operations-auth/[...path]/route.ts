@@ -27,6 +27,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("host");
   requestHeaders.delete("content-length");
+  requestHeaders.delete("accept-encoding");
 
   let upstream: Response;
   try {
@@ -52,10 +53,18 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const responseHeaders = new Headers(upstream.headers);
   responseHeaders.delete("set-cookie");
   responseHeaders.delete("content-length");
+  responseHeaders.delete("content-encoding");
   responseHeaders.delete("transfer-encoding");
   responseHeaders.delete("connection");
 
-  const response = new NextResponse(upstream.body, {
+  let responseBody: ArrayBuffer;
+  try {
+    responseBody = await upstream.arrayBuffer();
+  } catch {
+    return NextResponse.json({ error: "Backend returned an unreadable response" }, { status: 502 });
+  }
+
+  const response = new NextResponse(responseBody, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: responseHeaders,
