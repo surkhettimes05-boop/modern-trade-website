@@ -1,9 +1,11 @@
 import { FastifyInstance } from "fastify";
 import { getIntegrationSnapshot } from "../config/integrations.js";
 import { redisService } from "../services/redisService.js";
+import { LATEST_MIGRATION_ID } from "../database/migrationRunner.js";
 
 export async function healthRoutes(fastify: FastifyInstance) {
   const liveness = async () => {
+    if (process.env.NODE_ENV === "production") return { status: "ok" };
     return {
       status: "ok",
       timestamp: new Date().toISOString(),
@@ -31,17 +33,20 @@ export async function healthRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.get("/integrations", async () => ({
-    status: "ok",
-    integrations: getIntegrationSnapshot(),
-  }));
+  fastify.get("/integrations", async (_, reply) => {
+    if (process.env.NODE_ENV === "production") {
+      return reply.status(404).send({ error: "Not found" });
+    }
+    return { status: "ok", integrations: getIntegrationSnapshot() };
+  });
 
   fastify.get("/ready", async (_, reply) => {
     try {
       const { query } = await import("../database/connection.js");
       await query("SELECT 1");
       const migration = await query(
-        "SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE migration_id = '020_explicit_deny_supabase_api') AS current",
+        "SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE migration_id = $1) AS current",
+        [LATEST_MIGRATION_ID],
       );
       if (!migration.rows[0]?.current) {
         reply.status(503);

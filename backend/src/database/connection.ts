@@ -12,7 +12,10 @@ export const getPool = (): pg.Pool => {
       connectionString: getDatabaseUrl(),
       ssl:
         process.env.DATABASE_SSL === "true"
-          ? { rejectUnauthorized: false }
+          ? {
+              rejectUnauthorized:
+                process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
+            }
           : false,
       max: 20,
       idleTimeoutMillis: 30000,
@@ -40,7 +43,11 @@ export const query = async (
   params?: unknown[],
 ): Promise<pg.QueryResult> => {
   const start = Date.now();
-  const operation = text.trimStart().match(/^([A-Za-z]+)/)?.[1]?.toUpperCase() || "UNKNOWN";
+  const operation =
+    text
+      .trimStart()
+      .match(/^([A-Za-z]+)/)?.[1]
+      ?.toUpperCase() || "UNKNOWN";
   try {
     const result = await getPool().query(text, params);
     const duration = Date.now() - start;

@@ -54,6 +54,7 @@ export class PaymentService {
     device_id?: string;
     idempotency_key?: string;
     metadata?: any;
+    created_by?: string;
   }): Promise<PaymentIntent> {
     if (
       !Number.isFinite(paymentData.amount_npr) ||
@@ -131,7 +132,7 @@ export class PaymentService {
         signature,
         paymentData.idempotency_key || null,
         JSON.stringify(paymentData.metadata || {}),
-        "system",
+        paymentData.created_by || "system",
       ],
     );
 
@@ -166,16 +167,24 @@ export class PaymentService {
     const originalWebhookId = isDuplicate ? duplicateCheck.rows[0].id : null;
 
     // Verify signature
-    const signatureProvided = this.extractSignature(headers);
+    const signatureProvided = this.extractSignature(headers, webhookData);
     const signatureCalculated = this.calculateWebhookSignature(
       provider,
       webhookData,
     );
     const signatureValid =
-      provider === "KHALTI" && this.KHALTI_SECRET_KEY
-        ? Boolean(webhookData.pidx || webhookData.idx)
-        : Boolean(signatureProvided) &&
-          this.safeEqual(signatureProvided, signatureCalculated);
+      Boolean(signatureProvided) &&
+      this.safeEqual(signatureProvided, signatureCalculated);
+
+    const safeRequestHeaders = {
+      "content-type": headers?.["content-type"] || null,
+      "user-agent": headers?.["user-agent"] || null,
+    };
+    const safeRequestBody = {
+      webhook_id: webhookId,
+      event_type: eventType,
+      provider_transaction_id: providerTransactionId,
+    };
 
     // Log webhook
     const logResult = await query(
@@ -184,16 +193,17 @@ export class PaymentService {
         request_headers, request_body, signature_provided, signature_calculated,
         signature_valid, is_duplicate, original_webhook_id, processing_status
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ON CONFLICT (provider, webhook_id) DO NOTHING
       RETURNING id`,
       [
         provider,
         webhookId,
         eventType,
         providerTransactionId,
-        JSON.stringify(headers),
-        JSON.stringify(webhookData),
-        signatureProvided,
-        signatureCalculated,
+        JSON.stringify(safeRequestHeaders),
+        JSON.stringify(safeRequestBody),
+        null,
+        null,
         signatureValid,
         isDuplicate,
         originalWebhookId,
@@ -201,6 +211,9 @@ export class PaymentService {
       ],
     );
 
+    if (!logResult.rows[0]) {
+      return { success: true, message: "Duplicate webhook ignored" };
+    }
     const webhookLogId = logResult.rows[0].id;
 
     if (isDuplicate) {
@@ -211,7 +224,7 @@ export class PaymentService {
       await query(
         `UPDATE payment_webhook_logs
          SET processing_status = 'FAILED', processing_error = 'Invalid signature'
-         WHERE id = $1`,
+         WHERE id = $2`,
         [webhookLogId],
       );
       return { success: false, message: "Invalid signature" };
@@ -286,6 +299,7 @@ export class PaymentService {
     amount_npr: number,
     reason: string,
     idempotencyKey?: string,
+    createdBy = "system",
   ): Promise<string> {
     if (process.env.NODE_ENV === "production") {
       throw new Error("Provider refunds require a verified provider contract");
@@ -347,7 +361,7 @@ export class PaymentService {
         reason,
         providerRefundId,
         idempotencyKey || null,
-        "system",
+        createdBy,
       ],
     );
 
@@ -780,13 +794,20 @@ export class PaymentService {
         .update(message)
         .digest("base64");
     }
+    if (provider === "KHALTI") {
+      if (!this.KHALTI_SECRET_KEY) return "";
+      return crypto
+        .createHmac("sha256", this.KHALTI_SECRET_KEY)
+        .update(JSON.stringify(data))
+        .digest("hex");
+    }
     return "";
   }
 
   private safeEqual(provided: string, calculated: string): boolean {
     if (!provided || !calculated) return false;
-    const left = Buffer.from(provided.trim().toLowerCase());
-    const right = Buffer.from(calculated.trim().toLowerCase());
+    const left = Buffer.from(provided.trim(), "utf8");
+    const right = Buffer.from(calculated.trim(), "utf8");
     return left.length === right.length && crypto.timingSafeEqual(left, right);
   }
 
@@ -817,11 +838,12 @@ export class PaymentService {
     return "";
   }
 
-  private extractSignature(headers: any): string {
+  private extractSignature(headers: any, data: any): string {
     return (
       headers["x-esewa-signature"] ||
       headers["x-khalti-signature"] ||
       headers["signature"] ||
+      data?.signature ||
       ""
     );
   }

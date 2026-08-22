@@ -50,8 +50,11 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       JWT_SECRET: ${JWT_SECRET}
       COOKIE_SECRET: ${COOKIE_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-storesync-backend}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-storesync-operations}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       SIGNATURE_SECRET: ${SIGNATURE_SECRET}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       STRAPI_API_URL: ${STRAPI_API_URL}
       STRAPI_API_TOKEN: ${STRAPI_API_TOKEN}

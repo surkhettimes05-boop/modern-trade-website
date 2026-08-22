@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { query } from "../database/connection.js";
+import { hashSessionToken } from "../utils/sessionToken.js";
 
 export const STAFF_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 export const STAFF_SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -20,7 +21,7 @@ export async function createStaffSession(input: {
      VALUES ($1, $2, $3, $4, $5)`,
     [
       input.staffId,
-      input.sessionToken,
+      hashSessionToken(input.sessionToken),
       input.ipAddress || null,
       input.userAgent || null,
       input.expiresAt,
@@ -39,7 +40,7 @@ export async function validateStaffSession(
         AND expires_at > NOW()
         AND last_activity_at > NOW() - ($3 * INTERVAL '1 millisecond')
       RETURNING id`,
-    [staffId, sessionToken, STAFF_IDLE_TIMEOUT_MS],
+    [staffId, hashSessionToken(sessionToken), STAFF_IDLE_TIMEOUT_MS],
   );
   return result.rowCount === 1;
 }
@@ -51,6 +52,6 @@ export async function revokeStaffSession(
   await query(
     `UPDATE sessions SET is_revoked = TRUE, revoked_at = NOW(), revoked_reason = $2
      WHERE session_token = $1 AND is_revoked = FALSE`,
-    [sessionToken, reason],
+    [hashSessionToken(sessionToken), reason],
   );
 }

@@ -116,6 +116,36 @@ describe("PaymentService", () => {
       expect(result.message).toBe("Invalid signature");
     });
 
+    it("does not persist webhook credentials or sensitive raw payloads", async () => {
+      (query as jest.Mock)
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ id: "log-uuid" }] })
+        .mockResolvedValueOnce({ rows: [] });
+
+      await paymentService.processWebhook(
+        "ESEWA",
+        {
+          transactionId: "tx-sensitive-log-test",
+          status: "Success",
+          card_number: "4111111111111111",
+        },
+        {
+          authorization: "Bearer secret-token",
+          "x-esewa-signature": "secret-signature",
+          "content-type": "application/json",
+        },
+      );
+
+      const insertParameters = (query as jest.Mock).mock.calls[1][1];
+      expect(JSON.stringify(insertParameters)).not.toContain("secret-token");
+      expect(JSON.stringify(insertParameters)).not.toContain(
+        "secret-signature",
+      );
+      expect(JSON.stringify(insertParameters)).not.toContain(
+        "4111111111111111",
+      );
+    });
+
     it("should reject an unsigned Khalti webhook", async () => {
       const webhookData = {
         idx: "idx-123",
@@ -223,11 +253,7 @@ describe("PaymentService", () => {
       (query as jest.Mock).mockResolvedValueOnce({ rows: [mockIntent] });
 
       await expect(
-        paymentService.refundPayment(
-          "intent-uuid",
-          500,
-          "Customer request",
-        ),
+        paymentService.refundPayment("intent-uuid", 500, "Customer request"),
       ).rejects.toThrow("refund is unavailable");
     });
 

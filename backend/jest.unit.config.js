@@ -12,6 +12,8 @@ export default {
     "<rootDir>/src/routes/**/__tests__/authSecurity.test.ts",
     "<rootDir>/src/middleware/**/__tests__/**/*.test.ts",
     "<rootDir>/src/services/**/__tests__/shoppingCartSecurity.test.ts",
+    "<rootDir>/src/services/**/__tests__/twilioVerifyService.test.ts",
+    "<rootDir>/src/services/**/__tests__/demoOtpService.test.ts",
   ],
   maxWorkers: 1,
 };

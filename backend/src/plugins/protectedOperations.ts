@@ -25,6 +25,7 @@ import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
 import { requireStoreAccess } from "./authorization.js";
 import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
+import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
 
 const roleAccess: Record<string, string[]> = {
   CASHIER: ["/pos", "/shifts", "/payments"],
@@ -111,7 +112,11 @@ const capabilityAccess: Array<{
     read: ["procurement.read"],
     write: ["procurement.manage"],
   },
-  { prefix: "/payments", read: ["orders.read"], write: ["orders.read"] },
+  {
+    prefix: "/payments",
+    read: ["orders.read"],
+    write: ["orders.modify"],
+  },
 ];
 
 function routeStoreId(request: any): string | undefined {
@@ -131,7 +136,7 @@ function routeStoreId(request: any): string | undefined {
 }
 
 export async function protectedOperations(fastify: FastifyInstance) {
-  fastify.addHook("onRequest", async (request, reply) => {
+  fastify.addHook("preHandler", async (request, reply) => {
     try {
       await authenticateStaff(request, reply);
       if (reply.sent) return;
@@ -142,6 +147,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
           requestId: request.id,
         });
       }
+      bindAuthenticatedAuditActor(request);
     } catch {
       return reply.status(401).send({ error: "Staff authentication required" });
     }
@@ -154,6 +160,26 @@ export async function protectedOperations(fastify: FastifyInstance) {
       storeId?: string;
     };
     const routePath = request.url.replace(/^\/api/, "").split("?")[0];
+    const storeId = routeStoreId(request);
+    if (storeId) {
+      try {
+        await requireStoreAccess(request, storeId);
+      } catch {
+        return reply.status(403).send({
+          error: "Store is outside the staff scope",
+          code: "STORE_SCOPE_DENIED",
+        });
+      }
+    } else if (
+      ["ORGANIZATION", "STORE", "OWN_REGISTER"].includes(
+        String(user.scopeType),
+      )
+    ) {
+      return reply.status(400).send({
+        error: "Store ID is required for store-scoped operations",
+        code: "STORE_ID_REQUIRED",
+      });
+    }
     const resource = capabilityAccess.find(
       (item) =>
         routePath === item.prefix || routePath.startsWith(`${item.prefix}/`),
@@ -162,9 +188,14 @@ export async function protectedOperations(fastify: FastifyInstance) {
       user.roleKey === "platform_admin" ||
       user.capabilities?.includes("system.manage");
     if (resource) {
-      const required = ["GET", "HEAD"].includes(request.method)
+      let required = ["GET", "HEAD"].includes(request.method)
         ? resource.read
         : resource.write;
+      if (resource.prefix === "/payments") {
+        if (routePath.includes("/refund")) required = ["refunds.approve"];
+        else if (routePath.includes("/reconcile"))
+          required = ["reconciliation.manage"];
+      }
       if (
         !hasSystemAccess &&
         !required.some((capability) => user.capabilities?.includes(capability))
@@ -172,22 +203,6 @@ export async function protectedOperations(fastify: FastifyInstance) {
         return reply.status(403).send({
           error: "Your staff capabilities do not permit this operation",
           requiredCapabilities: required,
-        });
-      }
-      const storeId = routeStoreId(request);
-      if (storeId) {
-        try {
-          await requireStoreAccess(request, storeId);
-        } catch {
-          return reply.status(403).send({
-            error: "Store is outside the staff scope",
-            code: "STORE_SCOPE_DENIED",
-          });
-        }
-      } else if (["STORE", "OWN_REGISTER"].includes(String(user.scopeType))) {
-        return reply.status(400).send({
-          error: "Store ID is required for store-scoped operations",
-          code: "STORE_ID_REQUIRED",
         });
       }
       return;

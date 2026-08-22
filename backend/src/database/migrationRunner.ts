@@ -3,6 +3,32 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import pg from "pg";
 
+export const LATEST_MIGRATION_ID = "026_hash_session_tokens";
+
+// Databases created before schema_migrations was introduced already contain
+// this fixed baseline. Never derive the baseline from the current manifest:
+// doing so would mark future migrations as applied without running them.
+const LEGACY_BASELINE_MIGRATION_IDS = new Set([
+  "001_public_content",
+  "002_customer_loyalty",
+  "003_ecommerce",
+  "004_analytics",
+  "005_payment_expansion",
+  "006_commerce_expansion",
+  "007_offline_devices",
+  "008_operations",
+  "009_pos_offline",
+  "010_compliance",
+  "011_capability_scope",
+  "012_organization_market_configuration",
+]);
+
+export function legacyBaselineMigrations(
+  migrations: Array<[string, string]>,
+): Array<[string, string]> {
+  return migrations.filter(([id]) => LEGACY_BASELINE_MIGRATION_IDS.has(id));
+}
+
 export async function runMigrations(
   connectionString: string,
 ): Promise<string[]> {
@@ -27,7 +53,10 @@ export async function runMigrations(
     connectionString,
     ssl:
       process.env.DATABASE_SSL === "true"
-        ? { rejectUnauthorized: false }
+        ? {
+            rejectUnauthorized:
+              process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
+          }
         : false,
   });
   const applied: string[] = [];
@@ -49,7 +78,9 @@ export async function runMigrations(
       // This project was initialized before schema_migrations existed. The
       // schema marker proves the numbered baseline is already present, so
       // record checksums and continue with any future migrations.
-      for (const [id, relativePath] of canonicalMigrations) {
+      for (const [id, relativePath] of legacyBaselineMigrations(
+        canonicalMigrations,
+      )) {
         const sqlPath = relativePath.startsWith("../database/")
           ? resolve(
               process.cwd(),

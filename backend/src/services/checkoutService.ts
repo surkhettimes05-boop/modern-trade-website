@@ -17,6 +17,7 @@ export class CheckoutService {
     shippingPostalCode: string;
     shippingCountry: string;
     notes?: string;
+    actorId?: string;
   }) {
     const pool = getPool();
     const client = await pool.connect();
@@ -41,11 +42,11 @@ export class CheckoutService {
         FROM cart_items ci JOIN products p ON p.id = ci.product_id AND p.status = 'PUBLISHED'
         LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = $2 AND active = TRUE ORDER BY valid_from DESC LIMIT 1) pp ON TRUE
         LEFT JOIN LATERAL (SELECT COALESCE(SUM(quantity), 0)::int AS available_quantity FROM batch_inventory WHERE product_id = p.id AND store_id = $2) bi ON TRUE
-        WHERE ci.cart_id = $1 FOR UPDATE`,
+        WHERE ci.cart_id = $1 FOR UPDATE OF ci`,
         [input.cartId, input.storeId],
       );
       if (!items.rows.length) throw new Error("Cart is empty");
-      let subtotal = 0;
+      let subtotalPaisa = 0;
       for (const item of items.rows) {
         await client.query(
           `SELECT pg_advisory_xact_lock(hashtext($1 || ':' || $2))`,
@@ -62,11 +63,17 @@ export class CheckoutService {
           Number(item.quantity)
         )
           throw new Error(`Insufficient stock for ${item.name_en}`);
-        subtotal += Number(item.authoritative_price) * Number(item.quantity);
+        subtotalPaisa +=
+          Math.round(Number(item.authoritative_price) * 100) *
+          Number(item.quantity);
       }
-      const shipping = input.deliveryType === "DELIVERY" ? 100 : 0;
-      const tax = subtotal * MARKET.standardTaxRate;
-      const total = subtotal + tax + shipping;
+      const shippingPaisa = input.deliveryType === "DELIVERY" ? 10_000 : 0;
+      const taxPaisa = Math.round(subtotalPaisa * MARKET.standardTaxRate);
+      const totalPaisa = subtotalPaisa + taxPaisa + shippingPaisa;
+      const subtotal = subtotalPaisa / 100;
+      const shipping = shippingPaisa / 100;
+      const tax = taxPaisa / 100;
+      const total = totalPaisa / 100;
       const order = await client.query(
         `INSERT INTO web_orders (order_number, customer_id, store_id, cart_id, idempotency_key, status, subtotal, tax_amount, shipping_amount, discount_amount, total_amount, currency, payment_method, payment_status, shipping_name, shipping_phone, shipping_address, shipping_city, shipping_state, shipping_postal_code, shipping_country, delivery_type, notes)
         VALUES ('WO-' || TO_CHAR(NOW(), 'YYYYMMDDHH24MISS') || '-' || SUBSTRING($1, 1, 8), $2, $3, $4, $1, 'PENDING_PAYMENT', $5, $6, $7, 0, $8, '${MARKET.currencyCode}', 'COD', 'PENDING', $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
@@ -99,13 +106,22 @@ export class CheckoutService {
             item.name_en,
             item.quantity,
             item.authoritative_price,
-            Number(item.authoritative_price) * Number(item.quantity),
-            Number(item.authoritative_price) *
-              Number(item.quantity) *
-              MARKET.standardTaxRate,
-            Number(item.authoritative_price) *
-              Number(item.quantity) *
-              (1 + MARKET.standardTaxRate),
+            (Math.round(Number(item.authoritative_price) * 100) *
+              Number(item.quantity)) /
+              100,
+            Math.round(
+              Math.round(Number(item.authoritative_price) * 100) *
+                Number(item.quantity) *
+                MARKET.standardTaxRate,
+            ) / 100,
+            (Math.round(Number(item.authoritative_price) * 100) *
+                Number(item.quantity) +
+              Math.round(
+                Math.round(Number(item.authoritative_price) * 100) *
+                  Number(item.quantity) *
+                  MARKET.standardTaxRate,
+              )) /
+              100,
           ],
         );
         await client.query(
@@ -128,11 +144,71 @@ export class CheckoutService {
         [
           order.rows[0].id,
           JSON.stringify({ delivery_type: input.deliveryType }),
-          input.customerId,
+          input.actorId || input.customerId,
         ],
       );
       await client.query("COMMIT");
       return order.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "23505"
+      ) {
+        const existing = await pool.query(
+          "SELECT * FROM web_orders WHERE idempotency_key = $1 AND customer_id = $2",
+          [input.idempotencyKey, input.customerId],
+        );
+        if (existing.rows[0]) return existing.rows[0];
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async cancelCustomerOrder(
+    orderId: string,
+    authenticatedCustomerId: string,
+    reason: string,
+  ) {
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        `SELECT * FROM web_orders
+         WHERE id = $1 AND customer_id = $2 FOR UPDATE`,
+        [orderId, authenticatedCustomerId],
+      );
+      const order = current.rows[0];
+      if (
+        !order ||
+        !["PENDING", "PENDING_PAYMENT", "CONFIRMED"].includes(order.status)
+      ) {
+        throw new Error("Order cannot be cancelled");
+      }
+      const result = await client.query(
+        `UPDATE web_orders
+         SET status = 'CANCELLED', cancellation_reason = $1,
+             cancelled_at = NOW(), cancelled_by = $2, updated_at = NOW()
+         WHERE id = $3 RETURNING *`,
+        [reason, authenticatedCustomerId, orderId],
+      );
+      await client.query(
+        `UPDATE stock_reservations SET status = 'CANCELLED', updated_at = NOW()
+         WHERE status = 'ACTIVE' AND (order_id = $1 OR cart_id = $2)`,
+        [orderId, order.cart_id],
+      );
+      await client.query(
+        `INSERT INTO order_events
+          (order_id, event_type, from_status, to_status, reason, metadata, created_by)
+         VALUES ($1, 'CANCELLED', $2, 'CANCELLED', $3, '{}'::jsonb, $4)`,
+        [orderId, order.status, reason, authenticatedCustomerId],
+      );
+      await client.query("COMMIT");
+      return result.rows[0];
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

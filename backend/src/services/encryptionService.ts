@@ -1,5 +1,6 @@
 import { query } from "../database/connection.js";
 import crypto from "crypto";
+import { masterEncryptionKey } from "../utils/cryptoKeys.js";
 
 interface EncryptionKey {
   id: string;
@@ -65,21 +66,11 @@ export class EncryptionService {
   }): Promise<EncryptionKey> {
     const keyId = this.generateEncryptionKeyId();
 
-    let publicKey = "";
-    let privateKey = "";
-
-    if (keyData.key_algorithm.startsWith("RSA")) {
-      const keyPair = crypto.generateKeyPairSync("rsa", {
-        modulusLength: parseInt(keyData.key_algorithm.split("-")[1]) || 2048,
-        publicKeyEncoding: { type: "spki", format: "pem" },
-        privateKeyEncoding: { type: "pkcs8", format: "pem" },
-      });
-      publicKey = keyPair.publicKey;
-      privateKey = keyPair.privateKey;
-    } else if (keyData.key_algorithm.startsWith("AES")) {
-      privateKey = crypto.randomBytes(32).toString("hex");
-      publicKey = privateKey; // For symmetric keys, public and private are the same
+    if (keyData.key_algorithm !== "AES-256-GCM") {
+      throw new Error("Only AES-256-GCM data-encryption keys are supported");
     }
+    const privateKey = crypto.randomBytes(32).toString("hex");
+    const publicKey = "";
 
     const result = await query(
       `INSERT INTO encryption_keys (
@@ -230,10 +221,7 @@ export class EncryptionService {
    */
   private encryptWithMasterKey(data: string): string {
     const algorithm = "aes-256-gcm";
-    const key = Buffer.from(
-      process.env.ENCRYPTION_KEY || "default-encryption-key-32-bytes",
-      "utf8",
-    ).slice(0, 32);
+    const key = masterEncryptionKey();
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv(algorithm, key, iv);
 
@@ -250,10 +238,7 @@ export class EncryptionService {
    */
   private decryptWithMasterKey(encryptedData: string): string {
     const algorithm = "aes-256-gcm";
-    const key = Buffer.from(
-      process.env.ENCRYPTION_KEY || "default-encryption-key-32-bytes",
-      "utf8",
-    ).slice(0, 32);
+    const key = masterEncryptionKey();
 
     const [ivHex, authTagHex, encrypted] = encryptedData.split(":");
     const iv = Buffer.from(ivHex, "hex");

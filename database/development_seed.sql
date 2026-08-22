@@ -30,7 +30,10 @@ ON CONFLICT (program_id) DO UPDATE SET organization_id=EXCLUDED.organization_id,
 INSERT INTO categories (slug, name_en, description_en, status, published_at, created_by)
 VALUES
   ('groceries', 'Groceries', 'Daily grocery essentials', 'PUBLISHED', NOW(), 'development-seed'),
-  ('beverages', 'Beverages', 'Drinks and refreshments', 'PUBLISHED', NOW(), 'development-seed')
+  ('beverages', 'Beverages', 'Drinks and refreshments', 'PUBLISHED', NOW(), 'development-seed'),
+  ('instant-noodles', 'Instant noodles', 'Single packs and family multipacks', 'PUBLISHED', NOW(), 'development-seed'),
+  ('laundry', 'Laundry', 'Detergents and fabric care', 'PUBLISHED', NOW(), 'development-seed'),
+  ('hair-care', 'Hair care', 'Shampoo and daily hair care', 'PUBLISHED', NOW(), 'development-seed')
 ON CONFLICT (slug) DO NOTHING;
 
 INSERT INTO products (sku, name_en, description_en, category_id, pack_size_en, unit_en, status, published_at, created_by)
@@ -38,19 +41,22 @@ SELECT seed.sku, seed.name, seed.description, categories.id, seed.pack_size, see
 FROM (VALUES
   ('RICE-5KG', 'Premium Basmati Rice 5kg', 'Long-grain premium rice', 'groceries', '5 kg', 'bag'),
   ('OIL-1L', 'Sunflower Oil 1L', 'Refined sunflower cooking oil', 'groceries', '1 L', 'bottle'),
-  ('WATER-1L', 'Mineral Water 1L', 'Purified mineral water', 'beverages', '1 L', 'bottle')
+  ('WATER-1L', 'Mineral Water 1L', 'Purified mineral water', 'beverages', '1 L', 'bottle'),
+  ('NOODLES-FAM', 'Instant Noodles Family Pack', 'Five-pack instant noodles', 'instant-noodles', '5 x 70 g', 'pack'),
+  ('LAUNDRY-1KG', 'Everyday Laundry Detergent 1kg', 'Everyday laundry detergent', 'laundry', '1 kg', 'pack'),
+  ('SHAMPOO-340', 'Daily Care Shampoo 340ml', 'Daily care shampoo', 'hair-care', '340 ml', 'bottle')
 ) AS seed(sku, name, description, category_slug, pack_size, unit)
 JOIN categories ON categories.slug = seed.category_slug
 ON CONFLICT (sku) DO NOTHING;
 
 INSERT INTO product_prices (product_id, store_id, price, original_price, currency_code)
 SELECT p.id, s.id,
-  CASE p.sku WHEN 'RICE-5KG' THEN 799 WHEN 'OIL-1L' THEN 179 WHEN 'WATER-1L' THEN 25 END,
-  CASE p.sku WHEN 'RICE-5KG' THEN 999 WHEN 'OIL-1L' THEN 219 WHEN 'WATER-1L' THEN 30 END,
+  CASE p.sku WHEN 'RICE-5KG' THEN 799 WHEN 'OIL-1L' THEN 179 WHEN 'WATER-1L' THEN 25 WHEN 'NOODLES-FAM' THEN 120 WHEN 'LAUNDRY-1KG' THEN 245 WHEN 'SHAMPOO-340' THEN 299 END,
+  CASE p.sku WHEN 'RICE-5KG' THEN 999 WHEN 'OIL-1L' THEN 219 WHEN 'WATER-1L' THEN 30 ELSE NULL END,
   'NPR'
 FROM products p
 CROSS JOIN stores s
-WHERE p.sku IN ('RICE-5KG', 'OIL-1L', 'WATER-1L')
+WHERE p.sku IN ('RICE-5KG', 'OIL-1L', 'WATER-1L', 'NOODLES-FAM', 'LAUNDRY-1KG', 'SHAMPOO-340')
   AND NOT EXISTS (SELECT 1 FROM product_prices pp WHERE pp.product_id = p.id AND pp.store_id = s.id);
 
 INSERT INTO suppliers (supplier_code, supplier_name, contact_person, phone, email, city, payment_terms, status, approval_status, created_by)

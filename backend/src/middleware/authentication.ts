@@ -62,7 +62,7 @@ export async function authenticateStaff(
       scopeStoreIds: staff.scope_store_ids,
       storeId: staff.store_id,
       mfaEnabled: staff.mfa_enabled,
-      mfaVerified: false, // Would be set by MFA verification flow
+      mfaVerified: Boolean((request.user as any).mfaVerified),
     } as AuthenticatedUser;
   } catch (error) {
     request.log.warn(

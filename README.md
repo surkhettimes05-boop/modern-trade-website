@@ -26,9 +26,19 @@ Enabled: public website, catalog/search/filter, store selection, customer accoun
 
 Deferred and fail-closed: eSewa, Khalti, Fonepay, card payments, electronic refunds/reconciliation, loyalty, returns workflow, advanced analytics, customer segments, promotion engine, external IRD integration, fiscal signatures/compliance integration, offline sync/devices, and external CMS/CDN integrations. Their code is retained but their production routes and navigation are not registered.
 
+## Render deployment
+
+Use the root `render.yaml` Blueprint and then complete the prompted values in
+**Render Dashboard → Service → Environment**. The Blueprint supplies the fixed
+Nepal market configuration and generates most secrets. The operator must
+provide `DATABASE_URL`, the HTTPS `APP_URL` and `CORS_ORIGIN`, and an exactly
+64-character hexadecimal `PAYMENT_ENCRYPTION_KEY`. See
+[`backend/DEPLOYMENT.md`](backend/DEPLOYMENT.md) for the full variable groups,
+optional integration rules, migration startup behavior, and health checks.
+
 ## Local development
 
-Prerequisites: Node.js 20+, PostgreSQL 14+, and a Redis 7-compatible service.
+Prerequisites: Node.js 22+, PostgreSQL 14+, and a Redis 7-compatible service.
 
 ```bash
 cd backend

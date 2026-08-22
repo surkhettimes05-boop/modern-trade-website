@@ -84,6 +84,28 @@ describe("OTPService", () => {
       expect(result.valid).toBe(false);
     });
 
+    it("should allow only one concurrent verification of a one-time code", async () => {
+      const otp = await otpService.createOTP({
+        phone: "9812345678",
+        purpose: "LOGIN",
+      });
+
+      const results = await Promise.all([
+        otpService.verifyOTP({
+          phone: "9812345678",
+          otp_code: otp,
+          purpose: "LOGIN",
+        }),
+        otpService.verifyOTP({
+          phone: "9812345678",
+          otp_code: otp,
+          purpose: "LOGIN",
+        }),
+      ]);
+
+      expect(results.filter((result) => result.valid)).toHaveLength(1);
+    });
+
     it("should reject expired OTP", async () => {
       const input = {
         phone: "9812345678",

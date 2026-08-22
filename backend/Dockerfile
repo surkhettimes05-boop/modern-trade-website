@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app/backend
 
@@ -10,7 +10,7 @@ COPY database/ /app/database/
 RUN npm run build
 RUN mkdir -p dist/database && cp src/database/schema.sql dist/database/schema.sql
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app/backend
 RUN apk add --no-cache postgresql-client

@@ -5,7 +5,10 @@ export interface IntegrationSnapshot {
     mode: "COD_ONLY";
     status: IntegrationStatus;
     providers: string[];
-    deferredProviders: Record<"esewa" | "khalti" | "fonepay", IntegrationStatus>;
+    deferredProviders: Record<
+      "esewa" | "khalti" | "fonepay",
+      IntegrationStatus
+    >;
   };
   notifications: {
     mode: "OUTBOX_ONLY";
@@ -26,15 +29,29 @@ export function getIntegrationSnapshot(
     present(env, "EMAIL_PROVIDER") || present(env, "EMAIL_PROVIDER_API_KEY");
   const email =
     present(env, "EMAIL_PROVIDER") && present(env, "EMAIL_PROVIDER_API_KEY");
-  const smsConfigured = present(env, "SMS_PROVIDER") ||
+  const smsConfigured =
+    present(env, "SMS_PROVIDER") ||
     present(env, "TWILIO_ACCOUNT_SID") ||
     present(env, "TWILIO_AUTH_TOKEN") ||
-    present(env, "TWILIO_FROM_NUMBER");
+    present(env, "TWILIO_FROM_NUMBER") ||
+    present(env, "TWILIO_VERIFY_SERVICE_SID") ||
+    present(env, "OTP_DEMO_PHONE") ||
+    present(env, "OTP_DEMO_CODE") ||
+    present(env, "OTP_DEMO_EXPIRES_AT");
+  const twilioCredentials =
+    present(env, "TWILIO_ACCOUNT_SID") && present(env, "TWILIO_AUTH_TOKEN");
+  const demoConfigured =
+    present(env, "OTP_DEMO_PHONE") &&
+    present(env, "OTP_DEMO_CODE") &&
+    present(env, "OTP_DEMO_EXPIRES_AT");
   const sms =
-    env.SMS_PROVIDER === "twilio" &&
-    present(env, "TWILIO_ACCOUNT_SID") &&
-    present(env, "TWILIO_AUTH_TOKEN") &&
-    present(env, "TWILIO_FROM_NUMBER");
+    env.SMS_PROVIDER === "twilio"
+      ? twilioCredentials && present(env, "TWILIO_FROM_NUMBER")
+      : env.SMS_PROVIDER === "twilio_verify"
+        ? twilioCredentials && present(env, "TWILIO_VERIFY_SERVICE_SID")
+        : env.SMS_PROVIDER === "demo"
+          ? demoConfigured
+          : false;
   const mapProvider = env.DEFAULT_MAP_PROVIDER?.trim() || null;
   const mapKey =
     mapProvider === "Baato"
@@ -75,11 +92,7 @@ export function getIntegrationSnapshot(
       sms,
     },
     maps: {
-      status: mapProvider
-        ? mapKey
-          ? "ENABLED"
-          : "MISCONFIGURED"
-        : "DISABLED",
+      status: mapProvider ? (mapKey ? "ENABLED" : "MISCONFIGURED") : "DISABLED",
       provider: mapProvider,
     },
   };
@@ -118,16 +131,39 @@ export function validateProductionIntegrations(
     );
   }
   if (env.SMS_PROVIDER) {
-    if (env.SMS_PROVIDER !== "twilio") {
-      throw new Error("SMS_PROVIDER must be twilio");
+    if (!["twilio", "twilio_verify", "demo"].includes(env.SMS_PROVIDER)) {
+      throw new Error("SMS_PROVIDER must be twilio, twilio_verify, or demo");
     }
-    for (const key of [
-      "TWILIO_ACCOUNT_SID",
-      "TWILIO_AUTH_TOKEN",
-      "TWILIO_FROM_NUMBER",
-    ]) {
+    const requiredKeys =
+      env.SMS_PROVIDER === "demo"
+        ? ["OTP_DEMO_PHONE", "OTP_DEMO_CODE", "OTP_DEMO_EXPIRES_AT"]
+        : [
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+            env.SMS_PROVIDER === "twilio"
+              ? "TWILIO_FROM_NUMBER"
+              : "TWILIO_VERIFY_SERVICE_SID",
+          ];
+    for (const key of requiredKeys) {
       if (!present(env, key)) {
-        throw new Error(`${key} is required when SMS_PROVIDER=twilio`);
+        throw new Error(
+          `${key} is required when SMS_PROVIDER=${env.SMS_PROVIDER}`,
+        );
+      }
+    }
+    if (env.SMS_PROVIDER === "demo") {
+      if (!/^\d{6}$/.test(env.OTP_DEMO_CODE?.trim() || "")) {
+        throw new Error("OTP_DEMO_CODE must contain exactly 6 digits");
+      }
+      const expiry = new Date(env.OTP_DEMO_EXPIRES_AT || "");
+      const remaining = expiry.getTime() - Date.now();
+      if (!Number.isFinite(remaining) || remaining <= 0) {
+        throw new Error("OTP_DEMO_EXPIRES_AT must be a future ISO timestamp");
+      }
+      if (remaining > 7 * 24 * 60 * 60 * 1000) {
+        throw new Error(
+          "Demo OTP access cannot be enabled for more than 7 days",
+        );
       }
     }
   }

@@ -10,6 +10,12 @@ import {
   STAFF_SESSION_TTL_SECONDS,
 } from "../services/staffSessionService.js";
 import { CSRF_COOKIE } from "../utils/csrf.js";
+import { hashSessionToken } from "../utils/sessionToken.js";
+import { verifyTotp } from "../utils/totp.js";
+
+// Used when a username is absent so password verification has comparable cost.
+const DUMMY_PASSWORD_HASH =
+  "$2b$12$xivHf6wb78nEE2SHJHHUQeJHAbFq4JYxoOrAYVg6q6PHfwV2oWKky";
 
 export async function operationsAuthRoutes(fastify: FastifyInstance) {
   fastify.post(
@@ -18,10 +24,11 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
       config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
     },
     async (request, reply) => {
-      const { username, password } = z
+      const { username, password, mfa_code } = z
         .object({
           username: z.string().min(1).max(100),
           password: z.string().min(8).max(200),
+          mfa_code: z.string().regex(/^\d{6}$/).optional(),
         })
         .parse(request.body);
 
@@ -29,22 +36,21 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
         `SELECT s.id, s.staff_number, s.first_name, s.last_name, s.username, s.password_hash,
               s.role, s.status, s.store_id, s.permissions, s.failed_login_attempts, s.locked_until,
               s.role_id, s.capabilities, s.scope_type, s.scope_store_ids, s.scope_organization_id,
-              s.mfa_enabled, r.role_key
+              s.mfa_enabled, s.mfa_secret, r.role_key
        FROM staff s LEFT JOIN roles r ON r.id = s.role_id
        WHERE LOWER(s.username) = LOWER($1) LIMIT 1`,
         [username],
       );
       const staff = result.rows[0];
-      if (
+      const locked = Boolean(
         staff?.locked_until &&
-        new Date(staff.locked_until).getTime() > Date.now()
-      ) {
-        return reply.status(423).send({ error: "Account temporarily locked" });
-      }
-      const valid =
-        staff?.password_hash &&
-        (await bcrypt.compare(password, staff.password_hash));
-      if (!valid || staff.status !== "ACTIVE") {
+        new Date(staff.locked_until).getTime() > Date.now(),
+      );
+      const validPassword = await bcrypt.compare(
+        password,
+        staff?.password_hash || DUMMY_PASSWORD_HASH,
+      );
+      if (!validPassword || staff?.status !== "ACTIVE" || locked) {
         if (staff?.id) {
           await query(
             `UPDATE staff SET failed_login_attempts = failed_login_attempts + 1, locked_until = CASE WHEN failed_login_attempts + 1 >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE locked_until END WHERE id = $1`,
@@ -54,6 +60,15 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
         return reply
           .status(401)
           .send({ error: "Invalid username or password" });
+      }
+
+      if (staff.mfa_enabled) {
+        if (!mfa_code || !staff.mfa_secret || !verifyTotp(staff.mfa_secret, mfa_code)) {
+          return reply.status(403).send({
+            error: "A valid MFA code is required",
+            code: "MFA_REQUIRED",
+          });
+        }
       }
 
       await query(
@@ -69,6 +84,7 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
           roleKey: staff.role_key,
           store_id: staff.store_id,
           permissions: staff.permissions || {},
+          mfaVerified: Boolean(staff.mfa_enabled),
         },
         { expiresIn: "8h", jti: sessionToken },
       );
@@ -135,7 +151,7 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
       const sessionToken = (request.user as any).jti;
       const sessionResult = await query(
         `SELECT 1 FROM sessions WHERE staff_id = $1 AND session_token = $2 AND is_revoked = FALSE AND expires_at > NOW() AND last_activity_at > NOW() - INTERVAL '30 minutes'`,
-        [userId, sessionToken],
+        [userId, hashSessionToken(sessionToken)],
       );
       if (!sessionResult.rowCount)
         return reply.status(401).send({ authenticated: false });
@@ -229,7 +245,7 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
         featureFlags,
         mfa: {
           enabled: staff.mfa_enabled,
-          verified: false, // Would be set by MFA verification flow
+          verified: Boolean((request.user as any).mfaVerified),
         },
       };
 

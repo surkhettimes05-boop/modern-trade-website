@@ -23,11 +23,27 @@ services:
         value: "10000"
       - key: ENABLE_ADMIN_API
         value: "true"
+      # Fixed, non-secret Nepal pilot configuration. Runtime validation rejects
+      # missing or contradictory values.
+      - key: ACTIVE_MARKET
+        value: NP
+      - key: DEFAULT_COUNTRY_CODE
+        value: NP
+      - key: DEFAULT_CURRENCY_CODE
+        value: NPR
+      - key: DEFAULT_LOCALE
+        value: en-NP
+      - key: DEFAULT_TIMEZONE
+        value: Asia/Kathmandu
+      - key: DEFAULT_TAX_REGIME
+        value: IRD
       - key: TRUST_PROXY_HOPS
         value: "1"
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_SSL_REJECT_UNAUTHORIZED
         value: "true"
       - key: REDIS_URL
         fromService:
@@ -44,9 +60,15 @@ services:
         generateValue: true
       - key: COOKIE_SECRET
         generateValue: true
+      - key: JWT_ISSUER
+        value: storesync-backend
+      - key: JWT_AUDIENCE
+        value: storesync-operations
       - key: ENCRYPTION_KEY
         generateValue: true
       - key: SIGNATURE_SECRET
+        generateValue: true
+      - key: OTP_HASH_SECRET
         generateValue: true
       - key: PAYMENT_ENCRYPTION_KEY
         sync: false
@@ -58,9 +80,33 @@ services:
         value: "false"
       - key: SMS_PROVIDER
         sync: false
-      - key: SMS_PROVIDER_API_KEY
+      - key: TWILIO_ACCOUNT_SID
         sync: false
-      - key: EMAIL_PROVIDER
+      - key: TWILIO_AUTH_TOKEN
         sync: false
-      - key: EMAIL_PROVIDER_API_KEY
+      - key: TWILIO_VERIFY_SERVICE_SID
         sync: false
+      - key: OTP_DEMO_PHONE
+        sync: false
+      - key: OTP_DEMO_CODE
+        sync: false
+      - key: OTP_DEMO_EXPIRES_AT
+        sync: false
+      - key: ENABLE_ADVANCED_ANALYTICS
+        value: "false"
+      - key: ENABLE_EXTERNAL_TAX_INTEGRATION
+        value: "false"
+      - key: ENABLE_RETURNS
+        value: "false"
+      - key: ENABLE_PROMOTION_ENGINE
+        value: "false"
+      - key: ENABLE_CUSTOMER_SEGMENTS
+        value: "false"
+      - key: ENABLE_OFFLINE_SYNC
+        value: "false"
+      - key: ENABLE_HARDWARE_DEVICES
+        value: "false"
+      - key: ENABLE_EXTERNAL_CMS_CDN
+        value: "false"
+      - key: ENABLE_FISCAL_COMPLIANCE_INTEGRATION
+        value: "false"

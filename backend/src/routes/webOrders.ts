@@ -2,18 +2,92 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { WebOrderService } from "../services/webOrderService.js";
 import { authenticateStaff } from "../middleware/authentication.js";
+import { csrfMatches } from "../utils/csrf.js";
+import { requireStoreAccess } from "../plugins/authorization.js";
+import { query } from "../database/connection.js";
+import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
+import { CheckoutService } from "../services/checkoutService.js";
 
 const webOrderService = new WebOrderService();
+const checkoutService = new CheckoutService();
 
 export async function webOrderRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", authenticateStaff);
   fastify.addHook("preHandler", async (request, reply) => {
+    if (!csrfMatches(request)) {
+      return reply.status(403).send({
+        error: "CSRF validation failed",
+        code: "CSRF_INVALID",
+      });
+    }
     const user = request.user as { roleKey?: string; capabilities?: string[] };
-    const privileged = user.roleKey === "platform_admin" || user.capabilities?.includes("system.manage");
-    const capability = request.method === "GET" ? "orders.read" : "orders.write";
+    const privileged =
+      user.roleKey === "platform_admin" ||
+      user.capabilities?.includes("system.manage");
+    const requestBody = (request.body || {}) as Record<string, unknown>;
+    const path = request.url.split("?", 1)[0];
+    const capability =
+      request.method === "GET"
+        ? "orders.read"
+        : path.endsWith("/cancel") || requestBody.status === "CANCELLED"
+          ? "orders.cancel"
+          : path.endsWith("/payment-status") &&
+              requestBody.payment_status === "REFUNDED"
+            ? "refunds.approve"
+            : path.endsWith("/status")
+              ? "orders.fulfil"
+              : "orders.modify";
     if (!privileged && !user.capabilities?.includes(capability)) {
       return reply.status(403).send({ error: "Order permission required" });
     }
+
+    if (privileged) return;
+    const scopedUser = request.user as {
+      scopeType?: string;
+      scopeOrganizationId?: string;
+      scopeStoreIds?: string[];
+      storeId?: string;
+    };
+    if (scopedUser.scopeType === "GLOBAL") return;
+
+    const body = (request.body || {}) as Record<string, unknown>;
+    const queryParams = (request.query || {}) as Record<string, unknown>;
+    const params = (request.params || {}) as Record<string, unknown>;
+    let targetStoreId =
+      typeof body.store_id === "string"
+        ? body.store_id
+        : typeof queryParams.store_id === "string"
+          ? queryParams.store_id
+          : undefined;
+
+    if (!targetStoreId && typeof params.orderId === "string") {
+      const order = await query("SELECT store_id FROM web_orders WHERE id = $1", [
+        params.orderId,
+      ]);
+      targetStoreId = order.rows[0]?.store_id;
+    }
+    if (!targetStoreId && typeof params.orderNumber === "string") {
+      const order = await query(
+        "SELECT store_id FROM web_orders WHERE order_number = $1",
+        [params.orderNumber],
+      );
+      targetStoreId = order.rows[0]?.store_id;
+    }
+    if (!targetStoreId) {
+      return reply.status(400).send({
+        error: "Store ID is required for store-scoped order operations",
+        code: "STORE_ID_REQUIRED",
+      });
+    }
+    try {
+      await requireStoreAccess(request, targetStoreId);
+    } catch {
+      return reply.status(403).send({
+        error: "Store is outside the staff scope",
+        code: "STORE_SCOPE_DENIED",
+      });
+    }
+    bindAuthenticatedAuditActor(request);
   });
   // Web Order: Create order from cart
   fastify.post("/web-orders", async (request, reply) => {
@@ -21,8 +95,8 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       customer_id: z.string().uuid(),
       store_id: z.string().uuid(),
       cart_id: z.string().uuid(),
-      payment_method: z.string(),
-      payment_intent_id: z.string().optional(),
+      payment_method: z.literal("COD"),
+      idempotency_key: z.string().min(8).max(100),
       shipping_name: z.string().min(1),
       shipping_phone: z.string(),
       shipping_address: z.string().min(1),
@@ -34,13 +108,27 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       delivery_date: z.coerce.date().optional(),
       delivery_time_slot: z.string().optional(),
       notes: z.string().optional(),
-      metadata: z.any().optional(),
-    });
+    }).strict();
 
     const orderData = schema.parse(request.body);
 
     try {
-      const order = await webOrderService.createWebOrder(orderData);
+      const order = await checkoutService.createCodOrder({
+        customerId: orderData.customer_id,
+        storeId: orderData.store_id,
+        cartId: orderData.cart_id,
+        idempotencyKey: orderData.idempotency_key,
+        deliveryType: orderData.delivery_type,
+        shippingName: orderData.shipping_name,
+        shippingPhone: orderData.shipping_phone,
+        shippingAddress: orderData.shipping_address,
+        shippingCity: orderData.shipping_city,
+        shippingState: orderData.shipping_state,
+        shippingPostalCode: orderData.shipping_postal_code,
+        shippingCountry: orderData.shipping_country,
+        notes: orderData.notes,
+        actorId: (request.user as { id: string }).id,
+      });
       return reply.status(201).send(order);
     } catch (error) {
       if (error instanceof Error && error.message === "Cart is empty") {
@@ -96,10 +184,14 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       status: z
         .enum([
           "PENDING",
+          "PENDING_PAYMENT",
           "CONFIRMED",
-          "PROCESSING",
-          "SHIPPED",
+          "PICKING",
+          "PACKED",
+          "OUT_FOR_DELIVERY",
           "DELIVERED",
+          "RETURN_REQUESTED",
+          "RETURNED",
           "CANCELLED",
           "REFUNDED",
         ])
@@ -109,8 +201,8 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         .optional(),
       date_from: z.coerce.date().optional(),
       date_to: z.coerce.date().optional(),
-      limit: z.coerce.number().optional(),
-      offset: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      offset: z.coerce.number().int().min(0).max(100_000).default(0),
     });
 
     const filters = schema.parse(request.query);
@@ -147,24 +239,34 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
 
     const bodySchema = z.object({
       status: z.enum([
-        "PENDING",
+        "PENDING_PAYMENT",
         "CONFIRMED",
-        "PROCESSING",
-        "SHIPPED",
+        "PICKING",
+        "PACKED",
+        "OUT_FOR_DELIVERY",
         "DELIVERED",
+        "RETURN_REQUESTED",
+        "RETURNED",
         "CANCELLED",
         "REFUNDED",
       ]),
+      reason: z.string().trim().min(1).max(500).optional(),
     });
 
     const { orderId } = paramsSchema.parse(request.params);
-    const { status } = bodySchema.parse(request.body);
+    const { status, reason } = bodySchema.parse(request.body);
 
     try {
-      const order = await webOrderService.updateWebOrderStatus(orderId, status);
+      const order = await webOrderService.updateWebOrderStatus(
+        orderId,
+        status,
+        (request.user as { id: string }).id,
+        reason,
+      );
       return reply.send(order);
-    } catch {
-      return reply.status(500).send({ error: "Failed to update order status" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update order status";
+      return reply.status(message.startsWith("Invalid transition") ? 409 : 500).send({ error: message });
     }
   });
 
@@ -188,13 +290,13 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       const order = await webOrderService.updatePaymentStatus(
         orderId,
         payment_status,
+        (request.user as { id: string }).id,
         payment_intent_id,
       );
       return reply.send(order);
-    } catch {
-      return reply
-        .status(500)
-        .send({ error: "Failed to update payment status" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update payment status";
+      return reply.status(message.startsWith("Invalid payment transition") ? 409 : 500).send({ error: message });
     }
   });
 
@@ -212,10 +314,15 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
     const { reason } = bodySchema.parse(request.body);
 
     try {
-      const order = await webOrderService.cancelWebOrder(orderId, reason);
+      const order = await webOrderService.cancelWebOrder(
+        orderId,
+        (request.user as { id: string }).id,
+        reason,
+      );
       return reply.send(order);
-    } catch {
-      return reply.status(500).send({ error: "Failed to cancel order" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to cancel order";
+      return reply.status(message.startsWith("Invalid transition") ? 409 : 500).send({ error: message });
     }
   });
 }

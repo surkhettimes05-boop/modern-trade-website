@@ -10,14 +10,42 @@
   ["009_pos_offline", "../database/expansion_phase3_pos_schema.sql"],
   ["010_compliance", "../database/expansion_phase5_compliance_schema.sql"],
   ["011_capability_scope", "../database/wp1_capability_scope_schema.sql"],
-  ["012_organization_market_configuration", "../database/wp0_organization_config_schema.sql"],
+  [
+    "012_organization_market_configuration",
+    "../database/wp0_organization_config_schema.sql"
+  ],
   ["013_storefront_catalog", "../database/013_storefront_catalog.sql"],
-  ["014_phase07_integration_safety", "../database/014_phase07_integration_safety.sql"],
-  ["015_phase08_analytics_audit", "../database/015_phase08_analytics_audit.sql"],
-  ["016_nepal_market_configuration", "../database/016_nepal_market_configuration.sql"],
+  [
+    "014_phase07_integration_safety",
+    "../database/014_phase07_integration_safety.sql"
+  ],
+  [
+    "015_phase08_analytics_audit",
+    "../database/015_phase08_analytics_audit.sql"
+  ],
+  [
+    "016_nepal_market_configuration",
+    "../database/016_nepal_market_configuration.sql"
+  ],
   ["017_order_events", "../database/017_order_events.sql"],
   ["018_enable_public_rls", "../database/018_enable_public_rls.sql"],
-  ["020_explicit_deny_supabase_api", "../database/020_explicit_deny_supabase_api.sql"],
-  ["021_platform_admin_operations_capabilities", "../database/021_platform_admin_operations_capabilities.sql"],
-  ["022_nepal_loyalty_mvp", "../database/022_nepal_loyalty_mvp.sql"]
+  [
+    "020_explicit_deny_supabase_api",
+    "../database/020_explicit_deny_supabase_api.sql"
+  ],
+  [
+    "021_platform_admin_operations_capabilities",
+    "../database/021_platform_admin_operations_capabilities.sql"
+  ],
+  ["022_nepal_loyalty_mvp", "../database/022_nepal_loyalty_mvp.sql"],
+  [
+    "023_checkout_web_order_contract",
+    "../database/023_checkout_web_order_contract.sql"
+  ],
+  [
+    "024_stock_reservation_contract",
+    "../database/024_stock_reservation_contract.sql"
+  ],
+  ["025_hash_customer_otp", "../database/025_hash_customer_otp.sql"],
+  ["026_hash_session_tokens", "../database/026_hash_session_tokens.sql"]
 ]

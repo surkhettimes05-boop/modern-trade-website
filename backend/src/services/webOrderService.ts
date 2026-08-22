@@ -1,4 +1,4 @@
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
 import { MARKET } from "../config/market.js";
 
 interface WebOrder {
@@ -50,6 +50,26 @@ interface WebOrderItem {
 }
 
 export class WebOrderService {
+  private readonly validStatusTransitions: Record<string, string[]> = {
+    PENDING: ["CONFIRMED", "CANCELLED"],
+    PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
+    CONFIRMED: ["PICKING", "CANCELLED"],
+    PICKING: ["PACKED", "CANCELLED"],
+    PACKED: ["OUT_FOR_DELIVERY", "CANCELLED"],
+    OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED"],
+    DELIVERED: ["RETURN_REQUESTED"],
+    RETURN_REQUESTED: ["RETURNED"],
+    RETURNED: ["REFUNDED"],
+    CANCELLED: [],
+    REFUNDED: [],
+  };
+
+  private readonly validPaymentTransitions: Record<string, string[]> = {
+    PENDING: ["PAID", "FAILED"],
+    FAILED: ["PENDING", "PAID"],
+    PAID: ["REFUNDED"],
+    REFUNDED: [],
+  };
   /**
    * Create web order from cart
    */
@@ -103,7 +123,7 @@ export class WebOrderService {
         shipping_name, shipping_phone, shipping_address, shipping_city,
         shipping_state, shipping_postal_code, shipping_country,
         delivery_type, delivery_date, delivery_time_slot, notes, metadata
-      ) VALUES ($1, $2, $3, NOW(), 'PENDING', $4, $5, $6, $7, $8, $9, 'PENDING', $10,
+      ) VALUES ($1, $2, $3, NOW(), 'PENDING_PAYMENT', $4, $5, $6, $7, $8, $9, 'PENDING', $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *`,
       [
@@ -248,8 +268,11 @@ export class WebOrderService {
 
     const whereClause =
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const limitClause = filters.limit ? `LIMIT ${filters.limit}` : "";
-    const offsetClause = filters.offset ? `OFFSET ${filters.offset}` : "";
+    const limit = filters.limit || 50;
+    const offset = filters.offset || 0;
+    params.push(limit, offset);
+    const limitClause = `LIMIT $${paramIndex}`;
+    const offsetClause = `OFFSET $${paramIndex + 1}`;
 
     const result = await query(
       `SELECT * FROM web_orders ${whereClause} ORDER BY order_date DESC ${limitClause} ${offsetClause}`,
@@ -276,16 +299,59 @@ export class WebOrderService {
   async updateWebOrderStatus(
     orderId: string,
     status: string,
+    actorId: string,
+    reason?: string,
   ): Promise<WebOrder> {
-    const result = await query(
-      `UPDATE web_orders 
-       SET status = $1, updated_at = NOW()
-       WHERE id = $2
-       RETURNING *`,
-      [status, orderId],
-    );
-
-    return result.rows[0];
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        "SELECT * FROM web_orders WHERE id = $1 FOR UPDATE",
+        [orderId],
+      );
+      const order = current.rows[0];
+      if (!order) throw new Error("Order not found");
+      if (!this.validStatusTransitions[order.status]?.includes(status)) {
+        throw new Error(`Invalid transition from ${order.status} to ${status}`);
+      }
+      const result = await client.query(
+        `UPDATE web_orders
+         SET status = $1,
+             cancellation_reason = CASE WHEN $1 = 'CANCELLED' THEN $2 ELSE cancellation_reason END,
+             cancelled_at = CASE WHEN $1 = 'CANCELLED' THEN NOW() ELSE cancelled_at END,
+             cancelled_by = CASE WHEN $1 = 'CANCELLED' THEN $3 ELSE cancelled_by END,
+             updated_at = NOW()
+         WHERE id = $4 RETURNING *`,
+        [status, reason || null, actorId, orderId],
+      );
+      if (status === "CANCELLED") {
+        await client.query(
+          `UPDATE stock_reservations SET status = 'CANCELLED', updated_at = NOW()
+           WHERE status = 'ACTIVE' AND (order_id = $1 OR cart_id = $2)`,
+          [orderId, order.cart_id],
+        );
+      }
+      await client.query(
+        `INSERT INTO order_events
+          (order_id, event_type, from_status, to_status, reason, metadata, created_by)
+         VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, $6)`,
+        [
+          orderId,
+          status === "CANCELLED" ? "CANCELLED" : "STATUS_CHANGE",
+          order.status,
+          status,
+          reason || null,
+          actorId,
+        ],
+      );
+      await client.query("COMMIT");
+      return result.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -294,44 +360,60 @@ export class WebOrderService {
   async updatePaymentStatus(
     orderId: string,
     paymentStatus: string,
+    actorId: string,
     paymentIntentId?: string,
   ): Promise<WebOrder> {
-    const fields: string[] = [`payment_status = $1`];
-    const values: any[] = [paymentStatus];
-    let paramIndex = 2;
-
-    if (paymentIntentId) {
-      fields.push(`payment_intent_id = $${paramIndex}`);
-      values.push(paymentIntentId);
-      paramIndex++;
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        "SELECT * FROM web_orders WHERE id = $1 FOR UPDATE",
+        [orderId],
+      );
+      const order = current.rows[0];
+      if (!order) throw new Error("Order not found");
+      if (!this.validPaymentTransitions[order.payment_status]?.includes(paymentStatus)) {
+        throw new Error(
+          `Invalid payment transition from ${order.payment_status} to ${paymentStatus}`,
+        );
+      }
+      const result = await client.query(
+        `UPDATE web_orders SET payment_status = $1,
+           payment_intent_id = COALESCE($2, payment_intent_id), updated_at = NOW()
+         WHERE id = $3 RETURNING *`,
+        [paymentStatus, paymentIntentId || null, orderId],
+      );
+      await client.query(
+        `INSERT INTO order_events
+          (order_id, event_type, from_status, to_status, reason, metadata, created_by)
+         VALUES ($1, 'PAYMENT_STATUS_CHANGE', $2, $3, NULL, $4, $5)`,
+        [
+          orderId,
+          order.payment_status,
+          paymentStatus,
+          JSON.stringify({ payment_intent_id: paymentIntentId || null }),
+          actorId,
+        ],
+      );
+      await client.query("COMMIT");
+      return result.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
-
-    fields.push(`updated_at = NOW()`);
-    values.push(orderId);
-
-    const result = await query(
-      `UPDATE web_orders SET ${fields.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
-      values,
-    );
-
-    return result.rows[0];
   }
 
   /**
    * Cancel web order
    */
-  async cancelWebOrder(orderId: string, reason?: string): Promise<WebOrder> {
-    const result = await query(
-      `UPDATE web_orders 
-       SET status = 'CANCELLED', 
-           notes = COALESCE($1, notes) || ' - Cancelled',
-           updated_at = NOW()
-       WHERE id = $2
-       RETURNING *`,
-      [reason, orderId],
-    );
-
-    return result.rows[0];
+  async cancelWebOrder(
+    orderId: string,
+    actorId: string,
+    reason?: string,
+  ): Promise<WebOrder> {
+    return this.updateWebOrderStatus(orderId, "CANCELLED", actorId, reason);
   }
 
   /**

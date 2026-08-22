@@ -1,5 +1,6 @@
 import { FastifyError, FastifyRequest, FastifyReply } from "fastify";
 import { logger } from "../utils/logger.js";
+import { ZodError } from "zod";
 
 function errorCode(statusCode: number, error: FastifyError): string {
   if (statusCode === 400)
@@ -17,29 +18,46 @@ export const errorHandler = async (
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> => {
+  const zodValidation =
+    error instanceof ZodError ||
+    ((error as Error & { issues?: unknown }).name === "ZodError" &&
+      Array.isArray((error as Error & { issues?: unknown }).issues));
+  const statusCode = zodValidation ? 400 : error.statusCode || 500;
+
   // Log error without exposing sensitive information
-  logger.error("Request error", {
-    message: error.message,
-    status: error.statusCode,
-    path: request.url,
+  const logMeta = {
+    message: statusCode >= 500 ? error.message : "Request rejected",
+    status: statusCode,
+    path: request.routeOptions?.url || request.url.split("?", 1)[0],
     method: request.method,
     correlationId: request.id,
-  });
-
-  // Determine status code
-  const statusCode = error.statusCode || 500;
+  };
+  if (statusCode >= 500) logger.error("Request error", logMeta);
+  else logger.warn("Request rejected", logMeta);
 
   // Prepare error response
   const errorResponse: Record<string, unknown> = {
     error: true,
     code: errorCode(statusCode, error),
-    message: statusCode >= 500 ? "Internal server error" : error.message,
+    message:
+      statusCode >= 500
+        ? "Internal server error"
+        : zodValidation
+          ? "Validation failed"
+          : error.message,
     requestId: request.id,
     correlationId: request.id,
   };
 
   // Add validation errors if present
-  if (error.validation) {
+  if (zodValidation) {
+    const issues = (error as unknown as ZodError).issues;
+    errorResponse.validation = issues.map((issue) => ({
+      code: issue.code,
+      path: issue.path,
+      message: issue.message,
+    }));
+  } else if (error.validation) {
     errorResponse.validation = error.validation;
   }
 

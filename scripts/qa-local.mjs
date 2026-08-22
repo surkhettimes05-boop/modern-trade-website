@@ -29,8 +29,13 @@ const localEnv = {
   ENABLE_ADMIN_API: "true",
   JWT_SECRET: process.env.LOCAL_QA_JWT_SECRET || "local-qa-jwt-secret-do-not-use-in-production",
   COOKIE_SECRET: process.env.LOCAL_QA_COOKIE_SECRET || "local-qa-cookie-secret-do-not-use-in-production",
+  JWT_ISSUER: "storesync-backend",
+  JWT_AUDIENCE: "storesync-operations",
   ENCRYPTION_KEY: process.env.LOCAL_QA_ENCRYPTION_KEY || "local-qa-encryption-key-32-bytes!",
   SIGNATURE_SECRET: process.env.LOCAL_QA_SIGNATURE_SECRET || "local-qa-signature-secret-32-bytes!",
+  OTP_HASH_SECRET:
+    process.env.LOCAL_QA_OTP_HASH_SECRET ||
+    "local-qa-otp-hash-secret-32-bytes!",
   PAYMENT_ENCRYPTION_KEY: process.env.LOCAL_QA_PAYMENT_ENCRYPTION_KEY || "0".repeat(64),
 };
 

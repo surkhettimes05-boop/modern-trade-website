@@ -15,8 +15,11 @@ x-backend: &backend
     APP_URL: http://localhost:53000
     JWT_SECRET: ${QA_JWT_SECRET:-qa-only-jwt-secret-change-me}
     COOKIE_SECRET: ${QA_COOKIE_SECRET:-qa-only-cookie-secret-change-me}
+    JWT_ISSUER: storesync-backend
+    JWT_AUDIENCE: storesync-operations
     ENCRYPTION_KEY: ${QA_ENCRYPTION_KEY:-qa-only-encryption-key-32-bytes!}
     SIGNATURE_SECRET: ${QA_SIGNATURE_SECRET:-qa-only-signature-secret-32!}
+    OTP_HASH_SECRET: ${QA_OTP_HASH_SECRET:-qa-only-otp-hash-secret-32-bytes!}
     PAYMENT_ENCRYPTION_KEY: ${QA_PAYMENT_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
     ENABLE_ADMIN_API: "true"
     ENABLE_ELECTRONIC_PAYMENTS: "false"

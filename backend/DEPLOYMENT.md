@@ -2,21 +2,9 @@
 
 ## Environment Variables
 
-Required environment variables for production:
-
-```bash
-DATABASE_URL=postgresql://user:password@host:5432/storesync
-DATABASE_SSL=true
-PORT=3001
-HOST=0.0.0.0
-NODE_ENV=production
-JWT_SECRET=your-production-secret
-CORS_ORIGIN=https://storesync.com
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
-ENABLE_ADMIN_API=true
-ENABLE_CONTENT_SCHEDULING=true
-```
+Production startup validates all required configuration before connecting to
+Redis or opening the HTTP listener. Use `backend/.env.production.example` as
+the complete template; never commit populated secrets.
 
 ## Docker Deployment
 
@@ -24,8 +12,8 @@ ENABLE_CONTENT_SCHEDULING=true
 
 The repository includes `render.yaml` for a repeatable Render Blueprint. It
 creates the backend Docker Web Service and a private Redis-compatible Key Value
-service. Supabase remains the PostgreSQL provider; Render will prompt for the
-Supabase `DATABASE_URL` during the initial Blueprint setup.
+service. Render prompts for the deployment-specific PostgreSQL and frontend
+values during initial Blueprint setup.
 
 Review the plan and region in `render.yaml` before creating the Blueprint.
 
@@ -34,14 +22,11 @@ not need to be installed on your laptop.
 
 ### 1. Create the data services
 
-In the same Render region, create:
-
-- A Render Postgres database named `storesync-db`.
-- A Render Key Value instance named `storesync-redis`.
-
-Use the internal connection URLs from each service's Connect panel. Render
-recommends internal URLs when services share a region because traffic stays on
-the private network.
+The Blueprint creates `storesync-redis`. Supply `DATABASE_URL` for a managed
+PostgreSQL database reachable by the Web Service. Use a private/internal URL
+when the database shares the Render region; otherwise use the provider's TLS
+URL. The deployment migration command requires a PostgreSQL URL and working
+TLS certificate validation.
 
 ### 2. Create the backend Web Service
 
@@ -55,40 +40,62 @@ Region: same region as Postgres and Key Value
 Health Check Path: /api/health/ready
 ```
 
-The Dockerfile already installs `pg_dump`, runs the compiled deployment
-migration command, and starts the Fastify server. Do not add a separate start
-command unless you intentionally replace the Dockerfile `CMD`.
+The Node 22 Dockerfile installs `pg_dump`, runs the compiled deployment
+migration command, and starts `dist/index.js`. Do not add a separate start
+command unless you intentionally replace the Dockerfile `CMD`. Fastify reads
+Render's `PORT` and binds to `0.0.0.0`.
 
 ### 3. Add Render environment variables
 
-Start from `backend/.env.production.example`. In Render's **Environment** tab,
-add the following values:
+Start from `backend/.env.production.example`. In **Render Dashboard → Service
+→ Environment**, verify the following values.
+
+The Blueprint commits these safe, fixed Nepal launch constants:
 
 ```text
-NODE_ENV=production
-HOST=0.0.0.0
-PORT=10000
-ENABLE_ADMIN_API=true
-DATABASE_URL=<Render Postgres internal connection URL>
-DATABASE_SSL=true
-REDIS_URL=<Render Key Value internal connection URL>
-REDIS_NAMESPACE=storesync-production
-CORS_ORIGIN=https://<your-vercel-domain>
-APP_URL=https://<your-vercel-domain>
-JWT_SECRET=<generated secret>
-COOKIE_SECRET=<different generated secret>
-ENCRYPTION_KEY=<at least 32 random bytes>
-SIGNATURE_SECRET=<at least 32 random bytes>
-PAYMENT_ENCRYPTION_KEY=<exactly 64 hexadecimal characters>
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
-ENABLE_ELECTRONIC_PAYMENTS=false
+ACTIVE_MARKET=NP
+DEFAULT_COUNTRY_CODE=NP
+DEFAULT_CURRENCY_CODE=NPR
+DEFAULT_LOCALE=en-NP
+DEFAULT_TIMEZONE=Asia/Kathmandu
+DEFAULT_TAX_REGIME=IRD
 ```
 
-Also configure `SMS_PROVIDER` and `SMS_PROVIDER_API_KEY` before expecting real
-customer OTP login to work. Configure both email variables together if email
-notifications are enabled. Leave optional map and payment provider variables
-empty until those integrations are approved.
+The Blueprint also supplies the fixed runtime policy (`NODE_ENV`, `HOST`,
+`PORT`, SSL policy, JWT issuer/audience, rate limits, and disabled deferred
+features), connects `REDIS_URL`, and generates five independent secrets.
+
+Render requires the operator to supply these deployment-specific values:
+
+```text
+DATABASE_URL=<managed PostgreSQL connection URL>
+CORS_ORIGIN=https://<your-vercel-domain>
+APP_URL=https://<your-vercel-domain>
+PAYMENT_ENCRYPTION_KEY=<exactly 64 hexadecimal characters>
+```
+
+`DATABASE_URL`, `CORS_ORIGIN`, and `APP_URL` are deployment-specific
+configuration. `PAYMENT_ENCRYPTION_KEY` is a secret; generate it with a
+cryptographically secure generator (for example, `openssl rand -hex 32`) and
+enter it only in Render. Render generates `JWT_SECRET`, `COOKIE_SECRET`,
+`ENCRYPTION_KEY`, `SIGNATURE_SECRET`, and `OTP_HASH_SECRET`; do not overwrite
+them with shared or placeholder values.
+
+Optional integrations should remain absent unless intentionally enabled. For
+customer OTP delivery with Twilio Verify, configure the complete group
+`SMS_PROVIDER=twilio_verify`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and
+`TWILIO_VERIFY_SERVICE_SID`. Verify manages the SMS sender, so
+`TWILIO_FROM_NUMBER` is not required. Configure both `EMAIL_PROVIDER` and
+`EMAIL_PROVIDER_API_KEY` together. A map provider
+requires `DEFAULT_MAP_PROVIDER=Baato` plus `BAATO_API_KEY`, or
+`DEFAULT_MAP_PROVIDER=Galli` plus `GALLI_API_KEY`. Electronic payment providers
+remain uncertified and `ENABLE_ELECTRONIC_PAYMENTS` must stay `false`.
+
+For short-lived testing without SMS, set `SMS_PROVIDER=demo` together with one
+existing customer's `OTP_DEMO_PHONE`, a private six-digit `OTP_DEMO_CODE`, and
+an ISO `OTP_DEMO_EXPIRES_AT` no more than seven days ahead. The API never
+returns the configured code and rejects every other phone. Remove all four
+values immediately after testing; never use demo mode for customer traffic.
 
 ### 4. Deploy and verify
 
