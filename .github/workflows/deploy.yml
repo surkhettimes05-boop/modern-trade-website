@@ -25,6 +25,8 @@ jobs:
             frontend/package-lock.json
       - run: npm ci --prefix backend
       - run: npm ci --prefix frontend
+      - name: Locate PostgreSQL test binaries
+        run: echo "PG_BIN=$(pg_config --bindir)" >> "$GITHUB_ENV"
       - run: npm run type-check --prefix backend
       - run: npm run test:ci --prefix backend
       - run: npm run type-check --prefix frontend

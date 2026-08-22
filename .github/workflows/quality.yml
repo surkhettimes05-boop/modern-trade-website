@@ -41,6 +41,8 @@ jobs:
         run: npm ci --prefix backend
       - name: Install frontend
         run: npm ci --prefix frontend
+      - name: Locate PostgreSQL test binaries
+        run: echo "PG_BIN=$(pg_config --bindir)" >> "$GITHUB_ENV"
       - name: Backend type-check
         run: npm run type-check --prefix backend
       - name: Backend tests
