@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-const testUrl = 'postgresql://postgres@127.0.0.1:55433/storesync_jest_test?options=-c%20search_path%3Dstoresync_jest_test%2Cpublic';
+const testUrl = process.env.TEST_DATABASE_URL || 'postgresql://postgres@127.0.0.1:55433/storesync_jest_test?options=-c%20search_path%3Dstoresync_jest_test%2Cpublic';
 const parsed = new URL(testUrl);
 if (parsed.hostname !== '127.0.0.1' || parsed.port !== '55433' || parsed.pathname !== '/storesync_jest_test') {
   throw new Error('Refusing non-dedicated test database target');
