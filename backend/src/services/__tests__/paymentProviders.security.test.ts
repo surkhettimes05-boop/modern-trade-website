@@ -18,17 +18,20 @@ const payload = {
 
 describe("payment provider safety boundaries", () => {
   it("does not authenticate eSewa callbacks with a placeholder signature check", async () => {
-    const result = await new EsewaProvider().verifyWebhook(payload);
-    expect(result.valid).toBe(false);
+    await expect(new EsewaProvider().verifyWebhook(payload)).rejects.toThrow(
+      "provider contract is not certified",
+    );
   });
 
   it("does not authenticate Khalti callbacks without a configured secret", async () => {
-    const result = await new KhaltiProvider().verifyWebhook(payload);
-    expect(result.valid).toBe(false);
+    await expect(new KhaltiProvider().verifyWebhook(payload)).rejects.toThrow(
+      "provider contract is not certified",
+    );
   });
 
   it("does not accept every Fonepay callback as authentic", async () => {
-    const result = await new FonePayProvider().verifyWebhook(payload);
-    expect(result.valid).toBe(false);
+    await expect(new FonePayProvider().verifyWebhook(payload)).rejects.toThrow(
+      "provider contract is not certified",
+    );
   });
 });

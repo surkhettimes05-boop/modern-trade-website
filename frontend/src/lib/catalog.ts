@@ -22,8 +22,7 @@ export type StorefrontCategory = { id: string; name: string; slug: string; image
 export type Store = { id: string; name: string; address?: string; phone?: string; hours?: string; services?: string[] | Record<string, unknown>; latitude?: number; longitude?: number; map_url?: string; is_temporarily_closed?: boolean };
 export type Offer = { id: string; title: string; description: string; image_url?: string; banner_image_url?: string; start_date: string; end_date: string; terms?: string; is_featured: boolean; sort_order: number };
 
-export const MARKET = { countryCode: 'NP', currencyCode: 'NPR', locale: 'en-NP', timezone: 'Asia/Kathmandu', taxRegime: 'IRD' } as const;
-export const formatPrice = (n: number) => new Intl.NumberFormat(MARKET.locale, { style: 'currency', currency: MARKET.currencyCode, maximumFractionDigits: 0 }).format(n);
+export { MARKET, formatPrice } from './market';
 export const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 const image = (id: string) => id.startsWith('/') ? id : `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=82`;

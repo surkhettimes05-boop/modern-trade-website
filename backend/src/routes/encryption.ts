@@ -2,12 +2,21 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { encryptionService } from "../services/encryptionService.js";
 
+function keyMetadata(key: Record<string, unknown>) {
+  const metadata = { ...key };
+  delete metadata.private_key;
+  delete metadata.public_key;
+  delete metadata.private_key_encrypted;
+  delete metadata.public_key_encrypted;
+  return metadata;
+}
+
 export async function encryptionRoutes(fastify: FastifyInstance) {
   // Encryption: Encrypt data
   fastify.post("/encryption/encrypt", async (request, reply) => {
     const schema = z.object({
-      data: z.string(),
-      key_type: z.string().optional(),
+      data: z.string().min(1).max(100_000),
+      key_type: z.string().min(1).max(100).optional(),
     });
 
     const { data, key_type = "DATA_ENCRYPTION" } = schema.parse(request.body);
@@ -29,8 +38,8 @@ export async function encryptionRoutes(fastify: FastifyInstance) {
   // Encryption: Decrypt data
   fastify.post("/encryption/decrypt", async (request, reply) => {
     const schema = z.object({
-      encrypted_data: z.string(),
-      key_id: z.string(),
+      encrypted_data: z.string().min(1).max(200_000),
+      key_id: z.string().min(1).max(200),
     });
 
     const { encrypted_data, key_id } = schema.parse(request.body);
@@ -54,19 +63,25 @@ export async function encryptionRoutes(fastify: FastifyInstance) {
 
   // Encryption: Create key
   fastify.post("/encryption/keys", async (request, reply) => {
-    const schema = z.object({
-      key_type: z.string(),
-      key_algorithm: z.string(),
-      key_usage: z.string(),
-      created_by: z.string().optional(),
-      expires_at: z.coerce.date().optional(),
-    });
+    const schema = z
+      .object({
+        key_type: z.string().min(1).max(100),
+        key_algorithm: z.literal("AES-256-GCM"),
+        key_usage: z.literal("ENCRYPTION"),
+        expires_at: z.coerce.date().optional(),
+      })
+      .strict();
 
     const keyData = schema.parse(request.body);
 
     try {
-      const key = await encryptionService.createKey(keyData);
-      return reply.status(201).send(key);
+      const key = await encryptionService.createKey({
+        ...keyData,
+        created_by: (request.user as { id: string }).id,
+      });
+      return reply
+        .status(201)
+        .send(keyMetadata(key as unknown as Record<string, unknown>));
     } catch {
       return reply
         .status(500)
@@ -88,7 +103,7 @@ export async function encryptionRoutes(fastify: FastifyInstance) {
       if (!key) {
         return reply.status(404).send({ error: "No active key found" });
       }
-      return reply.send(key);
+      return reply.send(keyMetadata(key));
     } catch {
       return reply.status(500).send({ error: "Failed to get active key" });
     }
@@ -107,7 +122,7 @@ export async function encryptionRoutes(fastify: FastifyInstance) {
       if (!key) {
         return reply.status(404).send({ error: "Encryption key not found" });
       }
-      return reply.send(key);
+      return reply.send(keyMetadata(key));
     } catch {
       return reply.status(500).send({ error: "Failed to get encryption key" });
     }
@@ -119,16 +134,17 @@ export async function encryptionRoutes(fastify: FastifyInstance) {
       keyId: z.string(),
     });
 
-    const bodySchema = z.object({
-      rotated_by: z.string(),
-    });
+    const bodySchema = z.object({}).strict();
 
     const { keyId } = paramsSchema.parse(request.params);
-    const { rotated_by } = bodySchema.parse(request.body);
+    bodySchema.parse(request.body || {});
 
     try {
-      const key = await encryptionService.rotateKey(keyId, rotated_by);
-      return reply.send(key);
+      const key = await encryptionService.rotateKey(
+        keyId,
+        (request.user as { id: string }).id,
+      );
+      return reply.send(keyMetadata(key as unknown as Record<string, unknown>));
     } catch (error) {
       if (
         error instanceof Error &&
@@ -152,7 +168,11 @@ export async function encryptionRoutes(fastify: FastifyInstance) {
 
     try {
       const keys = await encryptionService.getAllKeys(filters);
-      return reply.send(keys);
+      return reply.send(
+        keys.map((key) =>
+          keyMetadata(key as unknown as Record<string, unknown>),
+        ),
+      );
     } catch {
       return reply.status(500).send({ error: "Failed to get encryption keys" });
     }

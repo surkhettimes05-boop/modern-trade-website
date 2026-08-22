@@ -1,5 +1,6 @@
 import { query } from "../database/connection.js";
 import crypto from "crypto";
+import { masterEncryptionKey } from "../utils/cryptoKeys.js";
 
 interface IRDTaxConfiguration {
   id: string;
@@ -350,10 +351,7 @@ export class IRDTaxService {
    */
   private encrypt(data: string): string {
     const algorithm = "aes-256-gcm";
-    const key = Buffer.from(
-      process.env.ENCRYPTION_KEY || "default-encryption-key-32-bytes",
-      "utf8",
-    ).slice(0, 32);
+    const key = masterEncryptionKey();
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv(algorithm, key, iv);
 
@@ -370,10 +368,7 @@ export class IRDTaxService {
    */
   private decrypt(encryptedData: string): string {
     const algorithm = "aes-256-gcm";
-    const key = Buffer.from(
-      process.env.ENCRYPTION_KEY || "default-encryption-key-32-bytes",
-      "utf8",
-    ).slice(0, 32);
+    const key = masterEncryptionKey();
 
     const [ivHex, authTagHex, encrypted] = encryptedData.split(":");
     const iv = Buffer.from(ivHex, "hex");

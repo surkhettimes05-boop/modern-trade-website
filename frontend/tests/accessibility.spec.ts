@@ -6,6 +6,7 @@ const pages = [
   "/shop",
   "/product/premium-basmati-rice-5kg",
   "/account",
+  "/loyalty",
   "/staff-login",
   "/cart",
   "/checkout",

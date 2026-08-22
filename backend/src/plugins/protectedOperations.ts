@@ -2,7 +2,6 @@ import { FastifyInstance } from "fastify";
 import { adminRoutes } from "../routes/admin.js";
 import { customerRoutes } from "../routes/customers.js";
 import { consentRoutes } from "../routes/consent.js";
-import { ledgerRoutes } from "../routes/ledger.js";
 import { ruleRoutes } from "../routes/rules.js";
 import { posRoutes } from "../routes/pos.js";
 import { offlineRoutes } from "../routes/offline.js";
@@ -25,6 +24,8 @@ import { posDeviceRoutes } from "../routes/posDevices.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
 import { requireStoreAccess } from "./authorization.js";
+import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
+import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
 
 const roleAccess: Record<string, string[]> = {
   CASHIER: ["/pos", "/shifts", "/payments"],
@@ -111,7 +112,11 @@ const capabilityAccess: Array<{
     read: ["procurement.read"],
     write: ["procurement.manage"],
   },
-  { prefix: "/payments", read: ["orders.read"], write: ["orders.read"] },
+  {
+    prefix: "/payments",
+    read: ["orders.read"],
+    write: ["orders.modify"],
+  },
 ];
 
 function routeStoreId(request: any): string | undefined {
@@ -131,7 +136,7 @@ function routeStoreId(request: any): string | undefined {
 }
 
 export async function protectedOperations(fastify: FastifyInstance) {
-  fastify.addHook("onRequest", async (request, reply) => {
+  fastify.addHook("preHandler", async (request, reply) => {
     try {
       await authenticateStaff(request, reply);
       if (reply.sent) return;
@@ -142,6 +147,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
           requestId: request.id,
         });
       }
+      bindAuthenticatedAuditActor(request);
     } catch {
       return reply.status(401).send({ error: "Staff authentication required" });
     }
@@ -154,6 +160,26 @@ export async function protectedOperations(fastify: FastifyInstance) {
       storeId?: string;
     };
     const routePath = request.url.replace(/^\/api/, "").split("?")[0];
+    const storeId = routeStoreId(request);
+    if (storeId) {
+      try {
+        await requireStoreAccess(request, storeId);
+      } catch {
+        return reply.status(403).send({
+          error: "Store is outside the staff scope",
+          code: "STORE_SCOPE_DENIED",
+        });
+      }
+    } else if (
+      ["ORGANIZATION", "STORE", "OWN_REGISTER"].includes(
+        String(user.scopeType),
+      )
+    ) {
+      return reply.status(400).send({
+        error: "Store ID is required for store-scoped operations",
+        code: "STORE_ID_REQUIRED",
+      });
+    }
     const resource = capabilityAccess.find(
       (item) =>
         routePath === item.prefix || routePath.startsWith(`${item.prefix}/`),
@@ -162,9 +188,14 @@ export async function protectedOperations(fastify: FastifyInstance) {
       user.roleKey === "platform_admin" ||
       user.capabilities?.includes("system.manage");
     if (resource) {
-      const required = ["GET", "HEAD"].includes(request.method)
+      let required = ["GET", "HEAD"].includes(request.method)
         ? resource.read
         : resource.write;
+      if (resource.prefix === "/payments") {
+        if (routePath.includes("/refund")) required = ["refunds.approve"];
+        else if (routePath.includes("/reconcile"))
+          required = ["reconciliation.manage"];
+      }
       if (
         !hasSystemAccess &&
         !required.some((capability) => user.capabilities?.includes(capability))
@@ -172,22 +203,6 @@ export async function protectedOperations(fastify: FastifyInstance) {
         return reply.status(403).send({
           error: "Your staff capabilities do not permit this operation",
           requiredCapabilities: required,
-        });
-      }
-      const storeId = routeStoreId(request);
-      if (storeId) {
-        try {
-          await requireStoreAccess(request, storeId);
-        } catch {
-          return reply.status(403).send({
-            error: "Store is outside the staff scope",
-            code: "STORE_SCOPE_DENIED",
-          });
-        }
-      } else if (["STORE", "OWN_REGISTER"].includes(String(user.scopeType))) {
-        return reply.status(400).send({
-          error: "Store ID is required for store-scoped operations",
-          code: "STORE_ID_REQUIRED",
         });
       }
       return;
@@ -208,16 +223,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
   await fastify.register(adminRoutes, { prefix: "/admin" });
   await fastify.register(customerRoutes, { prefix: "/customers" });
   await fastify.register(consentRoutes, { prefix: "/consent" });
-  await fastify.register(ledgerRoutes, { prefix: "/ledger" });
-  await fastify.register(ruleRoutes, { prefix: "/rules" });
   await fastify.register(posRoutes, { prefix: "/pos" });
-  await fastify.register(offlineRoutes, { prefix: "/offline" });
-  await fastify.register(alertRoutes, { prefix: "/alerts" });
-  await fastify.register(metricRoutes, { prefix: "/metrics" });
-  await fastify.register(kpiRoutes);
-  await fastify.register(offlineSyncRoutes);
-  await fastify.register(syncStatusRoutes);
-  await fastify.register(paymentRoutes);
   await fastify.register(supplierRoutes);
   await fastify.register(purchaseOrderRoutes);
   await fastify.register(receivingRoutes);
@@ -225,7 +231,25 @@ export async function protectedOperations(fastify: FastifyInstance) {
   await fastify.register(transferRoutes);
   await fastify.register(shiftRoutes);
   await fastify.register(tenderReconciliationRoutes);
-  await fastify.register(posDeviceRoutes);
   await fastify.register(staffRoutes);
   await fastify.register(auditReportRoutes);
+  if (deferredFeatureEnabled("ENABLE_PROMOTION_ENGINE")) {
+    await fastify.register(ruleRoutes, { prefix: "/rules" });
+  }
+  if (deferredFeatureEnabled("ENABLE_OFFLINE_SYNC")) {
+    await fastify.register(offlineRoutes, { prefix: "/offline" });
+    await fastify.register(offlineSyncRoutes);
+    await fastify.register(syncStatusRoutes);
+  }
+  if (deferredFeatureEnabled("ENABLE_ADVANCED_ANALYTICS")) {
+    await fastify.register(alertRoutes, { prefix: "/alerts" });
+    await fastify.register(metricRoutes, { prefix: "/metrics" });
+    await fastify.register(kpiRoutes);
+  }
+  if (deferredFeatureEnabled("ENABLE_ELECTRONIC_PAYMENTS")) {
+    await fastify.register(paymentRoutes);
+  }
+  if (deferredFeatureEnabled("ENABLE_HARDWARE_DEVICES")) {
+    await fastify.register(posDeviceRoutes);
+  }
 }

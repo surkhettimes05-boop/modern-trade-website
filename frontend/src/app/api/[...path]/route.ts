@@ -4,7 +4,11 @@ function getApiUrl(): string {
   const value = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
   if (!value) throw new Error("API_URL is not configured");
   const url = new URL(value);
-  if (process.env.NODE_ENV === "production" && ["localhost", "127.0.0.1"].includes(url.hostname)) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_LOCAL_QA !== "1" &&
+    ["localhost", "127.0.0.1"].includes(url.hostname)
+  ) {
     throw new Error("API_URL must be a public backend URL in production");
   }
   return url.toString();
@@ -36,6 +40,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("host");
   requestHeaders.delete("content-length");
+  requestHeaders.delete("accept-encoding");
 
   try {
     const upstream = await fetch(target, {
@@ -57,10 +62,12 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const responseHeaders = new Headers(upstream.headers);
     responseHeaders.delete("set-cookie");
     responseHeaders.delete("content-length");
+    responseHeaders.delete("content-encoding");
     responseHeaders.delete("transfer-encoding");
     responseHeaders.delete("connection");
 
-    const response = new NextResponse(upstream.body, {
+    const responseBody = await upstream.arrayBuffer();
+    const response = new NextResponse(responseBody, {
       status: upstream.status,
       statusText: upstream.statusText,
       headers: responseHeaders,

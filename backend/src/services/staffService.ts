@@ -1,4 +1,5 @@
 import { query } from "../database/connection.js";
+import { encryptMfaSecret } from "../utils/totp.js";
 import bcrypt from "bcrypt";
 
 interface Staff {
@@ -17,15 +18,21 @@ interface Staff {
   hire_date: Date;
   termination_date: Date;
   username: string;
-  password_hash: string;
   mfa_enabled: boolean;
-  mfa_secret: string;
   permissions: any;
   notes: string;
   metadata: any;
   created_at: Date;
   updated_at: Date;
   created_by: string;
+}
+
+function safeStaff(row: Record<string, any>): Staff {
+  const safe = { ...row };
+  delete safe.password_hash;
+  delete safe.mfa_secret;
+  delete safe.mfa_backup_codes;
+  return safe as Staff;
 }
 
 export class StaffService {
@@ -86,7 +93,7 @@ export class StaffService {
       ],
     );
 
-    return result.rows[0];
+    return safeStaff(result.rows[0]);
   }
 
   /**
@@ -94,7 +101,7 @@ export class StaffService {
    */
   async getStaff(staffId: string): Promise<Staff | null> {
     const result = await query("SELECT * FROM staff WHERE id = $1", [staffId]);
-    return result.rows.length > 0 ? result.rows[0] : null;
+    return result.rows.length > 0 ? safeStaff(result.rows[0]) : null;
   }
 
   /**
@@ -104,7 +111,7 @@ export class StaffService {
     const result = await query("SELECT * FROM staff WHERE staff_number = $1", [
       staffNumber,
     ]);
-    return result.rows.length > 0 ? result.rows[0] : null;
+    return result.rows.length > 0 ? safeStaff(result.rows[0]) : null;
   }
 
   /**
@@ -114,7 +121,7 @@ export class StaffService {
     const result = await query("SELECT * FROM staff WHERE username = $1", [
       username,
     ]);
-    return result.rows.length > 0 ? result.rows[0] : null;
+    return result.rows.length > 0 ? safeStaff(result.rows[0]) : null;
   }
 
   /**
@@ -175,7 +182,7 @@ export class StaffService {
       params,
     );
 
-    return result.rows;
+    return result.rows.map(safeStaff);
   }
 
   /**
@@ -293,7 +300,7 @@ export class StaffService {
       values,
     );
 
-    return result.rows[0];
+    return safeStaff(result.rows[0]);
   }
 
   /**
@@ -321,10 +328,10 @@ export class StaffService {
            updated_at = NOW()
        WHERE id = $2
        RETURNING *`,
-      [mfaSecret, staffId],
+      [encryptMfaSecret(mfaSecret), staffId],
     );
 
-    return result.rows[0];
+    return safeStaff(result.rows[0]);
   }
 
   /**
@@ -341,19 +348,22 @@ export class StaffService {
       [null, staffId],
     );
 
-    return result.rows[0];
+    return safeStaff(result.rows[0]);
   }
 
   /**
    * Verify password
    */
   async verifyPassword(staffId: string, password: string): Promise<boolean> {
-    const staff = await this.getStaff(staffId);
-    if (!staff || !staff.password_hash) {
+    const result = await query("SELECT password_hash FROM staff WHERE id = $1", [
+      staffId,
+    ]);
+    const passwordHash = result.rows[0]?.password_hash;
+    if (!passwordHash) {
       return false;
     }
 
-    return bcrypt.compare(password, staff.password_hash);
+    return bcrypt.compare(password, passwordHash);
   }
 
   /**
@@ -373,7 +383,7 @@ export class StaffService {
       [terminationDate || new Date(), staffId],
     );
 
-    return result.rows[0];
+    return safeStaff(result.rows[0]);
   }
 
   /**

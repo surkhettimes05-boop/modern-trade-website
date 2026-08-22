@@ -64,9 +64,9 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Content Placeholder</h2>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Policy status</h2>
             <p className="text-gray-600">
-              This privacy policy will be managed through the content management system. The actual policy terms should be reviewed by legal counsel and may be updated as regulations change.
+              This draft is excluded from search indexing until legal counsel approves the final policy. Customers should contact NOVA MART for the current privacy terms before submitting sensitive information.
             </p>
           </section>
         </div>

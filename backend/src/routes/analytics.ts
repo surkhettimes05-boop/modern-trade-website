@@ -177,18 +177,20 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
         "LOYALTY",
         "DELIVERY",
       ]),
-      query_config: z.any(),
+      query_config: z.object({}).strict().default({}),
       visualization_config: z.any().optional(),
       schedule_config: z.any().optional(),
-      created_by: z.string(),
       shared_with: z.any().optional(),
       metadata: z.any().optional(),
     });
 
-    const reportData = schema.parse(request.body);
+    const reportData = schema.strict().parse(request.body);
 
     try {
-      const report = await analyticsService.createSavedReport(reportData);
+      const report = await analyticsService.createSavedReport({
+        ...reportData,
+        created_by: (request.user as { id: string }).id,
+      });
       return reply.status(201).send(report);
     } catch {
       return reply.status(500).send({ error: "Failed to create saved report" });
@@ -248,18 +250,13 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
         reportId: z.string(),
       });
 
-      const bodySchema = z.object({
-        parameters: z.any().optional(),
-      });
+      const bodySchema = z.object({}).strict();
 
       const { reportId } = schema.parse(request.params);
-      const { parameters } = bodySchema.parse(request.body);
+      bodySchema.parse(request.body || {});
 
       try {
-        const result = await analyticsService.executeReport(
-          reportId,
-          parameters,
-        );
+        const result = await analyticsService.executeReport(reportId);
         return reply.send(result);
       } catch (error) {
         if (error instanceof Error && error.message === "Report not found") {

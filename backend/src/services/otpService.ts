@@ -1,6 +1,11 @@
-import { randomInt } from "crypto";
+import { createHmac, randomInt, timingSafeEqual } from "crypto";
 import { query } from "../database/connection.js";
 import { normalizePhone } from "../utils/phoneNormalization.js";
+import {
+  checkTwilioSmsVerification,
+  startTwilioSmsVerification,
+} from "./twilioVerifyService.js";
+import { getDemoOtpCodeForPhone } from "./demoOtpService.js";
 
 interface CreateOTPInput {
   phone: string;
@@ -23,6 +28,58 @@ const MAX_ATTEMPTS = 3;
 const RESEND_LIMIT_MINUTES = 1;
 const MAX_RESENDS_PER_HOUR = 5;
 
+function otpDigest(phone: string, purpose: string, otpCode: string): string {
+  const secret = process.env.OTP_HASH_SECRET;
+  if (!secret) throw new Error("OTP_HASH_SECRET is required");
+  return createHmac("sha256", secret)
+    .update(`${phone}\u0000${purpose}\u0000${otpCode}`)
+    .digest("hex");
+}
+
+function digestMatches(expectedHex: string, actualHex: string): boolean {
+  if (!/^[a-f0-9]{64}$/i.test(expectedHex)) return false;
+  const expected = Buffer.from(expectedHex, "hex");
+  const actual = Buffer.from(actualHex, "hex");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+async function sendTwilioSms(
+  toLocalNumber: string,
+  otpCode: string,
+): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_FROM_NUMBER;
+
+  if (!accountSid || !authToken || !fromNumber) {
+    throw new Error("Twilio SMS is not configured");
+  }
+
+  const form = new URLSearchParams({
+    To: `+977${toLocalNumber}`,
+    From: fromNumber,
+    Body: `Your StoreSync login code is ${otpCode}. It expires in 5 minutes.`,
+  });
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form,
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Twilio SMS failed (${response.status}): ${detail.slice(0, 300)}`,
+    );
+  }
+}
+
 export class OTPService {
   /**
    * Generate a secure OTP code
@@ -36,7 +93,11 @@ export class OTPService {
    */
   async createOTP(input: CreateOTPInput): Promise<string> {
     const phoneNormalized = normalizePhone(input.phone);
-    const otpCode = this.generateOTP();
+    const otpCode =
+      process.env.NODE_ENV === "production" &&
+      process.env.SMS_PROVIDER === "demo"
+        ? getDemoOtpCodeForPhone(phoneNormalized)
+        : this.generateOTP();
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
     // Check resend limits
@@ -50,7 +111,7 @@ export class OTPService {
       [
         input.customer_id || null,
         phoneNormalized,
-        otpCode,
+        otpDigest(phoneNormalized, input.purpose, otpCode),
         input.purpose,
         expiresAt,
         input.ip_address || null,
@@ -58,16 +119,33 @@ export class OTPService {
       ],
     );
 
-    if (
-      process.env.NODE_ENV === "production" &&
-      !process.env.SMS_PROVIDER_API_KEY
-    ) {
-      throw new Error("SMS provider is unavailable; OTP delivery is disabled");
-    }
-    if (process.env.NODE_ENV !== "production") {
-      console.log(
-        `OTP for ${phoneNormalized}: ${otpCode} (expires at ${expiresAt})`,
+    try {
+      if (
+        process.env.NODE_ENV === "test" ||
+        process.env.NODE_ENV === "development"
+      ) {
+        // Tests and local development receive the returned code from the API.
+        // Production still requires an explicitly configured SMS provider.
+      } else if (process.env.SMS_PROVIDER === "twilio") {
+        await sendTwilioSms(phoneNormalized, otpCode);
+      } else if (process.env.SMS_PROVIDER === "twilio_verify") {
+        await startTwilioSmsVerification(phoneNormalized);
+      } else if (process.env.SMS_PROVIDER === "demo") {
+        // The code is stored only as a keyed digest. No SMS is sent and the
+        // production API never returns the configured code.
+      } else {
+        throw new Error(
+          "SMS provider is unavailable; OTP delivery is disabled",
+        );
+      }
+    } catch (error) {
+      await query(
+        `UPDATE customer_otp
+         SET used_at = CURRENT_TIMESTAMP
+         WHERE phone_normalized = $1 AND otp_code = $2 AND used_at IS NULL`,
+        [phoneNormalized, otpDigest(phoneNormalized, input.purpose, otpCode)],
       );
+      throw error;
     }
 
     return otpCode;
@@ -106,21 +184,45 @@ export class OTPService {
       return { valid: false };
     }
 
-    // Increment attempt count
-    await query(
-      `UPDATE customer_otp SET attempt_count = attempt_count + 1 WHERE id = $1`,
-      [otpRecord.id],
-    );
+    const verified =
+      process.env.NODE_ENV === "production" &&
+      process.env.SMS_PROVIDER === "twilio_verify"
+        ? await checkTwilioSmsVerification(phoneNormalized, input.otp_code)
+        : digestMatches(
+            String(otpRecord.otp_code),
+            otpDigest(phoneNormalized, input.purpose, input.otp_code),
+          );
 
-    // Verify OTP
-    if (otpRecord.otp_code !== input.otp_code) {
+    if (!verified) {
+      await query(
+        `UPDATE customer_otp
+            SET attempt_count = attempt_count + 1,
+                used_at = CASE
+                  WHEN attempt_count + 1 >= $2 THEN CURRENT_TIMESTAMP
+                  ELSE used_at
+                END
+          WHERE id = $1 AND used_at IS NULL`,
+        [otpRecord.id, MAX_ATTEMPTS],
+      );
       return { valid: false };
     }
 
-    // Mark OTP as used
-    await this.markOTPUsed(otpRecord.id);
+    // Consume the OTP atomically. Concurrent verification requests cannot both
+    // cross the one-time credential boundary.
+    const consumed = await query(
+      `UPDATE customer_otp
+          SET attempt_count = attempt_count + 1,
+              used_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+          AND used_at IS NULL
+          AND expires_at > CURRENT_TIMESTAMP
+          AND attempt_count < $2
+        RETURNING customer_id`,
+      [otpRecord.id, MAX_ATTEMPTS],
+    );
+    if (!consumed.rowCount) return { valid: false };
 
-    return { valid: true, customer_id: otpRecord.customer_id };
+    return { valid: true, customer_id: consumed.rows[0].customer_id };
   }
 
   /**

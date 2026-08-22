@@ -9,12 +9,12 @@ This document summarizes the implementation of Work Packages 0 and 1 of the NOVA
 
 #### 1. Architecture Decision Record (ADR-001)
 - **File**: `docs/ADR-001-multi-country-architecture.md`
-- **Decision**: Multi-country architecture with India as initial tenant
+- **Decision (superseded)**: Early work assumed India; ADR-001 now makes Nepal the only certified pilot and retains India for future expansion.
 - **Key Points**:
   - Configuration-driven country settings (currency, locale, timezone, tax regime, payment providers)
   - Feature flags for country-specific modules
   - No hardcoding of currency symbols or tax labels
-  - Initial NOVA MART tenant configured for India (INR, GST, Razorpay, UPI)
+  - Current tenant configuration is Nepal (`NP`, `NPR`, `en-NP`, `Asia/Kathmandu`, IRD/VAT, COD/cash); the earlier India configuration is historical only.
 
 #### 2. Organization/Store Configuration Schema
 - **File**: `database/wp0_organization_config_schema.sql`

@@ -32,6 +32,25 @@ interface SavedReport {
   metadata: any;
 }
 
+const REPORT_QUERIES: Readonly<Record<string, string>> = Object.freeze({
+  SALES: `SELECT COUNT(*)::int AS total_orders,
+                 COALESCE(SUM(total_amount), 0) AS total_revenue,
+                 COALESCE(AVG(total_amount), 0) AS average_order_value
+            FROM web_orders`,
+  INVENTORY: `SELECT COUNT(DISTINCT product_id)::int AS products,
+                     COALESCE(SUM(quantity), 0)::int AS units_on_hand
+                FROM batch_inventory`,
+  CUSTOMER: `SELECT COUNT(*)::int AS total_customers,
+                    COUNT(*) FILTER (WHERE status = 'ACTIVE')::int AS active_customers
+               FROM customers`,
+  LOYALTY: `SELECT COUNT(*)::int AS accounts,
+                   COALESCE(SUM(current_points), 0)::int AS outstanding_points
+              FROM customer_loyalty_accounts`,
+  DELIVERY: `SELECT COUNT(*)::int AS total_deliveries,
+                    COUNT(*) FILTER (WHERE status = 'DELIVERED')::int AS delivered
+               FROM delivery_assignments`,
+});
+
 export class AnalyticsService {
   /**
    * Track analytics event
@@ -323,15 +342,19 @@ export class AnalyticsService {
   /**
    * Execute saved report
    */
-  async executeReport(reportId: string, parameters?: any): Promise<any> {
+  async executeReport(reportId: string): Promise<any> {
     const report = await this.getSavedReport(reportId);
     if (!report) {
       throw new Error("Report not found");
     }
 
-    const queryConfig = report.query_config;
-    let queryText = queryConfig.query;
-    const queryParams = parameters || queryConfig.default_parameters || [];
+    // Never execute SQL persisted in report configuration. Reports select a
+    // server-owned query solely from their validated report type so legacy or
+    // tampered rows cannot become a database command-execution primitive.
+    const queryText = REPORT_QUERIES[report.report_type];
+    if (!queryText) {
+      throw new Error("Unsupported report type");
+    }
 
     // Update last run time
     await query(
@@ -340,7 +363,7 @@ export class AnalyticsService {
     );
 
     // Execute the query
-    const result = await query(queryText, queryParams);
+    const result = await query(queryText, []);
 
     return {
       report_id: reportId,

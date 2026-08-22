@@ -1,13 +1,6 @@
 import { z } from "zod";
-
-export const MARKET = {
-  countryCode: "NP",
-  currencyCode: "NPR",
-  locale: "en-NP",
-  timezone: "Asia/Kathmandu",
-  taxRegime: "IRD",
-  phoneCountryCode: "+977",
-} as const;
+export { MARKET } from "../config/market.js";
+import { MARKET } from "../config/market.js";
 
 export const PaginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -103,10 +96,8 @@ export type StoreContract = {
 export const NepalPhoneSchema = z
   .string()
   .trim()
-  .regex(/^(?:\+977[ -]?)?9[6-9]\d{8}$/, "Invalid Nepal mobile number");
+  .regex(MARKET.phonePattern, "Invalid Nepal mobile number");
 export const NepalPostalCodeSchema = z
   .string()
   .trim()
-  .regex(/^\d{5}$/, "Invalid Nepal postal code");
-export const IndianPhoneSchema = NepalPhoneSchema;
-export const IndianPostalCodeSchema = NepalPostalCodeSchema;
+  .regex(MARKET.postalCodePattern, "Invalid Nepal postal code");

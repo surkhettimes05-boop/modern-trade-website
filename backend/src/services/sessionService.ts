@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { query } from "../database/connection.js";
+import { hashSessionToken } from "../utils/sessionToken.js";
 
 interface Session {
   id: string;
@@ -40,14 +41,14 @@ export class SessionService {
        RETURNING *`,
       [
         input.customer_id,
-        sessionToken,
+        hashSessionToken(sessionToken),
         input.ip_address || null,
         input.user_agent || null,
         expiresAt,
       ],
     );
 
-    return result.rows[0];
+    return { ...result.rows[0], session_token: sessionToken };
   }
 
   /**
@@ -61,7 +62,7 @@ export class SessionService {
          AND expires_at > CURRENT_TIMESTAMP
        ORDER BY created_at DESC 
        LIMIT 1`,
-      [sessionToken],
+      [hashSessionToken(sessionToken)],
     );
 
     if (result.rows.length === 0) {
@@ -85,7 +86,7 @@ export class SessionService {
       `UPDATE customer_sessions 
        SET revoked_at = CURRENT_TIMESTAMP, revoked_reason = $1 
        WHERE session_token = $2`,
-      [reason || "User logout", sessionToken],
+      [reason || "User logout", hashSessionToken(sessionToken)],
     );
   }
 

@@ -17,67 +17,41 @@ describe("PaymentService", () => {
   });
 
   describe("createPaymentIntent", () => {
-    it("should create eSewa payment intent", async () => {
-      const mockIntent = {
-        id: "intent-uuid",
-        intent_number: "PAY-20240115-000001",
-        provider: "ESEWA",
-        amount_npr: 1000,
-        status: "CREATED",
-        provider_payment_url: "https://uat.esewa.com.np/epay/main?...",
-      };
-
-      (query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ number: "PAY-20240115-000001" }] }) // Generate number
-        .mockResolvedValueOnce({ rows: [mockIntent] }); // Insert
-
-      const result = await paymentService.createPaymentIntent({
-        provider: "ESEWA",
-        amount_npr: 1000,
-        store_id: "store-uuid",
-      });
-
-      expect(result.provider).toBe("ESEWA");
-      expect(result.amount_npr).toBe(1000);
-      expect(result.status).toBe("CREATED");
+    it("rejects eSewa while electronic payments are disabled", async () => {
+      await expect(
+        paymentService.createPaymentIntent({
+          provider: "ESEWA",
+          amount_npr: 1000,
+          store_id: "store-uuid",
+        }),
+      ).rejects.toThrow("Electronic payments are disabled");
     });
 
-    it("should create Khalti payment intent", async () => {
-      const mockIntent = {
-        id: "intent-uuid",
-        intent_number: "PAY-20240115-000002",
-        provider: "KHALTI",
-        amount_npr: 500,
-        status: "CREATED",
-        provider_payment_url: "https://khalti.com/payment/...",
-      };
-
-      (query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ number: "PAY-20240115-000002" }] })
-        .mockResolvedValueOnce({ rows: [mockIntent] });
-
-      const result = await paymentService.createPaymentIntent({
-        provider: "KHALTI",
-        amount_npr: 500,
-        store_id: "store-uuid",
-      });
-
-      expect(result.provider).toBe("KHALTI");
-      expect(result.amount_npr).toBe(500);
+    it("rejects Khalti when enabled without merchant credentials", async () => {
+      process.env.ENABLE_ELECTRONIC_PAYMENTS = "true";
+      const configuredService = new PaymentService();
+      await expect(
+        configuredService.createPaymentIntent({
+          provider: "KHALTI",
+          amount_npr: 500,
+          store_id: "store-uuid",
+        }),
+      ).rejects.toThrow("credentials are missing");
+      delete process.env.ENABLE_ELECTRONIC_PAYMENTS;
     });
 
     it("should return existing intent on idempotency key match", async () => {
       const mockExisting = {
         id: "existing-uuid",
         intent_number: "PAY-20240115-000001",
-        provider: "ESEWA",
+        provider: "CASH",
         amount_npr: 1000,
       };
 
       (query as jest.Mock).mockResolvedValue({ rows: [mockExisting] });
 
       const result = await paymentService.createPaymentIntent({
-        provider: "ESEWA",
+        provider: "CASH",
         amount_npr: 1000,
         store_id: "store-uuid",
         idempotency_key: "key-123",
@@ -140,6 +114,36 @@ describe("PaymentService", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("Invalid signature");
+    });
+
+    it("does not persist webhook credentials or sensitive raw payloads", async () => {
+      (query as jest.Mock)
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ id: "log-uuid" }] })
+        .mockResolvedValueOnce({ rows: [] });
+
+      await paymentService.processWebhook(
+        "ESEWA",
+        {
+          transactionId: "tx-sensitive-log-test",
+          status: "Success",
+          card_number: "4111111111111111",
+        },
+        {
+          authorization: "Bearer secret-token",
+          "x-esewa-signature": "secret-signature",
+          "content-type": "application/json",
+        },
+      );
+
+      const insertParameters = (query as jest.Mock).mock.calls[1][1];
+      expect(JSON.stringify(insertParameters)).not.toContain("secret-token");
+      expect(JSON.stringify(insertParameters)).not.toContain(
+        "secret-signature",
+      );
+      expect(JSON.stringify(insertParameters)).not.toContain(
+        "4111111111111111",
+      );
     });
 
     it("should reject an unsigned Khalti webhook", async () => {
@@ -238,7 +242,7 @@ describe("PaymentService", () => {
   });
 
   describe("refundPayment", () => {
-    it("should refund payment successfully", async () => {
+    it("fails closed when an electronic refund contract is unavailable", async () => {
       const mockIntent = {
         id: "intent-uuid",
         provider: "ESEWA",
@@ -246,18 +250,11 @@ describe("PaymentService", () => {
         amount_npr: 1000,
       };
 
-      (query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [mockIntent] })
-        .mockResolvedValueOnce({ rows: [{ refund_number: "REF-123" }] }) // Insert refund
-        .mockResolvedValueOnce({ rows: [] }); // Update intent
+      (query as jest.Mock).mockResolvedValueOnce({ rows: [mockIntent] });
 
-      const result = await paymentService.refundPayment(
-        "intent-uuid",
-        500,
-        "Customer request",
-      );
-
-      expect(result).toBe("REF-123");
+      await expect(
+        paymentService.refundPayment("intent-uuid", 500, "Customer request"),
+      ).rejects.toThrow("refund is unavailable");
     });
 
     it("should throw error if payment not completed", async () => {
@@ -460,34 +457,6 @@ describe("PaymentService", () => {
       const eventType = (paymentService as any).extractEventType("ESEWA", data);
 
       expect(eventType).toBe("PAYMENT_STATUS");
-    });
-  });
-
-  describe("Sandbox Mode", () => {
-    it("should work in sandbox mode without credentials", async () => {
-      // This test verifies the service works without actual credentials
-      const mockIntent = {
-        id: "intent-uuid",
-        intent_number: "PAY-20240115-000001",
-        provider: "ESEWA",
-        amount_npr: 1000,
-        status: "CREATED",
-        provider_payment_url:
-          "https://uat.esewa.com.np/epay/main?pid=PAY-20240115-000001",
-      };
-
-      (query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ number: "PAY-20240115-000001" }] })
-        .mockResolvedValueOnce({ rows: [mockIntent] });
-
-      const result = await paymentService.createPaymentIntent({
-        provider: "ESEWA",
-        amount_npr: 1000,
-        store_id: "store-uuid",
-      });
-
-      expect(result).toBeDefined();
-      expect(result.provider_payment_url).toContain("uat.esewa.com.np");
     });
   });
 

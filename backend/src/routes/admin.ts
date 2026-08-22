@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { preHandler } from "../middleware/authentication.js";
+import { MARKET } from "../config/market.js";
 
 // Validation schemas
 const publicationStatusSchema = z.enum([
@@ -58,9 +59,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
       `);
       return {
         metrics: result.rows[0],
-        currencyCode: "NPR",
-        locale: "en-NP",
-        timezone: "Asia/Kathmandu",
+        currencyCode: MARKET.currencyCode,
+        locale: MARKET.locale,
+        timezone: MARKET.timezone,
       };
     } catch {
       return reply

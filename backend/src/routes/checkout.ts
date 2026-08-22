@@ -1,17 +1,32 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { authenticateCustomer, customerId } from "../middleware/customerAuthentication.js";
+import {
+  authenticateCustomer,
+  customerId,
+} from "../middleware/customerAuthentication.js";
 import { CheckoutService } from "../services/checkoutService.js";
+import {
+  MARKET,
+  NepalPhoneSchema,
+  NepalPostalCodeSchema,
+} from "../contracts/platform.js";
 
 const checkout = new CheckoutService();
 export async function checkoutRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", authenticateCustomer);
   fastify.get("/customer/orders", async (request) => {
+    const { limit, offset } = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+        offset: z.coerce.number().int().min(0).max(100_000).default(0),
+      })
+      .strict()
+      .parse(request.query);
     const result = await (
       await import("../database/connection.js")
     ).query(
-      "SELECT * FROM web_orders WHERE customer_id = $1 ORDER BY order_date DESC",
-      [customerId(request)],
+      "SELECT * FROM web_orders WHERE customer_id = $1 ORDER BY order_date DESC LIMIT $2 OFFSET $3",
+      [customerId(request), limit, offset],
     );
     return result.rows;
   });
@@ -40,19 +55,23 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     const { orderId } = z
       .object({ orderId: z.string().uuid() })
       .parse(request.params);
-    const result = await (
-      await import("../database/connection.js")
-    ).query(
-      "UPDATE web_orders SET status = 'CANCELLED', cancellation_reason = $1, cancelled_at = NOW(), cancelled_by = $2 WHERE id = $3 AND customer_id = $2 AND status IN ('PENDING_PAYMENT','CONFIRMED') RETURNING *",
-      [
-        (request.body as any)?.reason || "Cancelled by customer",
-        customerId(request),
+    const { reason } = z
+      .object({ reason: z.string().trim().min(1).max(500).optional() })
+      .strict()
+      .parse(request.body || {});
+    try {
+      return await checkout.cancelCustomerOrder(
         orderId,
-      ],
-    );
-    if (!result.rows[0])
-      return reply.status(400).send({ error: "Order cannot be cancelled" });
-    return result.rows[0];
+        customerId(request),
+        reason || "Cancelled by customer",
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === "Order cannot be cancelled") {
+        return reply.status(400).send({ error: error.message });
+      }
+      request.log.error({ error }, "Customer order cancellation failed");
+      return reply.status(500).send({ error: "Failed to cancel order" });
+    }
   });
   fastify.post("/checkout/cod", async (request, reply) => {
     const body = z
@@ -61,15 +80,16 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         store_id: z.string().uuid(),
         idempotency_key: z.string().min(8).max(100),
         delivery_type: z.enum(["DELIVERY", "PICKUP"]),
-        shipping_name: z.string().min(1),
-        shipping_phone: z.string().min(7),
-        shipping_address: z.string().min(1),
-        shipping_city: z.string().min(1),
-        shipping_state: z.string().min(1),
-        shipping_postal_code: z.string().min(1),
-        shipping_country: z.string().min(2),
-        notes: z.string().optional(),
+        shipping_name: z.string().trim().min(1).max(200),
+        shipping_phone: NepalPhoneSchema,
+        shipping_address: z.string().trim().min(1).max(500),
+        shipping_city: z.string().trim().min(1).max(100),
+        shipping_state: z.string().trim().min(1).max(100),
+        shipping_postal_code: NepalPostalCodeSchema,
+        shipping_country: z.literal(MARKET.countryCode),
+        notes: z.string().trim().max(1_000).optional(),
       })
+      .strict()
       .parse(request.body);
     try {
       return reply.status(201).send(
@@ -92,15 +112,14 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Checkout failed";
+      const clientError =
+        message.includes("stock") ||
+        message.includes("Cart") ||
+        message.includes("Price");
+      if (!clientError) request.log.error({ error }, "COD checkout failed");
       return reply
-        .status(
-          message.includes("stock") ||
-            message.includes("Cart") ||
-            message.includes("Price")
-            ? 400
-            : 500,
-        )
-        .send({ error: message });
+        .status(clientError ? 400 : 500)
+        .send({ error: clientError ? message : "Checkout failed" });
     }
   });
 }

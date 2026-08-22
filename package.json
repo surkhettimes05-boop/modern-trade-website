@@ -9,6 +9,8 @@
     "qa:status": "docker compose -f docker-compose.qa.yml ps",
     "qa:logs": "docker compose -f docker-compose.qa.yml logs --tail=200",
     "qa:verify": "node scripts/qa-verify.mjs",
+    "qa:dependency-failure": "node scripts/qa-dependency-failure.mjs",
+    "qa:certify": "npm run qa:reset && npm run qa:verify && npm run qa:restart && npm run qa:dependency-failure",
     "qa:release": "node scripts/qa-release.mjs",
     "qa:local": "node scripts/qa-local.mjs"
   }

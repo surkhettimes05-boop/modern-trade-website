@@ -9,6 +9,7 @@ import {
   RefundResponse,
   ReconciliationData,
 } from "./baseProvider.js";
+import { MARKET } from "../../config/market.js";
 
 export class EsewaProvider extends BasePaymentProvider {
   private apiKey: string;
@@ -30,8 +31,9 @@ export class EsewaProvider extends BasePaymentProvider {
   async createPaymentIntent(
     request: PaymentIntentRequest,
   ): Promise<PaymentIntentResponse> {
+    this.rejectIncompleteProductionCapability("legacy payment initiation");
     this.validateAmount(request.amount);
-    this.validateCurrency(request.currency || "NPR");
+    this.validateCurrency(request.currency || MARKET.currencyCode);
 
     const intentId = this.generateIdempotencyKey();
 
@@ -77,7 +79,7 @@ export class EsewaProvider extends BasePaymentProvider {
       intent_id: providerIntentId,
       provider_intent_id: providerIntentId,
       amount: 0,
-      currency: "NPR",
+      currency: MARKET.currencyCode,
       status: "PENDING",
       payment_method: "eSewa",
       provider: "eSewa",
@@ -131,7 +133,7 @@ export class EsewaProvider extends BasePaymentProvider {
       intent_id: verification.intent_id || "",
       provider_intent_id: payload.provider_webhook_id,
       amount: verification.amount || 0,
-      currency: "NPR",
+      currency: MARKET.currencyCode,
       status:
         (verification.status as
           | "PENDING"

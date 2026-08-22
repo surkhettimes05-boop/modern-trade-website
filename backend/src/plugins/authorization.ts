@@ -343,6 +343,21 @@ export async function requireStoreAccess(
   request: FastifyRequest,
   storeId: string,
 ): Promise<void> {
+  const user = request.user as AuthenticatedUser;
+  if (user?.scopeType === "ORGANIZATION") {
+    if (!user.scopeOrganizationId) {
+      await logPermissionDenied(request, "Organization scope is missing an organization ID");
+      throw new Error("Organization scope is incomplete");
+    }
+    const { query } = await import("../database/connection.js");
+    const membership = await query(
+      "SELECT 1 FROM stores WHERE id = $1 AND organization_id = $2 LIMIT 1",
+      [storeId, user.scopeOrganizationId],
+    );
+    if (membership.rowCount) return;
+    await logPermissionDenied(request, "Store is outside the user's organization");
+    throw new Error("Store is outside the user's organization");
+  }
   const result = checkStoreAccess(request, storeId);
 
   if (!result.authorized) {

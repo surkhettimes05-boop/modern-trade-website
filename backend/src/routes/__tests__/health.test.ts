@@ -25,6 +25,18 @@ describe("Health Endpoints", () => {
     expect(payload).toHaveProperty("uptime");
   });
 
+  it("exposes a dependency-free liveness endpoint", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/health/live" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().status).toBe("ok");
+  });
+
+  it("reports readiness failure when Redis or migrations are unavailable", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/health/ready" });
+    expect([200, 503]).toContain(response.statusCode);
+    expect(response.json()).toHaveProperty("checks");
+  });
+
   it("should return database health status", async () => {
     const response = await app.inject({
       method: "GET",

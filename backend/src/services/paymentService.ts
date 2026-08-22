@@ -1,5 +1,6 @@
 import { query } from "../database/connection.js";
 import crypto from "crypto";
+import { MARKET } from "../config/market.js";
 
 interface PaymentIntent {
   id: string;
@@ -53,6 +54,7 @@ export class PaymentService {
     device_id?: string;
     idempotency_key?: string;
     metadata?: any;
+    created_by?: string;
   }): Promise<PaymentIntent> {
     if (
       !Number.isFinite(paymentData.amount_npr) ||
@@ -63,9 +65,10 @@ export class PaymentService {
     if (paymentData.amount_npr > 1_000_000) {
       throw new Error("Amount exceeds maximum limit");
     }
-    if (paymentData.currency && paymentData.currency !== "NPR") {
-      throw new Error("Only NPR currency is supported");
+    if (paymentData.currency && paymentData.currency !== MARKET.currencyCode) {
+      throw new Error(`Only ${MARKET.currencyCode} currency is supported`);
     }
+    this.assertProviderAvailable(paymentData.provider);
     // Check idempotency
     if (paymentData.idempotency_key) {
       const existing = await query(
@@ -118,7 +121,7 @@ export class PaymentService {
         intentNumber,
         paymentData.provider,
         paymentData.amount_npr,
-        paymentData.currency || "NPR",
+        paymentData.currency || MARKET.currencyCode,
         "CREATED",
         paymentData.order_reference || null,
         paymentData.customer_id || null,
@@ -129,7 +132,7 @@ export class PaymentService {
         signature,
         paymentData.idempotency_key || null,
         JSON.stringify(paymentData.metadata || {}),
-        "system",
+        paymentData.created_by || "system",
       ],
     );
 
@@ -164,16 +167,24 @@ export class PaymentService {
     const originalWebhookId = isDuplicate ? duplicateCheck.rows[0].id : null;
 
     // Verify signature
-    const signatureProvided = this.extractSignature(headers);
+    const signatureProvided = this.extractSignature(headers, webhookData);
     const signatureCalculated = this.calculateWebhookSignature(
       provider,
       webhookData,
     );
     const signatureValid =
-      provider === "KHALTI" && this.KHALTI_SECRET_KEY
-        ? Boolean(webhookData.pidx || webhookData.idx)
-        : Boolean(signatureProvided) &&
-          this.safeEqual(signatureProvided, signatureCalculated);
+      Boolean(signatureProvided) &&
+      this.safeEqual(signatureProvided, signatureCalculated);
+
+    const safeRequestHeaders = {
+      "content-type": headers?.["content-type"] || null,
+      "user-agent": headers?.["user-agent"] || null,
+    };
+    const safeRequestBody = {
+      webhook_id: webhookId,
+      event_type: eventType,
+      provider_transaction_id: providerTransactionId,
+    };
 
     // Log webhook
     const logResult = await query(
@@ -182,16 +193,17 @@ export class PaymentService {
         request_headers, request_body, signature_provided, signature_calculated,
         signature_valid, is_duplicate, original_webhook_id, processing_status
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ON CONFLICT (provider, webhook_id) DO NOTHING
       RETURNING id`,
       [
         provider,
         webhookId,
         eventType,
         providerTransactionId,
-        JSON.stringify(headers),
-        JSON.stringify(webhookData),
-        signatureProvided,
-        signatureCalculated,
+        JSON.stringify(safeRequestHeaders),
+        JSON.stringify(safeRequestBody),
+        null,
+        null,
         signatureValid,
         isDuplicate,
         originalWebhookId,
@@ -199,6 +211,9 @@ export class PaymentService {
       ],
     );
 
+    if (!logResult.rows[0]) {
+      return { success: true, message: "Duplicate webhook ignored" };
+    }
     const webhookLogId = logResult.rows[0].id;
 
     if (isDuplicate) {
@@ -209,7 +224,7 @@ export class PaymentService {
       await query(
         `UPDATE payment_webhook_logs
          SET processing_status = 'FAILED', processing_error = 'Invalid signature'
-         WHERE id = $1`,
+         WHERE id = $2`,
         [webhookLogId],
       );
       return { success: false, message: "Invalid signature" };
@@ -284,6 +299,7 @@ export class PaymentService {
     amount_npr: number,
     reason: string,
     idempotencyKey?: string,
+    createdBy = "system",
   ): Promise<string> {
     if (process.env.NODE_ENV === "production") {
       throw new Error("Provider refunds require a verified provider contract");
@@ -345,7 +361,7 @@ export class PaymentService {
         reason,
         providerRefundId,
         idempotencyKey || null,
-        "system",
+        createdBy,
       ],
     );
 
@@ -373,7 +389,7 @@ export class PaymentService {
         `${provider} reconciliation requires a provider report contract`,
       );
     }
-    const storeFilter = storeId ? `AND store_id = '${storeId}'` : "";
+    const storeFilter = storeId ? "AND store_id = $3" : "";
 
     // Get StoreSync data
     const storesyncResult = await query(
@@ -390,12 +406,12 @@ export class PaymentService {
       WHERE provider = $1
         AND DATE(created_at) = $2
         ${storeFilter}`,
-      [provider, date],
+      storeId ? [provider, date, storeId] : [provider, date],
     );
 
     const storesyncData = storesyncResult.rows[0];
 
-    // Get provider data (mocked - would call provider API in production)
+    // Provider data is unavailable until a provider report contract is supplied.
     let providerData = { count: 0, amount: 0 };
     if (this.ESEWA_MERCHANT_CODE || this.KHALTI_SECRET_KEY) {
       providerData = await this.fetchProviderReconciliation(
@@ -460,11 +476,7 @@ export class PaymentService {
     _orderReference?: string,
   ): Promise<any> {
     if (!this.ESEWA_MERCHANT_CODE || !this.ESEWA_SECRET_KEY) {
-      // Mock response for sandbox/testing
-      return {
-        paymentUrl: `${this.ESEWA_API_URL}/epay/main?amt=${amount}&txAmt=0&tAmt=0&psc=0&pdc=0&scd=${this.ESEWA_MERCHANT_CODE}&pid=${intentNumber}&su=${encodeURIComponent("https://storesync.com/payment/esewa/success")}&fu=${encodeURIComponent("https://storesync.com/payment/esewa/fail")}`,
-        metadata: { sandbox: true, note: "eSewa credentials not configured" },
-      };
+      throw new Error("eSewa is unavailable: merchant credentials are missing");
     }
 
     if (!this.APP_URL && !this.ESEWA_SUCCESS_URL) {
@@ -568,8 +580,7 @@ export class PaymentService {
     _amount: number,
   ): Promise<string> {
     if (!this.ESEWA_MERCHANT_CODE || !this.ESEWA_SECRET_KEY) {
-      // Mock refund
-      return `REF-ESEWA-${Date.now()}`;
+      throw new Error("eSewa refund is unavailable: credentials are missing");
     }
 
     throw new Error(
@@ -614,11 +625,9 @@ export class PaymentService {
     metadata?: any,
   ): Promise<any> {
     if (!this.KHALTI_SECRET_KEY || !this.KHALTI_PUBLIC_KEY) {
-      // Mock response for sandbox/testing
-      return {
-        paymentUrl: `https://khalti.com/payment/${intentNumber}`,
-        metadata: { sandbox: true, note: "Khalti credentials not configured" },
-      };
+      throw new Error(
+        "Khalti is unavailable: merchant credentials are missing",
+      );
     }
 
     const payload = {
@@ -737,12 +746,12 @@ export class PaymentService {
     _amount: number,
   ): Promise<string> {
     if (!this.KHALTI_SECRET_KEY) {
-      // Mock refund
-      return `REF-KHALTI-${Date.now()}`;
+      throw new Error("Khalti refund is unavailable: credentials are missing");
     }
 
-    // Production implementation would call Khalti refund API
-    return `REF-KHALTI-${Date.now()}`;
+    throw new Error(
+      "Khalti refund API is not defined by the current integration contract",
+    );
   }
 
   // ============================================
@@ -785,13 +794,20 @@ export class PaymentService {
         .update(message)
         .digest("base64");
     }
+    if (provider === "KHALTI") {
+      if (!this.KHALTI_SECRET_KEY) return "";
+      return crypto
+        .createHmac("sha256", this.KHALTI_SECRET_KEY)
+        .update(JSON.stringify(data))
+        .digest("hex");
+    }
     return "";
   }
 
   private safeEqual(provided: string, calculated: string): boolean {
     if (!provided || !calculated) return false;
-    const left = Buffer.from(provided.trim().toLowerCase());
-    const right = Buffer.from(calculated.trim().toLowerCase());
+    const left = Buffer.from(provided.trim(), "utf8");
+    const right = Buffer.from(calculated.trim(), "utf8");
     return left.length === right.length && crypto.timingSafeEqual(left, right);
   }
 
@@ -822,11 +838,12 @@ export class PaymentService {
     return "";
   }
 
-  private extractSignature(headers: any): string {
+  private extractSignature(headers: any, data: any): string {
     return (
       headers["x-esewa-signature"] ||
       headers["x-khalti-signature"] ||
       headers["signature"] ||
+      data?.signature ||
       ""
     );
   }
@@ -856,5 +873,31 @@ export class PaymentService {
     throw new Error(
       `${provider} reconciliation API is not defined by the current integration contract`,
     );
+  }
+
+  private assertProviderAvailable(
+    provider: "ESEWA" | "KHALTI" | "CASH" | "CARD",
+  ): void {
+    if (provider === "CASH") return;
+    if (process.env.ENABLE_ELECTRONIC_PAYMENTS !== "true") {
+      throw new Error("Electronic payments are disabled for the Nepal pilot");
+    }
+    if (provider === "CARD") {
+      throw new Error("Card payments have no certified provider contract");
+    }
+    if (
+      provider === "ESEWA" &&
+      (!this.ESEWA_MERCHANT_CODE || !this.ESEWA_SECRET_KEY)
+    ) {
+      throw new Error("eSewa is unavailable: merchant credentials are missing");
+    }
+    if (
+      provider === "KHALTI" &&
+      (!this.KHALTI_SECRET_KEY || !this.KHALTI_PUBLIC_KEY)
+    ) {
+      throw new Error(
+        "Khalti is unavailable: merchant credentials are missing",
+      );
+    }
   }
 }

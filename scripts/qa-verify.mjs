@@ -55,10 +55,10 @@ const postgresLines = postgres
   .split(/\r?\n/)
   .map((line) => line.trim())
   .filter(Boolean);
-if (postgresLines.join("\n") !== "17\norder_events\n2\n1") {
+if (postgresLines.join("\n") !== "20\norder_events\n2\n1") {
   throw new Error(`Unexpected PostgreSQL QA verification output:\n${postgres}`);
 }
-results.push("PostgreSQL: 17 migrations, order_events, 2 stores, 1 staff");
+results.push("PostgreSQL: 20 migrations, order_events, 2 stores, 1 staff");
 
 if (runDocker(["exec", "-T", "redis", "redis-cli", "ping"]) !== "PONG") {
   throw new Error("Redis did not return PONG");

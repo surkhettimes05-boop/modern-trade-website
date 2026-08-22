@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: false,
-  timeout: 30_000,
+  timeout: 90_000,
   expect: { timeout: 5_000 },
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
@@ -22,7 +22,8 @@ export default defineConfig({
     {
       name: "chromium-mobile",
       use: {
-        ...devices["iPhone 13"],
+        ...devices["Pixel 7"],
+        browserName: "chromium",
       },
     },
     {

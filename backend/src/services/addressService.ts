@@ -95,10 +95,14 @@ export class AddressService {
   /**
    * Get address by ID
    */
-  async getAddress(addressId: string): Promise<CustomerAddress | null> {
+  async getAddress(
+    addressId: string,
+    customerId?: string,
+  ): Promise<CustomerAddress | null> {
     const result = await query(
-      "SELECT * FROM customer_addresses WHERE id = $1",
-      [addressId],
+      `SELECT * FROM customer_addresses
+       WHERE id = $1 AND ($2::uuid IS NULL OR customer_id = $2)`,
+      [addressId, customerId || null],
     );
     return result.rows.length > 0 ? result.rows[0] : null;
   }
@@ -167,6 +171,7 @@ export class AddressService {
       serviceability_result?: any;
       metadata?: any;
     },
+    customerId?: string,
   ): Promise<CustomerAddress> {
     const fields: string[] = [];
     const values: any[] = [];
@@ -310,12 +315,19 @@ export class AddressService {
 
     fields.push(`updated_at = NOW()`);
     values.push(addressId);
+    const addressIdIndex = paramIndex;
+    paramIndex++;
+    values.push(customerId || null);
 
     const result = await query(
-      `UPDATE customer_addresses SET ${fields.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
+      `UPDATE customer_addresses SET ${fields.join(", ")}
+       WHERE id = $${addressIdIndex}
+         AND ($${paramIndex}::uuid IS NULL OR customer_id = $${paramIndex})
+       RETURNING *`,
       values,
     );
 
+    if (!result.rows[0]) throw new Error("Address not found");
     return result.rows[0];
   }
 
@@ -347,8 +359,14 @@ export class AddressService {
   /**
    * Delete address
    */
-  async deleteAddress(addressId: string): Promise<void> {
-    await query("DELETE FROM customer_addresses WHERE id = $1", [addressId]);
+  async deleteAddress(addressId: string, customerId?: string): Promise<void> {
+    const result = await query(
+      `DELETE FROM customer_addresses
+       WHERE id = $1 AND ($2::uuid IS NULL OR customer_id = $2)
+       RETURNING id`,
+      [addressId, customerId || null],
+    );
+    if (!result.rowCount) throw new Error("Address not found");
   }
 
   /**

@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { MARKET } from "../config/market.js";
 
 // Validation schemas
 const langSchema = z.enum(["en", "ne"]).optional().default("en");
@@ -181,7 +182,7 @@ export async function publicRoutes(fastify: FastifyInstance) {
           products.is_featured,
           COALESCE(store_price.price, organization_price.price) as price,
           COALESCE(store_price.original_price, organization_price.original_price) as original_price,
-          COALESCE(store_price.currency_code, organization_price.currency_code, 'NPR') as currency_code,
+          COALESCE(store_price.currency_code, organization_price.currency_code, '${MARKET.currencyCode}') as currency_code,
           COALESCE(spa.availability_status, CASE WHEN EXISTS (SELECT 1 FROM batch_inventory bi WHERE bi.product_id = products.id AND bi.store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1)) AND bi.quantity > 0) THEN 'AVAILABLE' ELSE 'OUT_OF_STOCK' END) as availability_status,
           COALESCE(products.meta_title_${validatedLang}, products.meta_title_en) as meta_title,
           COALESCE(products.meta_description_${validatedLang}, products.meta_description_en) as meta_description

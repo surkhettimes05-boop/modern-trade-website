@@ -5,6 +5,39 @@ import { query } from "../database/connection.js";
 
 const paymentService = new PaymentService();
 
+export async function paymentWebhookRoutes(fastify: FastifyInstance) {
+  const options = {
+    bodyLimit: 256 * 1024,
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+  };
+
+  fastify.post("/payments/webhooks/esewa", options, async (request, reply) => {
+    try {
+      const result = await paymentService.processWebhook(
+        "ESEWA",
+        request.body,
+        request.headers,
+      );
+      return reply.status(result.success ? 200 : 401).send(result);
+    } catch {
+      return reply.status(500).send({ error: "Failed to process eSewa webhook" });
+    }
+  });
+
+  fastify.post("/payments/webhooks/khalti", options, async (request, reply) => {
+    try {
+      const result = await paymentService.processWebhook(
+        "KHALTI",
+        request.body,
+        request.headers,
+      );
+      return reply.status(result.success ? 200 : 401).send(result);
+    } catch {
+      return reply.status(500).send({ error: "Failed to process Khalti webhook" });
+    }
+  });
+}
+
 export async function paymentRoutes(fastify: FastifyInstance) {
   fastify.get("/payments/intents", async (request, reply) => {
     const schema = z.object({
@@ -48,7 +81,10 @@ export async function paymentRoutes(fastify: FastifyInstance) {
     const paymentData = schema.parse(request.body);
 
     try {
-      const intent = await paymentService.createPaymentIntent(paymentData);
+      const intent = await paymentService.createPaymentIntent({
+        ...paymentData,
+        created_by: (request.user as { id: string }).id,
+      });
       return reply.status(201).send(intent);
     } catch {
       return reply
@@ -126,6 +162,7 @@ export async function paymentRoutes(fastify: FastifyInstance) {
         amount_npr,
         reason,
         idempotency_key,
+        (request.user as { id: string }).id,
       );
       return reply.send({ refund_number: refundNumber });
     } catch (error) {
@@ -142,38 +179,6 @@ export async function paymentRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: error.message });
       }
       return reply.status(500).send({ error: "Failed to refund payment" });
-    }
-  });
-
-  // Webhook: eSewa webhook
-  fastify.post("/payments/webhooks/esewa", async (request, reply) => {
-    try {
-      const result = await paymentService.processWebhook(
-        "ESEWA",
-        request.body,
-        request.headers,
-      );
-      return reply.send(result);
-    } catch {
-      return reply
-        .status(500)
-        .send({ error: "Failed to process eSewa webhook" });
-    }
-  });
-
-  // Webhook: Khalti webhook
-  fastify.post("/payments/webhooks/khalti", async (request, reply) => {
-    try {
-      const result = await paymentService.processWebhook(
-        "KHALTI",
-        request.body,
-        request.headers,
-      );
-      return reply.send(result);
-    } catch {
-      return reply
-        .status(500)
-        .send({ error: "Failed to process Khalti webhook" });
     }
   });
 

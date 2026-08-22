@@ -11,7 +11,8 @@
     "type-check": "tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:chromium": "playwright test --project=chromium-desktop --project=chromium-mobile",
-    "test:a11y": "playwright test tests/accessibility.spec.ts"
+    "test:a11y": "playwright test tests/accessibility.spec.ts",
+    "test:seo": "playwright test tests/seo.spec.ts --project=chromium-desktop"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",

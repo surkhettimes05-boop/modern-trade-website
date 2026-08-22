@@ -4,6 +4,7 @@ import { RuleEngineService } from "./ruleEngineService.js";
 import { LedgerService } from "./ledgerService.js";
 import { EarnLotsService } from "./earnLotsService.js";
 import { normalizePhone } from "../utils/phoneNormalization.js";
+import { MARKET } from "../config/market.js";
 
 const customerService = new CustomerService();
 const ruleEngineService = new RuleEngineService();
@@ -205,7 +206,7 @@ export class POSService {
           input.customer_id || null,
           input.store_id,
           input.total_amount,
-          input.currency || "NPR",
+          input.currency || MARKET.currencyCode,
           input.payment_method || null,
           input.idempotency_key || null,
           input.created_by,

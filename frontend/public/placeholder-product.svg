@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-labelledby="title description">
+  <title id="title">Product image unavailable</title>
+  <desc id="description">Neutral NOVA MART product placeholder</desc>
+  <rect width="640" height="640" fill="#f3f4f6"/>
+  <rect x="170" y="150" width="300" height="340" rx="28" fill="#ffffff" stroke="#d1d5db" stroke-width="12"/>
+  <path d="M250 244h140M250 300h140M250 356h92" fill="none" stroke="#9ca3af" stroke-linecap="round" stroke-width="18"/>
+  <circle cx="389" cy="395" r="48" fill="#166534"/>
+  <path d="m365 395 16 16 32-36" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="14"/>
+  <text x="320" y="552" fill="#374151" font-family="Arial, sans-serif" font-size="28" text-anchor="middle">NOVA MART</text>
+</svg>

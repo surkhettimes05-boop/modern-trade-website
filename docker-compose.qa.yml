@@ -5,20 +5,25 @@ x-backend: &backend
     context: .
     dockerfile: backend/Dockerfile
   environment:
-    NODE_ENV: qa
+    NODE_ENV: production
     DATABASE_URL: postgresql://storesync_qa:${QA_DB_PASSWORD:-storesync_qa_password}@postgres:5432/storesync_qa
     REDIS_URL: redis://redis:6379
     REDIS_NAMESPACE: storesync-qa
     PORT: 3001
     HOST: 0.0.0.0
     CORS_ORIGIN: http://localhost:53000
+    APP_URL: http://localhost:53000
     JWT_SECRET: ${QA_JWT_SECRET:-qa-only-jwt-secret-change-me}
     COOKIE_SECRET: ${QA_COOKIE_SECRET:-qa-only-cookie-secret-change-me}
+    JWT_ISSUER: storesync-backend
+    JWT_AUDIENCE: storesync-operations
     ENCRYPTION_KEY: ${QA_ENCRYPTION_KEY:-qa-only-encryption-key-32-bytes!}
     SIGNATURE_SECRET: ${QA_SIGNATURE_SECRET:-qa-only-signature-secret-32!}
+    OTP_HASH_SECRET: ${QA_OTP_HASH_SECRET:-qa-only-otp-hash-secret-32-bytes!}
     PAYMENT_ENCRYPTION_KEY: ${QA_PAYMENT_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
     ENABLE_ADMIN_API: "true"
     ENABLE_ELECTRONIC_PAYMENTS: "false"
+    ACTIVE_MARKET: NP
     DEFAULT_COUNTRY_CODE: NP
     DEFAULT_CURRENCY_CODE: NPR
     DEFAULT_LOCALE: en-NP
@@ -59,7 +64,7 @@ services:
 
   qa-migrate:
     <<: *backend
-    command: ["node", "dist/database/migrate.js"]
+    command: ["node", "dist/database/deployMigrate.js"]
     restart: "no"
     depends_on:
       postgres:
@@ -106,6 +111,7 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         API_URL: http://backend:3001
+        NEXT_PUBLIC_ACTIVE_MARKET: NP
     environment:
       NODE_ENV: production
     ports:

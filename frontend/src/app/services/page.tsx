@@ -50,9 +50,9 @@ export default function ServicesPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Multiple Payment Options</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Nepal pilot payments</h3>
             <p className="text-gray-600">
-              Cash, card, and mobile payments accepted
+              Cash on delivery and cash at the POS are available during the pilot
             </p>
           </div>
 
@@ -81,13 +81,9 @@ export default function ServicesPage() {
           </div>
         </div>
 
-        <div className="mt-12 p-6 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <h3 className="text-lg font-semibold text-yellow-800 mb-2">
-            Content Placeholder
-          </h3>
-          <p className="text-yellow-700">
-            Services information will be managed through the content management system. The actual services offered may vary by location.
-          </p>
+        <div className="mt-12 p-6 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <h2 className="text-lg font-semibold text-emerald-900 mb-2">Availability depends on your store</h2>
+          <p className="text-emerald-800">Delivery eligibility, pickup timing, opening hours and stock are shown using the selected store whenever current information is available.</p>
         </div>
       </div>
     </div>

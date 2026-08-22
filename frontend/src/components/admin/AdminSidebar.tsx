@@ -16,7 +16,6 @@ import {
   FileText,
   Settings,
   Shield,
-  BarChart3,
   ChevronRight,
   ChevronDown
 } from 'lucide-react';
@@ -63,20 +62,6 @@ export function AdminSidebar() {
       children: [
         { title: 'Products', href: '/admin/catalog/products', icon: <Package className="h-4 w-4" />, capability: 'catalog.read' },
         { title: 'Categories', href: '/admin/catalog/categories', icon: <Tag className="h-4 w-4" />, capability: 'catalog.read' },
-        { title: 'Brands', href: '/admin/catalog/brands', icon: <Tag className="h-4 w-4" />, capability: 'catalog.read' },
-        { title: 'Attributes', href: '/admin/catalog/attributes', icon: <Tag className="h-4 w-4" />, capability: 'catalog.read' },
-        { title: 'Media', href: '/admin/catalog/media', icon: <Package className="h-4 w-4" />, capability: 'catalog.read' },
-      ],
-    },
-    {
-      title: 'Merchandising',
-      href: '/admin/merchandising',
-      icon: <ShoppingCart className="h-5 w-5" />,
-      capability: 'promotions.read',
-      children: [
-        { title: 'Promotions', href: '/admin/merchandising/promotions', icon: <Tag className="h-4 w-4" />, capability: 'promotions.read' },
-        { title: 'Collections', href: '/admin/merchandising/collections', icon: <ShoppingCart className="h-4 w-4" />, capability: 'merchandising.read' },
-        { title: 'Homepage', href: '/admin/merchandising/homepage', icon: <LayoutDashboard className="h-4 w-4" />, capability: 'merchandising.read' },
       ],
     },
     {
@@ -86,8 +71,6 @@ export function AdminSidebar() {
       capability: 'content.read',
       children: [
         { title: 'Pages', href: '/admin/content/pages', icon: <FileText className="h-4 w-4" />, capability: 'content.read' },
-        { title: 'Navigation', href: '/admin/content/navigation', icon: <LayoutDashboard className="h-4 w-4" />, capability: 'content.read' },
-        { title: 'SEO', href: '/admin/content/seo', icon: <FileText className="h-4 w-4" />, capability: 'content.read' },
       ],
     },
     {
@@ -97,9 +80,6 @@ export function AdminSidebar() {
       capability: 'orders.read',
       children: [
         { title: 'Orders', href: '/admin/commerce/orders', icon: <ShoppingCart className="h-4 w-4" />, capability: 'orders.read' },
-        { title: 'Returns', href: '/admin/commerce/returns', icon: <ShoppingCart className="h-4 w-4" />, capability: 'orders.read' },
-        { title: 'Deliveries', href: '/admin/commerce/deliveries', icon: <ShoppingCart className="h-4 w-4" />, capability: 'orders.read' },
-        { title: 'Payments', href: '/admin/commerce/payments', icon: <ShoppingCart className="h-4 w-4" />, capability: 'payments.read' },
       ],
     },
     {
@@ -109,8 +89,6 @@ export function AdminSidebar() {
       capability: 'customers.read',
       children: [
         { title: 'All Customers', href: '/admin/customers', icon: <Users className="h-4 w-4" />, capability: 'customers.read' },
-        { title: 'Segments', href: '/admin/customers/segments', icon: <Users className="h-4 w-4" />, capability: 'segments.manage' },
-        { title: 'Loyalty', href: '/admin/customers/loyalty', icon: <Users className="h-4 w-4" />, capability: 'loyalty.manage' },
       ],
     },
     {
@@ -150,12 +128,6 @@ export function AdminSidebar() {
         { title: 'Staff', href: '/admin/organization/staff', icon: <Users className="h-4 w-4" />, capability: 'staff.read' },
         { title: 'Roles', href: '/admin/organization/roles', icon: <Shield className="h-4 w-4" />, capability: 'roles.manage' },
       ],
-    },
-    {
-      title: 'Reports',
-      href: '/admin/reports',
-      icon: <BarChart3 className="h-5 w-5" />,
-      capability: 'reports.financial',
     },
     {
       title: 'Audit',

@@ -1,3 +1,5 @@
+import JsonLd from '@/components/JsonLd';
+
 export default function FAQPage() {
   const faqs = [
     {
@@ -6,19 +8,11 @@ export default function FAQPage() {
     },
     {
       question: "Do you offer home delivery?",
-      answer: "Currently, we offer in-store shopping. Home delivery services are being planned for a future phase. Please check our website for updates."
+      answer: "Pickup and eligible Kathmandu delivery are available based on the selected store and delivery address."
     },
     {
       question: "What payment methods do you accept?",
-      answer: "We accept cash, major credit/debit cards, and mobile payment options including eSewa and Khalti."
-    },
-    {
-      question: "Can I return items?",
-      answer: "Yes, we have a return policy for eligible items. Please bring your receipt and the item in its original condition. Returns are handled on a case-by-case basis."
-    },
-    {
-      question: "Do you have a loyalty program?",
-      answer: "Our loyalty program is coming soon! You'll be able to earn points on purchases and redeem them for rewards. Stay tuned for announcements."
+      answer: "The Nepal pilot accepts cash on delivery and cash at the POS. Electronic providers are not enabled."
     },
     {
       question: "How can I contact customer support?",
@@ -28,6 +22,7 @@ export default function FAQPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <JsonLd data={{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map((faq) => ({ '@type': 'Question', name: faq.question, acceptedAnswer: { '@type': 'Answer', text: faq.answer } })) }} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h1>
         <p className="text-xl text-gray-600 mb-8">
@@ -54,13 +49,9 @@ export default function FAQPage() {
           ))}
         </div>
 
-        <div className="mt-12 p-6 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <h3 className="text-lg font-semibold text-yellow-800 mb-2">
-            Content Placeholder
-          </h3>
-          <p className="text-yellow-700">
-            FAQ content will be managed through the content management system. Categories and answers can be organized and updated by administrators.
-          </p>
+        <div className="mt-12 p-6 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <h2 className="text-lg font-semibold text-emerald-900 mb-2">Still need help?</h2>
+          <p className="text-emerald-800">Contact NOVA MART support or ask the team at your selected store for information specific to your location.</p>
         </div>
       </div>
     </div>

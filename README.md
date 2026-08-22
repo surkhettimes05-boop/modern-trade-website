@@ -1,217 +1,71 @@
-# StoreSync - Modern Trade Platform
+# StoreSync — Nepal production pilot
 
-Phase 1 implementation: Public website and digital foundation.
+StoreSync is a Next.js 16 and Fastify retail platform prepared for an initial Nepal pilot. Nepal is the only certified active market. India remains represented in the market registry for future expansion, but startup validation rejects India activation for this release.
 
-## Architecture
+The controlled Nepal loyalty MVP is active. OTP-verified customers can enroll and view their own balance/history at `/loyalty`; completed POS sales and delivered COD orders earn 1 point per authoritative NPR 100. Scoped staff can redeem points against a completed POS sale. See [docs/LOYALTY_MVP.md](docs/LOYALTY_MVP.md) for the ledger, reversal, reconciliation, API, recovery, and release-gate contract.
 
-- **Frontend**: Next.js 16 with TypeScript, Tailwind CSS
-- **Backend**: Fastify with TypeScript, PostgreSQL
-- **Database**: PostgreSQL with content management schema
+## Pilot market
 
-## Project Structure
+| Setting | Active value |
+|---|---|
+| Country | Nepal (`NP`) |
+| Currency | Nepalese rupee (`NPR`) |
+| Locale | `en-NP` |
+| Timezone | `Asia/Kathmandu` |
+| Tax labels | IRD/VAT |
+| Customer phone | Nepal mobile (`+977`, prefixes 96–99) |
+| Address | Nepal province, district, municipality, ward, tole/locality |
+| Checkout payment | Cash on delivery only |
+| POS tender | Cash |
 
-```
-storesync/
-├── frontend/          # Next.js frontend application
-│   ├── src/
-│   │   ├── app/       # Next.js App Router pages
-│   │   ├── components/ # React components
-│   │   └── lib/       # Utility functions
-│   └── package.json
-├── backend/           # Fastify backend API
-│   ├── src/
-│   │   ├── routes/    # API route handlers
-│   │   ├── database/  # Database schema and connection
-│   │   ├── middleware/ # Express middleware
-│   │   └── utils/     # Utility functions
-│   └── package.json
-├── database/          # Database migrations and seeds
-└── shared/            # Shared TypeScript types
-```
+The backend source of truth is `backend/src/config/market.ts`; the browser-safe display contract is `frontend/src/lib/market.ts`. Production must explicitly set every market variable shown in `backend/.env.production.example`. Contradictory values fail startup.
 
-## Getting Started
+## Certified pilot scope
 
-### Prerequisites
+Enabled: public website, catalog/search/filter, store selection, customer account and OTP flow, cart, COD checkout, pickup/delivery selection, order history/detail/cancellation, staff login/logout, role/store-scoped admin and operations, basic cash POS and shifts, inventory, procurement, staff, content/catalog, audit and required operational support.
 
-- Node.js 20+
-- PostgreSQL 14+
-- npm or yarn
+Deferred and fail-closed: eSewa, Khalti, Fonepay, card payments, electronic refunds/reconciliation, loyalty, returns workflow, advanced analytics, customer segments, promotion engine, external IRD integration, fiscal signatures/compliance integration, offline sync/devices, and external CMS/CDN integrations. Their code is retained but their production routes and navigation are not registered.
 
-### Backend Setup
+## Render deployment
 
-1. Navigate to backend directory:
+Use the root `render.yaml` Blueprint and then complete the prompted values in
+**Render Dashboard → Service → Environment**. The Blueprint supplies the fixed
+Nepal market configuration and generates most secrets. The operator must
+provide `DATABASE_URL`, the HTTPS `APP_URL` and `CORS_ORIGIN`, and an exactly
+64-character hexadecimal `PAYMENT_ENCRYPTION_KEY`. See
+[`backend/DEPLOYMENT.md`](backend/DEPLOYMENT.md) for the full variable groups,
+optional integration rules, migration startup behavior, and health checks.
+
+## Local development
+
+Prerequisites: Node.js 22+, PostgreSQL 14+, and a Redis 7-compatible service.
+
 ```bash
 cd backend
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Configure environment:
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your database connection string and other settings.
-
-4. Run database migrations:
-```bash
-# Run schema.sql in your PostgreSQL database
-psql -U your_user -d storesync -f ../database/schema.sql
-```
-
-5. Start development server:
-```bash
+npm ci
+copy .env.example .env
+npm run db:migrate
+npm run seed
 npm run dev
 ```
 
-Backend will run on `http://localhost:3001`
-
-### Frontend Setup
-
-1. Navigate to frontend directory:
 ```bash
 cd frontend
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start development server:
-```bash
+npm ci
+copy .env.example .env.local
 npm run dev
 ```
 
-Frontend will run on `http://localhost:3000`
+Never commit populated `.env` files. Use the existing migration manifest and runner; do not apply SQL files manually or create a second migration path.
 
-## API Endpoints
+## Release verification
 
-### Public API
+Static and unit gates: `npm run qa:release`.
 
-- `GET /api/health` - Health check
-- `GET /api/health/db` - Database health check
-- `GET /api/public/pages/:slug` - Get published content page
-- `GET /api/public/stores` - Get all published stores
-- `GET /api/public/stores/:id` - Get single store
-- `GET /api/public/categories` - Get published categories
-- `GET /api/public/products` - Get published products
-- `GET /api/public/products/:id` - Get single product
-- `GET /api/public/offers` - Get current offers
-- `GET /api/public/faqs` - Get published FAQs
-- `GET /api/public/services` - Get published services
-- `POST /api/public/contact` - Submit contact form
+Disposable PostgreSQL/Redis/container certification: `npm run qa:certify`.
 
-### Admin API (Requires JWT authentication)
+Native Windows QA, when PostgreSQL, Memurai and Playwright browsers are installed: `npm run qa:local`.
 
-- `GET /api/admin/pages` - List all pages
-- `POST /api/admin/pages` - Create page
-- `PUT /api/admin/pages/:id` - Update page
-- `GET /api/admin/stores` - List all stores
-- `POST /api/admin/stores` - Create store
-- `GET /api/admin/products` - List all products
-- `POST /api/admin/products` - Create product
-- `GET /api/admin/contact` - List contact submissions
-- `PATCH /api/admin/contact/:id` - Update contact submission status
+The Compose stack performs a backup before migration, applies the canonical migration manifest, seeds Nepal data, waits for PostgreSQL and Redis health, and does not start the frontend until backend readiness passes. Readiness checks database connectivity, migration 020, and Redis. Liveness is `/api/health/live`; integration state is `/api/health/integrations`.
 
-## Content Management
-
-The system supports a publication workflow:
-
-- **DRAFT**: Initial state, not visible publicly
-- **REVIEW**: Under review
-- **PUBLISHED**: Visible publicly
-- **SCHEDULED**: Scheduled for future publication
-- **UNPUBLISHED**: Previously published, now hidden
-- **EXPIRED**: Content past its expiry date
-
-All content changes are logged in the audit trail.
-
-## Bilingual Support
-
-The system supports English and Nepali content:
-
-- Use `?lang=ne` query parameter to request Nepali content
-- Default language is English
-- Content falls back to English if Nepali version is not available
-
-## Security Features
-
-- Rate limiting on all public endpoints
-- Server-side validation with Zod schemas
-- No direct database access from frontend
-- Safe error responses (no stack traces exposed)
-- Helmet.js for security headers
-- CORS configuration
-- JWT authentication for admin endpoints
-
-## SEO Features
-
-- Dynamic sitemap generation
-- Robots.txt configuration
-- Open Graph and Twitter Card metadata
-- Canonical URLs
-- Structured data support
-
-## Accessibility
-
-The frontend is built with WCAG 2.2 AA compliance in mind:
-
-- Semantic HTML
-- Proper heading hierarchy
-- Keyboard navigation support
-- Focus indicators
-- Color contrast compliance
-- Screen reader friendly
-- Responsive design
-
-## Content Placeholders
-
-The following content is currently placeholder and should be updated:
-
-- Store addresses, hours, and contact information
-- Product catalog and images
-- Offer campaigns
-- FAQ content
-- About page company information
-- Privacy policy and terms of service (legal review required)
-- Service descriptions
-
-These should be managed through the admin API once the database is populated.
-
-## Next Steps
-
-1. Set up PostgreSQL database and run schema migrations
-2. Configure environment variables for both frontend and backend
-3. Populate initial content through admin API
-4. Test all public pages and API endpoints
-5. Set up deployment pipeline
-6. Configure monitoring and error tracking
-7. Run accessibility and performance audits
-8. Implement automated tests
-
-## Phase 1 Status
-
-- ✅ Project structure and tech stack
-- ✅ Backend API with Fastify
-- ✅ Database schema for content management
-- ✅ Public API endpoints with validation
-- ✅ Admin API with authentication
-- ✅ Frontend with Next.js
-- ✅ All required public pages
-- ✅ Product and offer pages
-- ✅ Bilingual content architecture
-- ✅ SEO features (sitemap, robots, metadata)
-- ✅ Security features
-- ✅ Health check endpoints
-- ⏳ Deployment pipeline configuration
-- ⏳ Accessibility audit completion
-- ⏳ Automated tests
-- ⏳ Content population
-
-## License
-
-ISC
+See `implementation/RELEASE_GATE.md`, `docs/PRODUCTION_RECOVERY_RUNBOOK.md`, and `docs/PAYMENT_EXTERNAL_REQUIREMENTS.md` before approving a pilot release. A command is not certified until its result is recorded in the release evidence.

@@ -1,4 +1,5 @@
 import { query } from "../database/connection.js";
+import { MARKET } from "../config/market.js";
 
 interface PurchaseOrder {
   id: string;
@@ -121,7 +122,7 @@ export class PurchaseOrderService {
         discountAmount,
         shippingAmount,
         totalAmount,
-        poData.currency || "NPR",
+        poData.currency || MARKET.currencyCode,
         poData.reference_number || null,
         poData.notes || null,
         poData.idempotency_key || null,

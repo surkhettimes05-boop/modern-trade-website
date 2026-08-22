@@ -1,4 +1,5 @@
 import { query } from "../database/connection.js";
+import { MARKET } from "../config/market.js";
 import crypto from "crypto";
 
 interface Device {
@@ -494,7 +495,7 @@ export class OfflineSyncService {
         data.payment_number || crypto.randomUUID(),
         data.payment_type || "RECEIPT",
         data.amount,
-        data.currency || "NPR",
+        data.currency || MARKET.currencyCode,
         data.tender_type,
         data.reference_number || null,
         data.payment_timestamp,
