@@ -44,7 +44,9 @@ services:
       - key: DATABASE_SSL
         value: "true"
       - key: DATABASE_SSL_REJECT_UNAUTHORIZED
-        value: "true"
+        # Equivalent to sslmode=require: traffic remains encrypted, while
+        # externally managed databases need no provider CA bundle in Node.
+        value: "false"
       - key: REDIS_URL
         fromService:
           type: keyvalue
