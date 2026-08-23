@@ -5,11 +5,7 @@ import {
   customerId,
 } from "../middleware/customerAuthentication.js";
 import { CheckoutService } from "../services/checkoutService.js";
-import {
-  MARKET,
-  NepalPhoneSchema,
-  NepalPostalCodeSchema,
-} from "../contracts/platform.js";
+import { CodCheckoutBodySchema } from "../contracts/checkout.js";
 
 const checkout = new CheckoutService();
 export async function checkoutRoutes(fastify: FastifyInstance) {
@@ -66,7 +62,10 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         reason || "Cancelled by customer",
       );
     } catch (error) {
-      if (error instanceof Error && error.message === "Order cannot be cancelled") {
+      if (
+        error instanceof Error &&
+        error.message === "Order cannot be cancelled"
+      ) {
         return reply.status(400).send({ error: error.message });
       }
       request.log.error({ error }, "Customer order cancellation failed");
@@ -74,23 +73,7 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     }
   });
   fastify.post("/checkout/cod", async (request, reply) => {
-    const body = z
-      .object({
-        cart_id: z.string().uuid(),
-        store_id: z.string().uuid(),
-        idempotency_key: z.string().min(8).max(100),
-        delivery_type: z.enum(["DELIVERY", "PICKUP"]),
-        shipping_name: z.string().trim().min(1).max(200),
-        shipping_phone: NepalPhoneSchema,
-        shipping_address: z.string().trim().min(1).max(500),
-        shipping_city: z.string().trim().min(1).max(100),
-        shipping_state: z.string().trim().min(1).max(100),
-        shipping_postal_code: NepalPostalCodeSchema,
-        shipping_country: z.literal(MARKET.countryCode),
-        notes: z.string().trim().max(1_000).optional(),
-      })
-      .strict()
-      .parse(request.body);
+    const body = CodCheckoutBodySchema.parse(request.body);
     try {
       return reply.status(201).send(
         await checkout.createCodOrder({
@@ -102,11 +85,22 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
           deliveryType: body.delivery_type,
           shippingName: body.shipping_name,
           shippingPhone: body.shipping_phone,
-          shippingAddress: body.shipping_address,
-          shippingCity: body.shipping_city,
-          shippingState: body.shipping_state,
-          shippingPostalCode: body.shipping_postal_code,
-          shippingCountry: body.shipping_country,
+          shippingAddress:
+            body.delivery_type === "DELIVERY"
+              ? body.shipping_address
+              : undefined,
+          shippingCity:
+            body.delivery_type === "DELIVERY" ? body.shipping_city : undefined,
+          shippingState:
+            body.delivery_type === "DELIVERY" ? body.shipping_state : undefined,
+          shippingPostalCode:
+            body.delivery_type === "DELIVERY"
+              ? body.shipping_postal_code
+              : undefined,
+          shippingCountry:
+            body.delivery_type === "DELIVERY"
+              ? body.shipping_country
+              : undefined,
         }),
       );
     } catch (error) {
@@ -115,7 +109,9 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       const clientError =
         message.includes("stock") ||
         message.includes("Cart") ||
-        message.includes("Price");
+        message.includes("Price") ||
+        message.includes("store") ||
+        message.includes("delivery address");
       if (!clientError) request.log.error({ error }, "COD checkout failed");
       return reply
         .status(clientError ? 400 : 500)

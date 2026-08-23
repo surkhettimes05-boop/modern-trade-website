@@ -31,6 +31,14 @@ workflows:
         API_BASE_URL: https://storesync-backend-dg8z.onrender.com
         ANDROID_KEYSTORE_PATH: /tmp/nova-mart-release.jks
     scripts:
+      - name: Validate release configuration
+        script: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "Missing required Codemagic secret: $name"
+              exit 1
+            fi
+          done
       - name: Restore signing keystore
         script: echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
       - name: Install dependencies

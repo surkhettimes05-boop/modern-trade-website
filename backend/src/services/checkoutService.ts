@@ -11,11 +11,11 @@ export class CheckoutService {
     deliveryType: "DELIVERY" | "PICKUP";
     shippingName: string;
     shippingPhone: string;
-    shippingAddress: string;
-    shippingCity: string;
-    shippingState: string;
-    shippingPostalCode: string;
-    shippingCountry: string;
+    shippingAddress?: string;
+    shippingCity?: string;
+    shippingState?: string;
+    shippingPostalCode?: string;
+    shippingCountry?: string;
     notes?: string;
     actorId?: string;
   }) {
@@ -37,6 +37,39 @@ export class CheckoutService {
       );
       if (!cart.rows[0])
         throw new Error("Cart is not available for this customer and store");
+      let shippingAddress: string | null;
+      let shippingCity: string | null;
+      let shippingState: string | null;
+      let shippingPostalCode: string | null;
+      let shippingCountry: string;
+      if (input.deliveryType === "PICKUP") {
+        const store = await client.query(
+          `SELECT address_en FROM stores
+           WHERE id = $1 AND status = 'PUBLISHED'`,
+          [input.storeId],
+        );
+        if (!store.rows[0]) throw new Error("Pickup store is not available");
+        shippingAddress = store.rows[0].address_en;
+        shippingCity = null;
+        shippingState = null;
+        shippingPostalCode = null;
+        shippingCountry = MARKET.countryCode;
+      } else {
+        if (
+          !input.shippingAddress ||
+          !input.shippingCity ||
+          !input.shippingState ||
+          !input.shippingPostalCode ||
+          input.shippingCountry !== MARKET.countryCode
+        ) {
+          throw new Error("A complete Nepal delivery address is required");
+        }
+        shippingAddress = input.shippingAddress;
+        shippingCity = input.shippingCity;
+        shippingState = input.shippingState;
+        shippingPostalCode = input.shippingPostalCode;
+        shippingCountry = input.shippingCountry;
+      }
       const items = await client.query(
         `SELECT ci.*, p.name_en, COALESCE(pp.price, 0) AS authoritative_price, bi.available_quantity
         FROM cart_items ci JOIN products p ON p.id = ci.product_id AND p.status = 'PUBLISHED'
@@ -88,11 +121,11 @@ export class CheckoutService {
           total,
           input.shippingName,
           input.shippingPhone,
-          input.shippingAddress,
-          input.shippingCity,
-          input.shippingState,
-          input.shippingPostalCode,
-          input.shippingCountry,
+          shippingAddress,
+          shippingCity,
+          shippingState,
+          shippingPostalCode,
+          shippingCountry,
           input.deliveryType,
           input.notes || null,
         ],
@@ -115,7 +148,7 @@ export class CheckoutService {
                 MARKET.standardTaxRate,
             ) / 100,
             (Math.round(Number(item.authoritative_price) * 100) *
-                Number(item.quantity) +
+              Number(item.quantity) +
               Math.round(
                 Math.round(Number(item.authoritative_price) * 100) *
                   Number(item.quantity) *

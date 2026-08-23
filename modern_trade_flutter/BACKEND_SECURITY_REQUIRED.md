@@ -8,4 +8,4 @@ The backend must also enforce stock and the maximum permitted item quantity; the
 
 ## Pickup checkout contract
 
-The current `POST /api/checkout/cod` Zod schema requires delivery address, city, province, postal code, and country even when `delivery_type` is `PICKUP`. The corrected app intentionally omits these fields for pickup rather than inventing a customer address. The backend must make those fields conditionally required only for `DELIVERY`; for `PICKUP`, it should derive the pickup location from the authenticated cart/store. Until that schema is deployed, pickup order submission remains a backend compatibility blocker.
+The checked-in `POST /api/checkout/cod` contract now requires the Nepal delivery address fields only when `delivery_type` is `DELIVERY`. For `PICKUP`, the API rejects invented customer delivery fields and derives the pickup address from the selected published store. Keep the contract tests passing and deploy this backend revision before enabling pickup in production.
