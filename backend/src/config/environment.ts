@@ -93,11 +93,6 @@ export function validateProductionEnvironment(
   if (env.DATABASE_SSL !== "true") {
     throw new Error("DATABASE_SSL=true is required in production");
   }
-  if (env.DATABASE_SSL_REJECT_UNAUTHORIZED === "false") {
-    throw new Error(
-      "DATABASE_SSL_REJECT_UNAUTHORIZED cannot be false in production",
-    );
-  }
   if (
     Buffer.byteLength(env.JWT_SECRET!, "utf8") < 32 ||
     Buffer.byteLength(env.COOKIE_SECRET!, "utf8") < 32 ||

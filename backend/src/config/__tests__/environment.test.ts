@@ -50,6 +50,24 @@ describe("environment safety", () => {
     ).not.toThrow();
   });
 
+  it("allows TLS require mode for a managed database without a CA bundle", () => {
+    expect(() =>
+      validateProductionEnvironment({
+        ...productionEnvironment,
+        DATABASE_SSL_REJECT_UNAUTHORIZED: "false",
+      }),
+    ).not.toThrow();
+  });
+
+  it("still requires encrypted database transport in production", () => {
+    expect(() =>
+      validateProductionEnvironment({
+        ...productionEnvironment,
+        DATABASE_SSL: "false",
+      }),
+    ).toThrow("DATABASE_SSL=true is required in production");
+  });
+
   it("rejects a missing explicit production market variable", () => {
     const env: NodeJS.ProcessEnv = { ...productionEnvironment };
     delete env.DEFAULT_TIMEZONE;
