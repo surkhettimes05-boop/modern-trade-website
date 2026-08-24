@@ -55,7 +55,7 @@ describe("integration health snapshot", () => {
     ).toThrow("TWILIO_VERIFY_SERVICE_SID is required");
   });
 
-  it("accepts a complete short-lived demo OTP configuration", () => {
+  it("rejects static demo OTP configuration in production", () => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const env = {
       NODE_ENV: "production",
@@ -65,22 +65,9 @@ describe("integration health snapshot", () => {
       OTP_DEMO_EXPIRES_AT: expiresAt,
     };
 
-    expect(() => validateProductionIntegrations(env)).not.toThrow();
-    expect(getIntegrationSnapshot(env).notifications.sms).toBe(true);
-  });
-
-  it("rejects demo OTP access lasting longer than seven days", () => {
-    expect(() =>
-      validateProductionIntegrations({
-        NODE_ENV: "production",
-        SMS_PROVIDER: "demo",
-        OTP_DEMO_PHONE: "9812345678",
-        OTP_DEMO_CODE: "482731",
-        OTP_DEMO_EXPIRES_AT: new Date(
-          Date.now() + 8 * 24 * 60 * 60 * 1000,
-        ).toISOString(),
-      }),
-    ).toThrow("cannot be enabled for more than 7 days");
+    expect(() => validateProductionIntegrations(env)).toThrow(
+      "SMS_PROVIDER=demo is forbidden in production",
+    );
   });
 
   it("reports a configured map provider as enabled", () => {

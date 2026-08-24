@@ -1,0 +1,56 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  attributes/redact:
+    actions:
+      - key: http.request.header.authorization
+        action: delete
+      - key: http.request.header.cookie
+        action: delete
+      - key: http.response.header.set_cookie
+        action: delete
+      - key: url.query
+        action: delete
+      - key: db.query.text
+        action: delete
+      - key: enduser.id
+        action: delete
+      - key: user.email
+        action: delete
+      - key: user.phone
+        action: delete
+      - key: user.address
+        action: delete
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  otlphttp/observability:
+    endpoint: ${env:OBSERVABILITY_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:OBSERVABILITY_EXPORTER_AUTHORIZATION}
+
+service:
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, batch]
+      exporters: [otlphttp/observability]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, batch]
+      exporters: [otlphttp/observability]

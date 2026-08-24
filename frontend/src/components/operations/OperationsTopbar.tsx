@@ -4,6 +4,7 @@ import { LogOut, Store } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useStaffSession } from '@/components/StaffSessionProvider';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 export function OperationsTopbar() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export function OperationsTopbar() {
       ?.split('=')[1];
     setLoggingOut(true);
     try {
-      await fetch('/api/operations-auth/logout', {
+      await resilientFetch('/api/operations-auth/logout', {
         method: 'POST',
         credentials: 'include',
         headers: { 'x-csrf-token': csrf || '' },

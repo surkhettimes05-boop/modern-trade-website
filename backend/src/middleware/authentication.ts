@@ -13,6 +13,7 @@ export async function authenticateStaff(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
+  reply.header("cache-control", "private, no-store");
   try {
     // Verify JWT from cookie
     await request.jwtVerify({ onlyCookie: true });
@@ -61,6 +62,7 @@ export async function authenticateStaff(
       scopeOrganizationId: staff.scope_organization_id,
       scopeStoreIds: staff.scope_store_ids,
       storeId: staff.store_id,
+      roleLevel: staff.role_level,
       mfaEnabled: staff.mfa_enabled,
       mfaVerified: Boolean((request.user as any).mfaVerified),
     } as AuthenticatedUser;

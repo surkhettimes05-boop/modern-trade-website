@@ -1,8 +1,8 @@
 import "dotenv/config";
-import { getDatabaseUrl } from "../config/environment.js";
+import { getMigrationDatabaseUrl } from "../config/environment.js";
 import { runMigrations } from "./migrationRunner.js";
 
-const applied = await runMigrations(getDatabaseUrl());
+const applied = await runMigrations(getMigrationDatabaseUrl());
 console.log(
   applied.length
     ? `Applied migrations: ${applied.join(", ")}`

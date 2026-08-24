@@ -210,6 +210,47 @@ describe("PaymentService", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("Invalid signature");
+      expect(query).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining("WHERE id = $1"),
+        ["log-uuid"],
+      );
+    });
+
+    it("records a verified webhook processing failure against the webhook log", async () => {
+      process.env.ESEWA_SECRET_KEY = "webhook-test-secret";
+      const configuredPaymentService = new PaymentService();
+      const webhookData = {
+        transactionId: "tx-processing-failure",
+        pid: "missing-intent",
+        signed_field_names: "transactionId,pid",
+      };
+      const signature = (
+        configuredPaymentService as any
+      ).calculateWebhookSignature("ESEWA", webhookData);
+
+      (query as jest.Mock)
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ id: "log-processing-failure" }] })
+        .mockRejectedValueOnce(new Error("Payment intent lookup failed"))
+        .mockResolvedValueOnce({ rows: [] });
+
+      const result = await configuredPaymentService.processWebhook(
+        "ESEWA",
+        webhookData,
+        { "x-esewa-signature": signature },
+      );
+
+      expect(result).toEqual({
+        success: false,
+        message: "Payment intent lookup failed",
+      });
+      expect(query).toHaveBeenNthCalledWith(
+        4,
+        expect.stringContaining("WHERE id = $2"),
+        ["Payment intent lookup failed", "log-processing-failure"],
+      );
+      delete process.env.ESEWA_SECRET_KEY;
     });
   });
 

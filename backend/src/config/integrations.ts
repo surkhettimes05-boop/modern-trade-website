@@ -134,6 +134,11 @@ export function validateProductionIntegrations(
     if (!["twilio", "twilio_verify", "demo"].includes(env.SMS_PROVIDER)) {
       throw new Error("SMS_PROVIDER must be twilio, twilio_verify, or demo");
     }
+    if (env.SMS_PROVIDER === "demo") {
+      throw new Error(
+        "SMS_PROVIDER=demo is forbidden in production; configure a real OTP provider",
+      );
+    }
     const requiredKeys =
       env.SMS_PROVIDER === "demo"
         ? ["OTP_DEMO_PHONE", "OTP_DEMO_CODE", "OTP_DEMO_EXPIRES_AT"]
@@ -148,21 +153,6 @@ export function validateProductionIntegrations(
       if (!present(env, key)) {
         throw new Error(
           `${key} is required when SMS_PROVIDER=${env.SMS_PROVIDER}`,
-        );
-      }
-    }
-    if (env.SMS_PROVIDER === "demo") {
-      if (!/^\d{6}$/.test(env.OTP_DEMO_CODE?.trim() || "")) {
-        throw new Error("OTP_DEMO_CODE must contain exactly 6 digits");
-      }
-      const expiry = new Date(env.OTP_DEMO_EXPIRES_AT || "");
-      const remaining = expiry.getTime() - Date.now();
-      if (!Number.isFinite(remaining) || remaining <= 0) {
-        throw new Error("OTP_DEMO_EXPIRES_AT must be a future ISO timestamp");
-      }
-      if (remaining > 7 * 24 * 60 * 60 * 1000) {
-        throw new Error(
-          "Demo OTP access cannot be enabled for more than 7 days",
         );
       }
     }

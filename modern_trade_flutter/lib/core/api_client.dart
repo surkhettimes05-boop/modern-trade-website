@@ -59,11 +59,12 @@ String userMessage(Object error) {
 
 class ApiClient {
   ApiClient(
-      {required this.baseUrl,
+      {required String baseUrl,
       http.Client? client,
       SecureSessionStore? sessionStore,
       this.onSessionExpired})
-      : _client = client ?? http.Client(),
+      : baseUrl = validateApiBaseUrl(baseUrl),
+        _client = client ?? http.Client(),
         _store = sessionStore ?? const FlutterSecureSessionStore();
 
   final String baseUrl;
@@ -218,4 +219,22 @@ class ApiClient {
   }
 
   void close() => _client.close();
+}
+
+String validateApiBaseUrl(String value, {bool releaseMode = kReleaseMode}) {
+  final uri = Uri.tryParse(value);
+  if (uri == null ||
+      !uri.hasAuthority ||
+      !const {'http', 'https'}.contains(uri.scheme) ||
+      uri.userInfo.isNotEmpty ||
+      uri.hasQuery ||
+      uri.hasFragment) {
+    throw ArgumentError.value(value, 'baseUrl', 'Invalid API base URL');
+  }
+  final localDevelopment = uri.scheme == 'http' &&
+      const {'localhost', '127.0.0.1', '::1'}.contains(uri.host);
+  if (releaseMode && uri.scheme != 'https' && !localDevelopment) {
+    throw StateError('Production API_BASE_URL must use HTTPS');
+  }
+  return uri.toString().replaceFirst(RegExp(r'/$'), '');
 }

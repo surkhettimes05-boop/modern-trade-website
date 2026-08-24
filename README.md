@@ -46,6 +46,7 @@ npm ci
 copy .env.example .env
 npm run db:migrate
 npm run seed
+npm run bootstrap-admin
 npm run dev
 ```
 

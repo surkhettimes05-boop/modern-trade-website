@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 export default function StaffLoginPage() {
   const router = useRouter();
@@ -14,10 +15,14 @@ export default function StaffLoginPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/operations-auth/login', {
+      const response = await resilientFetch('/api/operations-auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: form.get('username'), password: form.get('password') }),
+        body: JSON.stringify({
+          username: form.get('username'),
+          password: form.get('password'),
+          ...(form.get('mfa_code') ? { mfa_code: form.get('mfa_code') } : {}),
+        }),
       });
       const contentType = response.headers.get('content-type') || '';
       const result = contentType.includes('application/json')
@@ -45,6 +50,7 @@ export default function StaffLoginPage() {
         <form onSubmit={login} className="space-y-5">
           <label className="block text-sm font-medium text-slate-700">Username<input name="username" autoComplete="username" required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label>
           <label className="block text-sm font-medium text-slate-700">Password<input name="password" type="password" autoComplete="current-password" required minLength={8} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label>
+          <label className="block text-sm font-medium text-slate-700">Authenticator code (if enabled)<input name="mfa_code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label>
           {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           <button disabled={loading} className="w-full rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 disabled:bg-slate-400">{loading ? 'Signing in…' : 'Sign in'}</button>
         </form>

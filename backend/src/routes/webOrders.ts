@@ -20,6 +20,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         code: "CSRF_INVALID",
       });
     }
+    bindAuthenticatedAuditActor(request);
     const user = request.user as { roleKey?: string; capabilities?: string[] };
     const privileged =
       user.roleKey === "platform_admin" ||
@@ -61,9 +62,10 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
           : undefined;
 
     if (!targetStoreId && typeof params.orderId === "string") {
-      const order = await query("SELECT store_id FROM web_orders WHERE id = $1", [
-        params.orderId,
-      ]);
+      const order = await query(
+        "SELECT store_id FROM web_orders WHERE id = $1",
+        [params.orderId],
+      );
       targetStoreId = order.rows[0]?.store_id;
     }
     if (!targetStoreId && typeof params.orderNumber === "string") {
@@ -87,28 +89,29 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         code: "STORE_SCOPE_DENIED",
       });
     }
-    bindAuthenticatedAuditActor(request);
   });
   // Web Order: Create order from cart
   fastify.post("/web-orders", async (request, reply) => {
-    const schema = z.object({
-      customer_id: z.string().uuid(),
-      store_id: z.string().uuid(),
-      cart_id: z.string().uuid(),
-      payment_method: z.literal("COD"),
-      idempotency_key: z.string().min(8).max(100),
-      shipping_name: z.string().min(1),
-      shipping_phone: z.string(),
-      shipping_address: z.string().min(1),
-      shipping_city: z.string(),
-      shipping_state: z.string(),
-      shipping_postal_code: z.string(),
-      shipping_country: z.string(),
-      delivery_type: z.enum(["DELIVERY", "PICKUP"]),
-      delivery_date: z.coerce.date().optional(),
-      delivery_time_slot: z.string().optional(),
-      notes: z.string().optional(),
-    }).strict();
+    const schema = z
+      .object({
+        customer_id: z.string().uuid(),
+        store_id: z.string().uuid(),
+        cart_id: z.string().uuid(),
+        payment_method: z.literal("COD"),
+        idempotency_key: z.string().min(8).max(100),
+        shipping_name: z.string().min(1),
+        shipping_phone: z.string(),
+        shipping_address: z.string().min(1),
+        shipping_city: z.string(),
+        shipping_state: z.string(),
+        shipping_postal_code: z.string(),
+        shipping_country: z.string(),
+        delivery_type: z.enum(["DELIVERY", "PICKUP"]),
+        delivery_date: z.coerce.date().optional(),
+        delivery_time_slot: z.string().optional(),
+        notes: z.string().optional(),
+      })
+      .strict();
 
     const orderData = schema.parse(request.body);
 
@@ -265,8 +268,13 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       );
       return reply.send(order);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update order status";
-      return reply.status(message.startsWith("Invalid transition") ? 409 : 500).send({ error: message });
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update order status";
+      return reply
+        .status(message.startsWith("Invalid transition") ? 409 : 500)
+        .send({ error: message });
     }
   });
 
@@ -295,8 +303,13 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       );
       return reply.send(order);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update payment status";
-      return reply.status(message.startsWith("Invalid payment transition") ? 409 : 500).send({ error: message });
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update payment status";
+      return reply
+        .status(message.startsWith("Invalid payment transition") ? 409 : 500)
+        .send({ error: message });
     }
   });
 
@@ -321,8 +334,11 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       );
       return reply.send(order);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to cancel order";
-      return reply.status(message.startsWith("Invalid transition") ? 409 : 500).send({ error: message });
+      const message =
+        error instanceof Error ? error.message : "Failed to cancel order";
+      return reply
+        .status(message.startsWith("Invalid transition") ? 409 : 500)
+        .send({ error: message });
     }
   });
 }

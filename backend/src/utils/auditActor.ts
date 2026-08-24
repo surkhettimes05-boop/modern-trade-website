@@ -12,6 +12,8 @@ const ACTOR_FIELDS = new Set([
   "reconciled_by",
   "resolved_by",
   "assigned_by",
+  "acknowledged_by",
+  "escalated_by",
   "rotated_by",
   "reported_by",
   "generated_by",
@@ -20,6 +22,7 @@ const ACTOR_FIELDS = new Set([
   "merged_by",
   "corrected_by",
   "processed_by",
+  "performed_by",
   "published_by",
   "retired_by",
   "posted_by",
@@ -27,6 +30,8 @@ const ACTOR_FIELDS = new Set([
   "registered_by",
   "cancelled_by",
   "failed_by",
+  "quality_checked_by",
+  "withdrawn_by",
 ]);
 
 /** Prevent clients from forging audit attribution fields accepted by legacy APIs. */

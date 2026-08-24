@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 export default function SupportPage() {
   const [requestType, setRequestType] = useState<'missing_points' | 'general'>('missing_points');
@@ -18,11 +19,11 @@ export default function SupportPage() {
     setError('');
 
     try {
-      const customerResponse = await fetch('/api/auth/session/validate', {
+      const customerResponse = await resilientFetch('/api/auth/session/validate', {
       });
       const customerData = await customerResponse.json();
 
-      const response = await fetch('/api/consent/data-request', {
+      const response = await resilientFetch('/api/consent/data-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

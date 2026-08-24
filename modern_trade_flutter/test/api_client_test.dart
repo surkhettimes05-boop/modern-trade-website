@@ -5,6 +5,22 @@ import 'package:modern_trade_flutter/core/api_client.dart';
 import 'test_helpers.dart';
 
 void main() {
+  test('release API configuration rejects remote plaintext HTTP', () {
+    expect(
+        () => validateApiBaseUrl('http://api.example.com', releaseMode: true),
+        throwsStateError);
+    expect(validateApiBaseUrl('https://api.example.com/', releaseMode: true),
+        'https://api.example.com');
+    expect(validateApiBaseUrl('http://127.0.0.1:3001', releaseMode: true),
+        'http://127.0.0.1:3001');
+  });
+
+  test('API configuration rejects credentials and non-HTTP schemes', () {
+    expect(() => validateApiBaseUrl('https://user:pass@api.example.com'),
+        throwsArgumentError);
+    expect(() => validateApiBaseUrl('file:///tmp/socket'), throwsArgumentError);
+  });
+
   test('captures rotated cookies from GET and sends them on PUT', () async {
     final store = MemorySessionStore();
     late http.Request putRequest;

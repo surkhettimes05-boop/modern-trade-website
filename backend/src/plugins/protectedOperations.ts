@@ -23,9 +23,13 @@ import { auditReportRoutes } from "../routes/auditReports.js";
 import { posDeviceRoutes } from "../routes/posDevices.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
-import { requireStoreAccess } from "./authorization.js";
 import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
 import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
+import {
+  assertProtectedResourceScope,
+  ProtectedResourceScopeError,
+} from "./protectedResourceScope.js";
+import { recordSecurityEvent } from "../services/securityEventService.js";
 
 const roleAccess: Record<string, string[]> = {
   CASHIER: ["/pos", "/shifts", "/payments"],
@@ -117,21 +121,17 @@ const capabilityAccess: Array<{
     read: ["orders.read"],
     write: ["orders.modify"],
   },
+  { prefix: "/staff", read: ["staff.read"], write: ["staff.manage"] },
 ];
 
-function routeStoreId(request: any): string | undefined {
-  const body =
-    request.body && typeof request.body === "object" ? request.body : {};
-  const params =
-    request.params && typeof request.params === "object" ? request.params : {};
-  const query =
-    request.query && typeof request.query === "object" ? request.query : {};
+export function requiresStepUpMfa(method: string, routePath: string): boolean {
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) return false;
   return (
-    body.store_id ||
-    body.storeId ||
-    params.storeId ||
-    query.store_id ||
-    query.storeId
+    routePath === "/staff" ||
+    routePath.startsWith("/staff/") ||
+    /^\/payments\/.+\/refund$/.test(routePath) ||
+    routePath === "/payments/reconcile" ||
+    /\/tender-reconciliations\/[^/]+\/(?:resolve|status)$/.test(routePath)
   );
 }
 
@@ -158,26 +158,29 @@ export async function protectedOperations(fastify: FastifyInstance) {
       capabilities?: string[];
       scopeType?: string;
       storeId?: string;
+      mfaEnabled?: boolean;
+      mfaVerified?: boolean;
     };
     const routePath = request.url.replace(/^\/api/, "").split("?")[0];
-    const storeId = routeStoreId(request);
-    if (storeId) {
-      try {
-        await requireStoreAccess(request, storeId);
-      } catch {
-        return reply.status(403).send({
-          error: "Store is outside the staff scope",
-          code: "STORE_SCOPE_DENIED",
-        });
-      }
-    } else if (
-      ["ORGANIZATION", "STORE", "OWN_REGISTER"].includes(
-        String(user.scopeType),
-      )
-    ) {
-      return reply.status(400).send({
-        error: "Store ID is required for store-scoped operations",
-        code: "STORE_ID_REQUIRED",
+    try {
+      // Global actors still require self/system/MFA target protections. The
+      // resolver itself skips only the store-membership portion for them.
+      await assertProtectedResourceScope(request);
+    } catch (error) {
+      const scopedError =
+        error instanceof ProtectedResourceScopeError ? error : undefined;
+      await recordSecurityEvent(request, {
+        eventType: "SCOPE_ACCESS_DENIED",
+        entityType: "authorization",
+        details: {
+          route: routePath,
+          method: request.method,
+          code: scopedError?.code || "STORE_SCOPE_DENIED",
+        },
+      });
+      return reply.status(403).send({
+        error: scopedError?.message || "Store is outside the staff scope",
+        code: scopedError?.code || "STORE_SCOPE_DENIED",
       });
     }
     const resource = capabilityAccess.find(
@@ -200,9 +203,28 @@ export async function protectedOperations(fastify: FastifyInstance) {
         !hasSystemAccess &&
         !required.some((capability) => user.capabilities?.includes(capability))
       ) {
+        await recordSecurityEvent(request, {
+          eventType: "CAPABILITY_DENIED",
+          entityType: "authorization",
+          details: { route: routePath, method: request.method, required },
+        });
         return reply.status(403).send({
           error: "Your staff capabilities do not permit this operation",
           requiredCapabilities: required,
+        });
+      }
+      if (
+        requiresStepUpMfa(request.method, routePath) &&
+        (!user.mfaEnabled || !user.mfaVerified)
+      ) {
+        await recordSecurityEvent(request, {
+          eventType: "STEP_UP_MFA_REQUIRED",
+          entityType: "authorization",
+          details: { route: routePath, method: request.method },
+        });
+        return reply.status(403).send({
+          error: "Verified MFA is required for this high-risk operation",
+          code: "MFA_REQUIRED",
         });
       }
       return;
@@ -214,9 +236,32 @@ export async function protectedOperations(fastify: FastifyInstance) {
       !allowed.includes("*") &&
       !allowed.some((prefix) => routePath.startsWith(prefix))
     ) {
+      await recordSecurityEvent(request, {
+        eventType: "ROLE_ACCESS_DENIED",
+        entityType: "authorization",
+        details: { route: routePath, method: request.method },
+      });
       return reply
         .status(403)
         .send({ error: "Your staff role does not permit this operation" });
+    }
+  });
+
+  fastify.addHook("onResponse", async (request, reply) => {
+    if (
+      !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+      reply.statusCode < 400 &&
+      request.user
+    ) {
+      await recordSecurityEvent(request, {
+        eventType: "OPERATION_MUTATION",
+        entityType: "staff_operation",
+        details: {
+          route: request.routeOptions.url,
+          method: request.method,
+          statusCode: reply.statusCode,
+        },
+      });
     }
   });
 

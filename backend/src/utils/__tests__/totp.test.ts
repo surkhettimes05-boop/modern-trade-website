@@ -13,7 +13,10 @@ function codeFor(secret: string, now: number): string {
   }
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(Math.floor(now / 30_000)));
-  const digest = crypto.createHmac("sha1", Buffer.from(bytes)).update(counter).digest();
+  const digest = crypto
+    .createHmac("sha1", Buffer.from(bytes))
+    .update(counter)
+    .digest();
   const offset = digest[digest.length - 1] & 0x0f;
   const value =
     (((digest[offset] & 0x7f) << 24) |
@@ -29,7 +32,8 @@ describe("TOTP", () => {
   const secret = "JBSWY3DPEHPK3PXP";
 
   beforeAll(() => {
-    process.env.ENCRYPTION_KEY = "test-encryption-key-that-is-at-least-32-bytes";
+    process.env.ENCRYPTION_KEY =
+      "test-encryption-key-that-is-at-least-32-bytes";
   });
 
   afterAll(() => {

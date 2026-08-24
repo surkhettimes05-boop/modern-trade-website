@@ -1,13 +1,20 @@
 import Fastify, { FastifyReply, FastifyRequest } from "fastify";
 import { authenticateStaff } from "../../middleware/authentication.js";
+import { recordSecurityEvent } from "../../services/securityEventService.js";
 import { requirePrivilegedAdministration } from "../privilegedAdministration.js";
 
 jest.mock("../../middleware/authentication.js", () => ({
   authenticateStaff: jest.fn(),
 }));
+jest.mock("../../services/securityEventService.js", () => ({
+  recordSecurityEvent: jest.fn(),
+}));
 
 const mockedAuthenticate = authenticateStaff as jest.MockedFunction<
   typeof authenticateStaff
+>;
+const mockedRecordSecurityEvent = recordSecurityEvent as jest.MockedFunction<
+  typeof recordSecurityEvent
 >;
 
 async function buildApp() {
@@ -29,7 +36,11 @@ async function buildApp() {
 }
 
 describe("privileged administration guard", () => {
-  beforeEach(() => mockedAuthenticate.mockReset());
+  beforeEach(() => {
+    mockedAuthenticate.mockReset();
+    mockedRecordSecurityEvent.mockReset();
+    mockedRecordSecurityEvent.mockResolvedValue(undefined);
+  });
 
   it("rejects an unauthenticated request", async () => {
     mockedAuthenticate.mockImplementation(

@@ -1,44 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
-
-function getApiUrl(): string {
-  const value = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
-  if (!value) throw new Error("API_URL is not configured");
-  const url = new URL(value);
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.NEXT_LOCAL_QA !== "1" &&
-    ["localhost", "127.0.0.1"].includes(url.hostname)
-  ) {
-    throw new Error("API_URL must be a public backend URL in production");
-  }
-  return url.toString();
-}
+import { requireServerApiUrl, upstreamTimeoutMs } from "@/lib/serverApiUrl";
+import {
+  ProxyPayloadTooLargeError,
+  readBoundedProxyBody,
+} from "@/lib/proxyRequestBody";
+import {
+  proxyRequestHeaders,
+  proxyResponseHeaders,
+} from "@/lib/proxyHeaders";
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   let target: URL;
   try {
-    target = new URL(`/api/operations-auth/${path.join("/")}`, getApiUrl());
+    target = new URL(
+      `/api/operations-auth/${path.map(encodeURIComponent).join("/")}`,
+      requireServerApiUrl(),
+    );
     target.search = request.nextUrl.search;
   } catch {
     return NextResponse.json({ error: "Backend service is not configured" }, { status: 500 });
   }
 
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.delete("host");
-  requestHeaders.delete("content-length");
-  requestHeaders.delete("accept-encoding");
+  const requestHeaders = proxyRequestHeaders(request.headers);
+
+  let requestBody: ArrayBuffer | undefined;
+  try {
+    requestBody = await readBoundedProxyBody(request);
+  } catch (error) {
+    if (error instanceof ProxyPayloadTooLargeError) {
+      return NextResponse.json({ error: error.message }, { status: 413 });
+    }
+    return NextResponse.json({ error: "Request body could not be read" }, { status: 400 });
+  }
 
   let upstream: Response;
   try {
     upstream = await fetch(target, {
       method: request.method,
       headers: requestHeaders,
-      body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
+      body: requestBody,
       redirect: "manual",
       cache: "no-store",
+      signal: AbortSignal.any([
+        request.signal,
+        AbortSignal.timeout(upstreamTimeoutMs()),
+      ]),
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      return NextResponse.json({ error: "Backend service timed out" }, { status: 504 });
+    }
     return NextResponse.json({ error: "Backend service is temporarily unavailable" }, { status: 503 });
   }
 
@@ -50,21 +62,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     );
   }
 
-  const responseHeaders = new Headers(upstream.headers);
-  responseHeaders.delete("set-cookie");
-  responseHeaders.delete("content-length");
-  responseHeaders.delete("content-encoding");
-  responseHeaders.delete("transfer-encoding");
-  responseHeaders.delete("connection");
-
-  let responseBody: ArrayBuffer;
-  try {
-    responseBody = await upstream.arrayBuffer();
-  } catch {
-    return NextResponse.json({ error: "Backend returned an unreadable response" }, { status: 502 });
-  }
-
-  const response = new NextResponse(responseBody, {
+  const responseHeaders = proxyResponseHeaders(upstream.headers);
+  const response = new NextResponse(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: responseHeaders,

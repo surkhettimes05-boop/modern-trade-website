@@ -1,6 +1,8 @@
 import pg from "pg";
 import { logger } from "../utils/logger.js";
 import { getDatabaseUrl } from "../config/environment.js";
+import { getResilienceConfig } from "../config/resilience.js";
+import { currentRequestId } from "../utils/requestContext.js";
 
 const { Pool } = pg;
 
@@ -8,6 +10,7 @@ let pool: pg.Pool | null = null;
 
 export const getPool = (): pg.Pool => {
   if (!pool) {
+    const limits = getResilienceConfig();
     pool = new Pool({
       connectionString: getDatabaseUrl(),
       ssl:
@@ -17,9 +20,14 @@ export const getPool = (): pg.Pool => {
                 process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
             }
           : false,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      max: limits.databasePoolMax,
+      idleTimeoutMillis: limits.databaseIdleTimeoutMs,
+      connectionTimeoutMillis: limits.databaseConnectionTimeoutMs,
+      statement_timeout: limits.databaseStatementTimeoutMs,
+      query_timeout: limits.databaseQueryTimeoutMs,
+      lock_timeout: limits.databaseLockTimeoutMs,
+      idle_in_transaction_session_timeout:
+        limits.databaseIdleTransactionTimeoutMs,
     });
 
     pool.on("error", (err: Error) => {
@@ -43,6 +51,7 @@ export const query = async (
   params?: unknown[],
 ): Promise<pg.QueryResult> => {
   const start = Date.now();
+  const limits = getResilienceConfig();
   const operation =
     text
       .trimStart()
@@ -51,15 +60,23 @@ export const query = async (
   try {
     const result = await getPool().query(text, params);
     const duration = Date.now() - start;
-    logger.debug("Executed query", {
+    const metadata = {
       operation,
       duration,
       rows: result.rowCount,
-    });
+      requestId: currentRequestId(),
+    };
+    if (duration >= limits.slowQueryMs) {
+      logger.warn("Slow database query", metadata);
+    } else {
+      logger.debug("Executed query", metadata);
+    }
     return result;
   } catch (error) {
     logger.error("Query error", {
       operation,
+      duration: Date.now() - start,
+      requestId: currentRequestId(),
       errorCode:
         error && typeof error === "object" && "code" in error
           ? String(error.code)

@@ -21,6 +21,14 @@ services:
         value: 0.0.0.0
       - key: PORT
         value: "10000"
+      - key: HTTP_REQUEST_TIMEOUT_MS
+        value: "15000"
+      - key: HTTP_CONNECTION_TIMEOUT_MS
+        value: "10000"
+      - key: HTTP_KEEP_ALIVE_TIMEOUT_MS
+        value: "72000"
+      - key: SHUTDOWN_TIMEOUT_MS
+        value: "25000"
       - key: ENABLE_ADMIN_API
         value: "true"
       # Fixed, non-secret Nepal pilot configuration. Runtime validation rejects
@@ -41,10 +49,32 @@ services:
         value: "1"
       - key: DATABASE_URL
         sync: false
+      - key: DATABASE_RUNTIME_ROLE
+        value: storesync_app
+      - key: DATABASE_MIGRATION_ROLE
+        value: storesync_migrator
       - key: DATABASE_SSL
         value: "true"
       - key: DATABASE_SSL_REJECT_UNAUTHORIZED
         value: "true"
+      - key: REQUIRE_LEAST_PRIVILEGE_DATABASE_ROLE
+        value: "true"
+      - key: DATABASE_POOL_MAX
+        value: "20"
+      - key: DATABASE_IDLE_TIMEOUT_MS
+        value: "30000"
+      - key: DATABASE_CONNECTION_TIMEOUT_MS
+        value: "10000"
+      - key: DATABASE_STATEMENT_TIMEOUT_MS
+        value: "15000"
+      - key: DATABASE_QUERY_TIMEOUT_MS
+        value: "17000"
+      - key: DATABASE_LOCK_TIMEOUT_MS
+        value: "5000"
+      - key: DATABASE_IDLE_TRANSACTION_TIMEOUT_MS
+        value: "30000"
+      - key: DATABASE_SLOW_QUERY_MS
+        value: "750"
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -52,6 +82,10 @@ services:
           property: connectionString
       - key: REDIS_NAMESPACE
         value: storesync-production
+      # Render's service URL is private but may use redis://. Validation only
+      # permits this exception for private hostnames; public Redis must use TLS.
+      - key: REDIS_ALLOW_PLAINTEXT_PRIVATE
+        value: "true"
       - key: CORS_ORIGIN
         sync: false
       - key: APP_URL
@@ -85,12 +119,6 @@ services:
       - key: TWILIO_AUTH_TOKEN
         sync: false
       - key: TWILIO_VERIFY_SERVICE_SID
-        sync: false
-      - key: OTP_DEMO_PHONE
-        sync: false
-      - key: OTP_DEMO_CODE
-        sync: false
-      - key: OTP_DEMO_EXPIRES_AT
         sync: false
       - key: ENABLE_ADVANCED_ANALYTICS
         value: "false"

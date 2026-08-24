@@ -14,12 +14,16 @@ import {
   CUSTOMER_SESSION_COOKIE,
   authenticateCustomer,
 } from "../middleware/customerAuthentication.js";
+import { csrfMatches } from "../utils/csrf.js";
 
 const otpService = new OTPService();
 const sessionService = new SessionService();
 const customerService = new CustomerService();
 
 export async function authRoutes(fastify: FastifyInstance) {
+  fastify.addHook("onSend", async (_request, reply) => {
+    reply.header("cache-control", "private, no-store");
+  });
   const requireStaffAdmin = async (
     request: FastifyRequest,
     reply: FastifyReply,
@@ -40,6 +44,21 @@ export async function authRoutes(fastify: FastifyInstance) {
         message: "Administrative session management requires system.manage",
       });
     }
+    if (!user.mfaEnabled || !user.mfaVerified) {
+      return reply.status(403).send({
+        error: "Forbidden",
+        message:
+          "Verified MFA is required for administrative session management",
+        code: "MFA_REQUIRED",
+      });
+    }
+    if (!csrfMatches(request)) {
+      return reply.status(403).send({
+        error: "CSRF validation failed",
+        code: "CSRF_INVALID",
+        requestId: request.id,
+      });
+    }
   };
   // Public: Request OTP for login/verification
   fastify.post(
@@ -48,7 +67,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const schema = z.object({
         phone: z.string().min(10),
-        purpose: z.enum(["LOGIN", "VERIFICATION", "ENROLLMENT"]),
+        purpose: z.literal("LOGIN"),
       });
 
       try {
@@ -59,16 +78,13 @@ export async function authRoutes(fastify: FastifyInstance) {
           return { error: "Invalid phone number format" };
         }
 
-        // Check if customer exists for login purpose
-        if (body.purpose === "LOGIN") {
-          const customer = await customerService.findByPhone(body.phone);
-          if (!customer) {
-            // Enumeration-resistant response
-            return {
-              success: true,
-              message: "If a customer exists with this phone, OTP will be sent",
-            };
-          }
+        const customer = await customerService.findByPhone(body.phone);
+        if (!customer) {
+          return {
+            success: true,
+            message:
+              "If a customer exists with this phone, an OTP will be sent",
+          };
         }
 
         const otp = await otpService.createOTP({
@@ -80,11 +96,17 @@ export async function authRoutes(fastify: FastifyInstance) {
 
         // In production, OTP is sent via SMS
         // For development, return OTP (remove in production)
-        if (process.env.NODE_ENV === "development") {
+        if (
+          process.env.NODE_ENV === "development" &&
+          process.env.EXPOSE_DEVELOPMENT_OTP === "true"
+        ) {
           return { success: true, message: "OTP sent", otp }; // Remove otp in production
         }
 
-        return { success: true, message: "OTP sent" };
+        return {
+          success: true,
+          message: "If a customer exists with this phone, an OTP will be sent",
+        };
       } catch (error) {
         if (error instanceof z.ZodError) {
           reply.status(400);
@@ -112,7 +134,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       const schema = z.object({
         phone: z.string().min(10),
         otp_code: z.string().length(6),
-        purpose: z.enum(["LOGIN", "VERIFICATION", "ENROLLMENT"]),
+        purpose: z.literal("LOGIN"),
       });
 
       try {
@@ -135,64 +157,54 @@ export async function authRoutes(fastify: FastifyInstance) {
           return { error: "Invalid or expired OTP" };
         }
 
-        // For login, create session
-        if (body.purpose === "LOGIN") {
-          const customer = await customerService.findByPhone(body.phone);
-          if (!customer) {
-            reply.status(404);
-            return { error: "Customer not found" };
-          }
-
-          // Mark customer as verified if not already
-          if (customer.verification_status === "UNVERIFIED") {
-            await customerService.markVerified(customer.id, "OTP_VERIFICATION");
-          }
-
-          // Update last login
-          await query(
-            `UPDATE customers SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = $1 WHERE id = $2`,
-            [(request as any).ip, customer.id],
-          );
-
-          // Create session
-          const session = await sessionService.createSession({
-            customer_id: customer.id,
-            ip_address: (request as any).ip,
-            user_agent: request.headers["user-agent"],
-          });
-
-          const csrfToken = crypto.randomBytes(32).toString("hex");
-          reply.setCookie(CUSTOMER_SESSION_COOKIE, session.session_token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            path: "/",
-            maxAge: 24 * 60 * 60,
-          });
-          reply.setCookie(CUSTOMER_CSRF_COOKIE, csrfToken, {
-            httpOnly: false,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            path: "/",
-            maxAge: 24 * 60 * 60,
-          });
-          return {
-            success: true,
-            message: "Login successful",
-            customer: {
-              id: customer.id,
-              phone_masked: customer.phone_masked,
-              preferred_name: customer.preferred_name,
-              verification_status: customer.verification_status,
-            },
-          };
+        const customer = await customerService.findByPhone(body.phone);
+        if (!customer) {
+          reply.status(400);
+          return { error: "Invalid or expired OTP" };
         }
 
-        // For verification/enrollment, just return success
+        // Mark customer as verified if not already
+        if (customer.verification_status === "UNVERIFIED") {
+          await customerService.markVerified(customer.id, "OTP_VERIFICATION");
+        }
+
+        // Update last login
+        await query(
+          `UPDATE customers SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = $1 WHERE id = $2`,
+          [(request as any).ip, customer.id],
+        );
+
+        // Create session
+        const session = await sessionService.createSession({
+          customer_id: customer.id,
+          ip_address: (request as any).ip,
+          user_agent: request.headers["user-agent"],
+        });
+
+        const csrfToken = crypto.randomBytes(32).toString("hex");
+        reply.setCookie(CUSTOMER_SESSION_COOKIE, session.session_token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
+        reply.setCookie(CUSTOMER_CSRF_COOKIE, csrfToken, {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
         return {
           success: true,
-          message: "OTP verified successfully",
-          customer_id: verification.customer_id,
+          message: "Login successful",
+          customer: {
+            id: customer.id,
+            phone_masked: customer.phone_masked,
+            preferred_name: customer.preferred_name,
+            verification_status: customer.verification_status,
+          },
         };
       } catch (error) {
         if (error instanceof z.ZodError) {
@@ -269,8 +281,18 @@ export async function authRoutes(fastify: FastifyInstance) {
         return reply.status(403).send({ error: "CSRF validation failed" });
       try {
         await sessionService.revokeSession(sessionToken, "User logout");
-        reply.clearCookie(CUSTOMER_SESSION_COOKIE, { path: "/" });
-        reply.clearCookie(CUSTOMER_CSRF_COOKIE, { path: "/" });
+        reply.clearCookie(CUSTOMER_SESSION_COOKIE, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+        });
+        reply.clearCookie(CUSTOMER_CSRF_COOKIE, {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+        });
         return { success: true, message: "Logged out successfully" };
       } catch {
         reply.status(500);

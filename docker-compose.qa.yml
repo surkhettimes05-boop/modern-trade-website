@@ -5,12 +5,27 @@ x-backend: &backend
     context: .
     dockerfile: backend/Dockerfile
   environment:
-    NODE_ENV: production
-    DATABASE_URL: postgresql://storesync_qa:${QA_DB_PASSWORD:-storesync_qa_password}@postgres:5432/storesync_qa
+    NODE_ENV: qa
+    DATABASE_URL: postgresql://storesync_app:${QA_APP_DB_PASSWORD:?Set QA_APP_DB_PASSWORD}@postgres:5432/storesync_qa
+    DATABASE_RUNTIME_ROLE: storesync_app
+    DATABASE_MIGRATION_ROLE: storesync_migrator
+    REQUIRE_LEAST_PRIVILEGE_DATABASE_ROLE: "true"
     REDIS_URL: redis://redis:6379
     REDIS_NAMESPACE: storesync-qa
     PORT: 3001
     HOST: 0.0.0.0
+    HTTP_REQUEST_TIMEOUT_MS: 15000
+    HTTP_CONNECTION_TIMEOUT_MS: 10000
+    HTTP_KEEP_ALIVE_TIMEOUT_MS: 72000
+    SHUTDOWN_TIMEOUT_MS: 25000
+    DATABASE_POOL_MAX: 20
+    DATABASE_IDLE_TIMEOUT_MS: 30000
+    DATABASE_CONNECTION_TIMEOUT_MS: 10000
+    DATABASE_STATEMENT_TIMEOUT_MS: 15000
+    DATABASE_QUERY_TIMEOUT_MS: 17000
+    DATABASE_LOCK_TIMEOUT_MS: 5000
+    DATABASE_IDLE_TRANSACTION_TIMEOUT_MS: 30000
+    DATABASE_SLOW_QUERY_MS: 750
     CORS_ORIGIN: http://localhost:53000
     APP_URL: http://localhost:53000
     JWT_SECRET: ${QA_JWT_SECRET:-qa-only-jwt-secret-change-me}
@@ -35,14 +50,17 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_DB: storesync_qa
-      POSTGRES_USER: storesync_qa
-      POSTGRES_PASSWORD: ${QA_DB_PASSWORD:-storesync_qa_password}
+      POSTGRES_USER: storesync_migrator
+      POSTGRES_PASSWORD: ${QA_MIGRATION_DB_PASSWORD:?Set QA_MIGRATION_DB_PASSWORD}
+      STORESYNC_APP_PASSWORD: ${QA_APP_DB_PASSWORD:?Set QA_APP_DB_PASSWORD}
     ports:
-      - "55432:5432"
+      - "127.0.0.1:55432:5432"
     volumes:
       - storesync_qa_postgres_data:/var/lib/postgresql/data
+      - ./database/docker-init-qa-role.sh:/docker-entrypoint-initdb.d/10-create-app-role.sh:ro
+      - ./database/create-qa-role.sql:/docker-entrypoint-security/create-qa-role.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U storesync_qa -d storesync_qa"]
+      test: ["CMD-SHELL", "pg_isready -U storesync_migrator -d storesync_qa"]
       interval: 2s
       timeout: 5s
       retries: 20
@@ -52,7 +70,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "56379:6379"
+      - "127.0.0.1:56379:6379"
     volumes:
       - storesync_qa_redis_data:/data
     healthcheck:
@@ -65,6 +83,12 @@ services:
   qa-migrate:
     <<: *backend
     command: ["node", "dist/database/deployMigrate.js"]
+    environment:
+      NODE_ENV: qa
+      MIGRATION_DATABASE_URL: postgresql://storesync_migrator:${QA_MIGRATION_DB_PASSWORD:?Set QA_MIGRATION_DB_PASSWORD}@postgres:5432/storesync_qa
+      DATABASE_MIGRATION_ROLE: storesync_migrator
+      DATABASE_SSL: "false"
+      DATABASE_BACKUP_DIR: /tmp/storesync-backups
     restart: "no"
     depends_on:
       postgres:
@@ -80,16 +104,39 @@ services:
         condition: service_completed_successfully
     networks: [storesync-qa]
 
+  qa-bootstrap:
+    <<: *backend
+    command: ["node", "dist/database/bootstrapAdmin.js"]
+    environment:
+      NODE_ENV: qa
+      DATABASE_URL: postgresql://storesync_app:${QA_APP_DB_PASSWORD:?Set QA_APP_DB_PASSWORD}@postgres:5432/storesync_qa
+      BOOTSTRAP_ADMIN_USERNAME: admin
+      BOOTSTRAP_ADMIN_EMAIL: qa-admin@example.invalid
+      BOOTSTRAP_ADMIN_PASSWORD: ${QA_BOOTSTRAP_ADMIN_PASSWORD:?Set QA_BOOTSTRAP_ADMIN_PASSWORD}
+    restart: "no"
+    depends_on:
+      qa-seed:
+        condition: service_completed_successfully
+    networks: [storesync-qa]
+
   backend:
     <<: *backend
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    volumes:
+      - storesync_qa_backups:/var/backups/storesync
     ports:
-      - "53001:3001"
+      - "127.0.0.1:53001:3001"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      qa-seed:
+      qa-bootstrap:
         condition: service_completed_successfully
     healthcheck:
       test:
@@ -114,8 +161,15 @@ services:
         NEXT_PUBLIC_ACTIVE_MARKET: NP
     environment:
       NODE_ENV: production
+      ALLOW_INSECURE_INTERNAL_API: "1"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
     ports:
-      - "53000:3000"
+      - "127.0.0.1:53000:3000"
     depends_on:
       backend:
         condition: service_healthy
@@ -136,6 +190,7 @@ services:
 volumes:
   storesync_qa_postgres_data:
   storesync_qa_redis_data:
+  storesync_qa_backups:
 
 networks:
   storesync-qa:

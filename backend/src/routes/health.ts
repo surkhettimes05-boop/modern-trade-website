@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { getIntegrationSnapshot } from "../config/integrations.js";
 import { redisService } from "../services/redisService.js";
 import { LATEST_MIGRATION_ID } from "../database/migrationRunner.js";
+import { isShuttingDown } from "../utils/lifecycle.js";
 
 export async function healthRoutes(fastify: FastifyInstance) {
   const liveness = async () => {
@@ -41,6 +42,13 @@ export async function healthRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/ready", async (_, reply) => {
+    if (isShuttingDown()) {
+      reply.status(503);
+      return {
+        status: "not_ready",
+        checks: { application: "shutting_down" },
+      };
+    }
     try {
       const { query } = await import("../database/connection.js");
       await query("SELECT 1");

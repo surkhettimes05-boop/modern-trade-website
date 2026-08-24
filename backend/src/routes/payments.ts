@@ -20,7 +20,9 @@ export async function paymentWebhookRoutes(fastify: FastifyInstance) {
       );
       return reply.status(result.success ? 200 : 401).send(result);
     } catch {
-      return reply.status(500).send({ error: "Failed to process eSewa webhook" });
+      return reply
+        .status(500)
+        .send({ error: "Failed to process eSewa webhook" });
     }
   });
 
@@ -33,7 +35,9 @@ export async function paymentWebhookRoutes(fastify: FastifyInstance) {
       );
       return reply.status(result.success ? 200 : 401).send(result);
     } catch {
-      return reply.status(500).send({ error: "Failed to process Khalti webhook" });
+      return reply
+        .status(500)
+        .send({ error: "Failed to process Khalti webhook" });
     }
   });
 }

@@ -2,6 +2,7 @@
 // Centralized authorization plugin with capability-based access control
 
 import { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
+import { recordSecurityEvent } from "../services/securityEventService.js";
 
 // ============================================
 // TYPE DEFINITIONS
@@ -12,6 +13,7 @@ export interface AuthenticatedUser {
   username: string;
   roleId: string;
   roleKey: string;
+  roleLevel?: number;
   capabilities: string[];
   scopeType: "GLOBAL" | "ORGANIZATION" | "STORE" | "OWN_REGISTER";
   scopeOrganizationId?: string;
@@ -178,7 +180,11 @@ function checkStoreAccess(
 
   // ORGANIZATION users can access stores in their organization
   if (user.scopeType === "ORGANIZATION") {
-    return { authorized: false, reason: "Organization store membership must be verified", scopeMismatch: true };
+    return {
+      authorized: false,
+      reason: "Organization store membership must be verified",
+      scopeMismatch: true,
+    };
   }
 
   // STORE users can only access their assigned stores
@@ -240,7 +246,8 @@ function checkStepUpAuth(
     return { authorized: false, reason: "User not authenticated" };
   }
 
-  const stepUpUntil = (user as AuthenticatedUser & { stepUpUntil?: number }).stepUpUntil;
+  const stepUpUntil = (user as AuthenticatedUser & { stepUpUntil?: number })
+    .stepUpUntil;
   if (!stepUpUntil || stepUpUntil < Date.now()) {
     return {
       authorized: false,
@@ -272,6 +279,17 @@ async function logPermissionDenied(
     scope_store_ids: user?.scopeStoreIds,
     actor_capabilities: user?.capabilities,
     reason,
+  });
+  await recordSecurityEvent(request, {
+    eventType: "PERMISSION_DENIED",
+    entityType: "authorization",
+    actorId: user?.id,
+    details: {
+      requiredCapability: missingCapabilities?.[0] || "unknown",
+      route: request.url.split("?", 1)[0],
+      method: request.method,
+      reason,
+    },
   });
 }
 
@@ -346,7 +364,10 @@ export async function requireStoreAccess(
   const user = request.user as AuthenticatedUser;
   if (user?.scopeType === "ORGANIZATION") {
     if (!user.scopeOrganizationId) {
-      await logPermissionDenied(request, "Organization scope is missing an organization ID");
+      await logPermissionDenied(
+        request,
+        "Organization scope is missing an organization ID",
+      );
       throw new Error("Organization scope is incomplete");
     }
     const { query } = await import("../database/connection.js");
@@ -355,7 +376,10 @@ export async function requireStoreAccess(
       [storeId, user.scopeOrganizationId],
     );
     if (membership.rowCount) return;
-    await logPermissionDenied(request, "Store is outside the user's organization");
+    await logPermissionDenied(
+      request,
+      "Store is outside the user's organization",
+    );
     throw new Error("Store is outside the user's organization");
   }
   const result = checkStoreAccess(request, storeId);

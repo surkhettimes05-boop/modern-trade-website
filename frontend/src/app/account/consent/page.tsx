@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 interface Consent {
   id: string;
@@ -23,7 +24,7 @@ export default function ConsentPage() {
     setError('');
 
     try {
-      const customerResponse = await fetch('/api/auth/session/validate', {
+      const customerResponse = await resilientFetch('/api/auth/session/validate', {
       });
 
       if (!customerResponse.ok) {
@@ -33,7 +34,7 @@ export default function ConsentPage() {
 
       const customerData = await customerResponse.json();
 
-      const response = await fetch(`/api/consent/customer/${customerData.customer.id}`);
+      const response = await resilientFetch(`/api/consent/customer/${customerData.customer.id}`);
       const data = await response.json();
       setConsents(data);
     } catch {
@@ -50,11 +51,11 @@ export default function ConsentPage() {
 
   const handleGrantConsent = async (consentType: string, channel?: string) => {
     try {
-      const customerResponse = await fetch('/api/auth/session/validate', {
+      const customerResponse = await resilientFetch('/api/auth/session/validate', {
       });
       const customerData = await customerResponse.json();
 
-      const response = await fetch('/api/consent/grant', {
+      const response = await resilientFetch('/api/consent/grant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-csrf-token': document.cookie.match(/(?:^|; )customer_csrf=([^;]+)/)?.[1] || '' },
         body: JSON.stringify({
@@ -75,7 +76,7 @@ export default function ConsentPage() {
 
   const handleWithdrawConsent = async (consentId: string) => {
     try {
-      const response = await fetch('/api/consent/withdraw', {
+      const response = await resilientFetch('/api/consent/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -8,6 +9,14 @@ import JsonLd from "@/components/JsonLd";
 import { getCatalog } from "@/lib/serverCatalog";
 import { absoluteUrl, SITE } from "@/lib/seo";
 import WebVitals from "@/components/WebVitals";
+import WhatsAppOrderShortcut from "@/components/WhatsAppOrderShortcut";
+
+const inter = localFont({
+  src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+  display: "swap",
+  variable: "--font-inter",
+  weight: "100 900",
+});
 
 export const metadata: Metadata = {
   title: { default: "NOVA MART — Everyday value for every home", template: "%s | NOVA MART" },
@@ -40,10 +49,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   };
   return (
     <html lang="en-NP" className="antialiased">
-      <body className="min-h-screen flex flex-col">
+      <body className={`${inter.variable} min-h-screen flex flex-col`}>
         <JsonLd data={[organization, website]} />
         <WebVitals />
-        <CommerceProvider initialProducts={products} initialCategories={categories} initialStores={stores}><SkipLink/><Header/><main id="main-content" className="flex-1">{children}</main><Footer/><MobileNav/></CommerceProvider>
+        <CommerceProvider initialProducts={products} initialCategories={categories} initialStores={stores}><SkipLink/><Header/><main id="main-content" className="flex-1">{children}</main><Footer/><WhatsAppOrderShortcut/><MobileNav/></CommerceProvider>
       </body>
     </html>
   );

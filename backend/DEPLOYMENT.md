@@ -6,6 +6,29 @@ Production startup validates all required configuration before connecting to
 Redis or opening the HTTP listener. Use `backend/.env.production.example` as
 the complete template; never commit populated secrets.
 
+The runtime enforces bounded HTTP, pool, statement, lock, query, and idle
+transaction timeouts. Keep `SHUTDOWN_TIMEOUT_MS` below the hosting platform's
+termination grace period; the committed default is 25 seconds and requires a
+grace period of at least 30 seconds. During shutdown, readiness changes to 503,
+new requests are rejected, active requests are drained, and Redis and
+PostgreSQL connections are closed.
+
+### Required database role separation
+
+1. Run `database/production_roles.sql` once using the managed database owner.
+2. Set independent provider-managed passwords for `storesync_app` and
+   `storesync_migrator`; never place passwords in the SQL file.
+3. Configure the runtime service with `DATABASE_URL` for `storesync_app`.
+   Configure a separate one-time release job with `MIGRATION_DATABASE_URL`
+   for `storesync_migrator`; never attach it to the runtime service.
+4. Set `REQUIRE_LEAST_PRIVILEGE_DATABASE_ROLE=true`.
+5. Run `npm run verify:database-role` with the production runtime
+   environment. Startup also fails closed if the runtime role is privileged,
+   owns application objects, can create database/schema objects, belongs to
+   the migration role, or has an unexpected identity.
+
+The application and migration URLs must never contain the same credential.
+
 ## Docker Deployment
 
 ## Render Deployment
@@ -40,10 +63,10 @@ Region: same region as Postgres and Key Value
 Health Check Path: /api/health/ready
 ```
 
-The Node 22 Dockerfile installs `pg_dump`, runs the compiled deployment
-migration command, and starts `dist/index.js`. Do not add a separate start
-command unless you intentionally replace the Dockerfile `CMD`. Fastify reads
-Render's `PORT` and binds to `0.0.0.0`.
+The Node 22 Dockerfile contains `pg_dump` and the compiled migration command,
+but its entrypoint starts only the backend runtime. Run
+`node dist/database/deployMigrate.js` as a separate audited release job before
+starting the new image. Fastify reads Render's `PORT` and binds to `0.0.0.0`.
 
 ### 3. Add Render environment variables
 
@@ -68,11 +91,14 @@ features), connects `REDIS_URL`, and generates five independent secrets.
 Render requires the operator to supply these deployment-specific values:
 
 ```text
-DATABASE_URL=<managed PostgreSQL connection URL>
+DATABASE_URL=<storesync_app managed PostgreSQL connection URL>
 CORS_ORIGIN=https://<your-vercel-domain>
 APP_URL=https://<your-vercel-domain>
 PAYMENT_ENCRYPTION_KEY=<exactly 64 hexadecimal characters>
 ```
+
+The separate migration job uses `.env.migration.example` and receives
+`MIGRATION_DATABASE_URL`; the Web Service must not receive that variable.
 
 `DATABASE_URL`, `CORS_ORIGIN`, and `APP_URL` are deployment-specific
 configuration. `PAYMENT_ENCRYPTION_KEY` is a secret; generate it with a
@@ -91,9 +117,10 @@ requires `DEFAULT_MAP_PROVIDER=Baato` plus `BAATO_API_KEY`, or
 `DEFAULT_MAP_PROVIDER=Galli` plus `GALLI_API_KEY`. Electronic payment providers
 remain uncertified and `ENABLE_ELECTRONIC_PAYMENTS` must stay `false`.
 
-For short-lived testing without SMS, set `SMS_PROVIDER=demo` together with one
-existing customer's `OTP_DEMO_PHONE`, a private six-digit `OTP_DEMO_CODE`, and
-an ISO `OTP_DEMO_EXPIRES_AT` no more than seven days ahead. The API never
+For short-lived testing without SMS in a separate non-production environment,
+set `SMS_PROVIDER=demo` together with one existing customer's `OTP_DEMO_PHONE`,
+a private six-digit `OTP_DEMO_CODE`, and an ISO `OTP_DEMO_EXPIRES_AT` no more
+than seven days ahead. Production startup rejects this provider. The API never
 returns the configured code and rejects every other phone. Remove all four
 values immediately after testing; never use demo mode for customer traffic.
 
@@ -156,11 +183,12 @@ docker run -d \
 
 ## Database Setup
 
-1. Create PostgreSQL database
-2. Run schema migrations:
-```bash
-psql -U your_user -d storesync -f database/schema.sql
-```
+1. Create PostgreSQL with private networking and verified TLS.
+2. Run `database/production_roles.sql` as the existing database owner.
+3. Set independent random credentials for both roles outside the repository.
+4. Run `npm run deploy:migrate` with migration-job configuration.
+5. Start the backend with only the runtime credential and run
+   `npm run verify:database-role`.
 
 ## Health Checks
 
@@ -171,13 +199,18 @@ psql -U your_user -d storesync -f database/schema.sql
 
 The application includes:
 - Structured logging
-- Error tracking (configure with external service)
+- Optional OpenTelemetry traces and metrics via `OTEL_EXPORTER_OTLP_ENDPOINT`
+- A hardened Collector baseline in `ops/otel-collector.yaml`; configure the
+  external OTLP destination and secret authorization header outside source
 - Health check endpoints
-- Request/response logging in development
+- Redacted request/response logging
 
 ## Backup Strategy
 
-- Database backups should be configured via PostgreSQL tools
+- Enable managed PostgreSQL point-in-time recovery and encrypted off-site
+  backups. The pre-migration `pg_dump` is a rollback aid, not a durable backup.
+- Copy and checksum migration backups to immutable object storage from the
+  release job, then complete a witnessed restore drill before approval.
 - Application logs should be retained per policy
 - Configuration backups via version control
 

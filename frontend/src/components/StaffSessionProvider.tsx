@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 export type StaffSession = {
   authenticated: boolean;
@@ -26,7 +27,7 @@ export function StaffSessionProvider({ children, area }: { children: React.React
   const refresh = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/operations-auth/session', { credentials: 'include', cache: 'no-store' });
+      const response = await resilientFetch('/api/operations-auth/session', { credentials: 'include', cache: 'no-store' });
       const next = await response.json() as StaffSession;
       setSession(response.ok && next.authenticated ? next : null);
     } catch { setSession(null); } finally { setLoading(false); }

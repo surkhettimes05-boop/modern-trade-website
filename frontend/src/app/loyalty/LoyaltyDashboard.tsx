@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 type Entry = { id: string; points_signed: number; effective_timestamp: string; source_type: string; source_amount: string | null; balance_after: number; reason: string };
 type LoyaltyData = {
@@ -19,7 +20,7 @@ export default function LoyaltyDashboard() {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let active = true;
-    fetch('/api/loyalty/me', { credentials: 'include', cache: 'no-store' })
+    resilientFetch('/api/loyalty/me', { credentials: 'include', cache: 'no-store' })
       .then(async (response) => {
         if (response.status === 401) throw new Error('Sign in with your Nepal mobile number and OTP to view loyalty.');
         const payload = await response.json();
@@ -33,7 +34,7 @@ export default function LoyaltyDashboard() {
   async function enroll() {
     setBusy(true); setError('');
     try {
-      const response = await fetch('/api/loyalty/enroll', { method: 'POST', credentials: 'include', headers: { 'x-csrf-token': csrfToken() } });
+      const response = await resilientFetch('/api/loyalty/enroll', { method: 'POST', credentials: 'include', headers: { 'x-csrf-token': csrfToken() } });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Enrollment failed');
       setData(payload);

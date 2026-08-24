@@ -5,13 +5,23 @@ export const CUSTOMER_SESSION_COOKIE = "customer_session";
 export const CUSTOMER_CSRF_COOKIE = "customer_csrf";
 const sessions = new SessionService();
 
-export async function authenticateCustomer(request: FastifyRequest, reply: FastifyReply) {
+export async function authenticateCustomer(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  reply.header("cache-control", "private, no-store");
   const token = request.cookies?.[CUSTOMER_SESSION_COOKIE];
-  if (!token) return reply.status(401).send({ error: "Customer login required" });
+  if (!token)
+    return reply.status(401).send({ error: "Customer login required" });
   const session = await sessions.validateSession(token);
-  if (!session) return reply.status(401).send({ error: "Customer session expired" });
-  (request as FastifyRequest & { customerId?: string }).customerId = session.customer_id;
-  if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && !customerCsrfValid(request)) {
+  if (!session)
+    return reply.status(401).send({ error: "Customer session expired" });
+  (request as FastifyRequest & { customerId?: string }).customerId =
+    session.customer_id;
+  if (
+    !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+    !customerCsrfValid(request)
+  ) {
     return reply.status(403).send({ error: "CSRF validation failed" });
   }
 }

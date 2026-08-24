@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 async function readApiResponse(response: Response): Promise<Record<string, unknown>> {
   const body = await response.text();
@@ -22,6 +23,7 @@ export default function AccountPage() {
   const [phone, setPhone] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
+  const [developmentOtp, setDevelopmentOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -32,7 +34,7 @@ export default function AccountPage() {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/otp/request', {
+      const response = await resilientFetch('/api/auth/otp/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, purpose: 'LOGIN' }),
@@ -44,6 +46,9 @@ export default function AccountPage() {
         throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send OTP');
       }
 
+      const returnedOtp = typeof data.otp === 'string' ? data.otp : '';
+      setDevelopmentOtp(returnedOtp);
+      if (returnedOtp) setOtp(returnedOtp);
       setOtpSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send OTP');
@@ -58,7 +63,7 @@ export default function AccountPage() {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/otp/verify', {
+      const response = await resilientFetch('/api/auth/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, otp_code: otp, purpose: 'LOGIN' }),
@@ -131,8 +136,18 @@ export default function AccountPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-2xl tracking-widest"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">Enter the 6-digit code sent to your phone</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {developmentOtp
+                  ? 'Local development code returned by the backend'
+                  : 'Enter the 6-digit code sent to your phone'}
+              </p>
             </div>
+
+            {developmentOtp && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded">
+                Development OTP: <strong>{developmentOtp}</strong>
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
@@ -150,7 +165,11 @@ export default function AccountPage() {
 
             <button
               type="button"
-              onClick={() => setOtpSent(false)}
+              onClick={() => {
+                setOtpSent(false);
+                setOtp('');
+                setDevelopmentOtp('');
+              }}
               className="w-full text-blue-600 hover:text-blue-700 py-2"
             >
               Change phone number

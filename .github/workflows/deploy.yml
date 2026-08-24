@@ -8,14 +8,18 @@ on:
 
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55433/storesync_jest_test?options=-c%20search_path%3Dstoresync_jest_test%2Cpublic
+      DB_PASSWORD: ci-only-compose-validation-password
     services:
       postgres:
         image: postgres:16
@@ -34,11 +38,25 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
+      - name: Generate disposable QA credentials
+        shell: bash
+        run: |
+          migration_password="$(openssl rand -hex 24)"
+          app_password="$(openssl rand -hex 24)"
+          bootstrap_password="Qa!$(openssl rand -hex 24)9"
+          echo "::add-mask::$migration_password"
+          echo "::add-mask::$app_password"
+          echo "::add-mask::$bootstrap_password"
+          echo "QA_MIGRATION_DB_PASSWORD=$migration_password" >> "$GITHUB_ENV"
+          echo "QA_APP_DB_PASSWORD=$app_password" >> "$GITHUB_ENV"
+          echo "QA_BOOTSTRAP_ADMIN_PASSWORD=$bootstrap_password" >> "$GITHUB_ENV"
+      - name: Security static checks
+        run: npm run security:static
       - run: npm ci --prefix backend
       - run: npm ci --prefix frontend
       - run: npm run type-check --prefix backend
@@ -47,11 +65,29 @@ jobs:
       - run: npm run lint --prefix frontend
       - run: npm run build --prefix frontend
       - run: docker compose -f backend/docker-compose.yml config
+      - run: docker compose -f docker-compose.qa.yml config
+      - name: Build final container images
+        run: |
+          docker build --file backend/Dockerfile --tag storesync-backend:verify .
+          docker build --file frontend/Dockerfile --build-arg API_URL=http://backend:3001 --tag storesync-frontend:verify .
+      - name: Verify containers declare non-root runtime users
+        shell: bash
+        run: |
+          test "$(docker image inspect --format '{{.Config.User}}' storesync-backend:verify)" = "node"
+          test "$(docker image inspect --format '{{.Config.User}}' storesync-frontend:verify)" = "node"
+      - name: Install Chromium for the release gate
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Full-stack Chromium desktop/mobile release gate
+        run: npm run qa:full-stack
 
   publish:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Log in to GHCR
@@ -66,6 +102,8 @@ jobs:
           context: .
           file: backend/Dockerfile
           push: true
+          sbom: true
+          provenance: mode=max
           tags: ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
       - name: Publish frontend image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -74,4 +112,6 @@ jobs:
           file: frontend/Dockerfile
           build-args: API_URL=${{ vars.API_URL || 'http://backend:3001' }}
           push: true
+          sbom: true
+          provenance: mode=max
           tags: ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}

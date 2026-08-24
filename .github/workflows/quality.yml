@@ -5,6 +5,13 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   flutter:
     runs-on: ubuntu-latest
@@ -48,11 +55,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
+      - name: Security static checks
+        run: npm run security:static
       - name: Install backend
         run: npm ci --prefix backend
       - name: Install frontend
@@ -70,4 +79,8 @@ jobs:
       - name: Frontend build
         run: npm run build --prefix frontend
       - name: Dependency audit
-        run: npm audit --prefix backend --audit-level=high --omit=dev && npm audit --prefix frontend --audit-level=high --omit=dev
+        run: |
+          npm audit --prefix backend --audit-level=high --omit=dev
+          npm audit --prefix frontend --audit-level=high --omit=dev
+          npm audit --prefix backend --audit-level=high
+          npm audit --prefix frontend --audit-level=high

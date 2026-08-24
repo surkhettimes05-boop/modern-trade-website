@@ -162,12 +162,7 @@ export class ShoppingCartService {
              updated_at = NOW()
          WHERE id = $4
          RETURNING *`,
-        [
-          itemData.quantity,
-          authoritativePrice,
-          0,
-          existing.rows[0].id,
-        ],
+        [itemData.quantity, authoritativePrice, 0, existing.rows[0].id],
       );
       return result.rows[0];
     }

@@ -79,27 +79,56 @@ export class CheckoutService {
         [input.cartId, input.storeId],
       );
       if (!items.rows.length) throw new Error("Cart is empty");
+      const productIds = items.rows.map((item) => String(item.product_id));
+      await client.query(
+        `SELECT pg_advisory_xact_lock(hashtext(requested.product_id::text || ':' || $2))
+           FROM unnest($1::uuid[]) AS requested(product_id)
+          ORDER BY requested.product_id`,
+        [productIds, input.storeId],
+      );
+      const stockResult = await client.query(
+        `SELECT requested.product_id,
+                COALESCE(inventory.stock, 0)::int AS stock,
+                COALESCE(reservations.reserved, 0)::int AS reserved
+           FROM unnest($1::uuid[]) AS requested(product_id)
+           LEFT JOIN LATERAL (
+             SELECT SUM(quantity)::int AS stock
+               FROM batch_inventory
+              WHERE product_id = requested.product_id AND store_id = $2
+           ) inventory ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT SUM(quantity)::int AS reserved
+               FROM stock_reservations
+              WHERE product_id = requested.product_id AND store_id = $2
+                AND status = 'ACTIVE' AND expires_at > NOW()
+           ) reservations ON TRUE`,
+        [productIds, input.storeId],
+      );
+      const stockByProduct = new Map(
+        stockResult.rows.map((row) => [String(row.product_id), row]),
+      );
       let subtotalPaisa = 0;
-      for (const item of items.rows) {
-        await client.query(
-          `SELECT pg_advisory_xact_lock(hashtext($1 || ':' || $2))`,
-          [item.product_id, input.storeId],
-        );
-        const stock = await client.query(
-          `SELECT COALESCE(SUM(bi.quantity), 0)::int AS stock, COALESCE((SELECT SUM(sr.quantity) FROM stock_reservations sr WHERE sr.product_id = $1 AND sr.store_id = $2 AND sr.status = 'ACTIVE' AND sr.expires_at > NOW()), 0)::int AS reserved FROM batch_inventory bi WHERE bi.product_id = $1 AND bi.store_id = $2`,
-          [item.product_id, input.storeId],
-        );
+      const pricedItems = items.rows.map((item) => {
+        const stock = stockByProduct.get(String(item.product_id));
         if (Number(item.authoritative_price) <= 0)
           throw new Error(`Price unavailable for ${item.name_en}`);
         if (
-          Number(stock.rows[0].stock) - Number(stock.rows[0].reserved) <
+          Number(stock?.stock || 0) - Number(stock?.reserved || 0) <
           Number(item.quantity)
         )
           throw new Error(`Insufficient stock for ${item.name_en}`);
-        subtotalPaisa +=
+        const linePaisa =
           Math.round(Number(item.authoritative_price) * 100) *
           Number(item.quantity);
-      }
+        const taxPaisa = Math.round(linePaisa * MARKET.standardTaxRate);
+        subtotalPaisa += linePaisa;
+        return {
+          ...item,
+          lineTotal: linePaisa / 100,
+          taxAmount: taxPaisa / 100,
+          lineTotalWithTax: (linePaisa + taxPaisa) / 100,
+        };
+      });
       const shippingPaisa = input.deliveryType === "DELIVERY" ? 10_000 : 0;
       const taxPaisa = Math.round(subtotalPaisa * MARKET.standardTaxRate);
       const totalPaisa = subtotalPaisa + taxPaisa + shippingPaisa;
@@ -130,44 +159,48 @@ export class CheckoutService {
           input.notes || null,
         ],
       );
-      for (const item of items.rows) {
-        await client.query(
-          `INSERT INTO web_order_items (order_id, product_id, product_name, quantity, unit_price, discount_amount, line_total, tax_amount, line_total_with_tax) VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8)`,
-          [
-            order.rows[0].id,
-            item.product_id,
-            item.name_en,
-            item.quantity,
-            item.authoritative_price,
-            (Math.round(Number(item.authoritative_price) * 100) *
-              Number(item.quantity)) /
-              100,
-            Math.round(
-              Math.round(Number(item.authoritative_price) * 100) *
-                Number(item.quantity) *
-                MARKET.standardTaxRate,
-            ) / 100,
-            (Math.round(Number(item.authoritative_price) * 100) *
-              Number(item.quantity) +
-              Math.round(
-                Math.round(Number(item.authoritative_price) * 100) *
-                  Number(item.quantity) *
-                  MARKET.standardTaxRate,
-              )) /
-              100,
-          ],
-        );
-        await client.query(
-          `INSERT INTO stock_reservations (reservation_id, order_id, product_id, store_id, quantity, reserved_at, expires_at, status) VALUES ($1, $2, $3, $4, $5, NOW(), NOW() + INTERVAL '30 minutes', 'ACTIVE')`,
-          [
-            `RES-${randomUUID()}`,
-            order.rows[0].id,
-            item.product_id,
-            input.storeId,
-            item.quantity,
-          ],
-        );
-      }
+      await client.query(
+        `INSERT INTO web_order_items
+          (order_id, product_id, product_name, quantity, unit_price,
+           discount_amount, line_total, tax_amount, line_total_with_tax)
+         SELECT $1, item.product_id, item.product_name, item.quantity,
+                item.unit_price, 0, item.line_total, item.tax_amount,
+                item.line_total_with_tax
+           FROM unnest(
+             $2::uuid[], $3::text[], $4::integer[], $5::numeric[],
+             $6::numeric[], $7::numeric[], $8::numeric[]
+           ) AS item(
+             product_id, product_name, quantity, unit_price,
+             line_total, tax_amount, line_total_with_tax
+           )`,
+        [
+          order.rows[0].id,
+          pricedItems.map((item) => item.product_id),
+          pricedItems.map((item) => item.name_en),
+          pricedItems.map((item) => item.quantity),
+          pricedItems.map((item) => item.authoritative_price),
+          pricedItems.map((item) => item.lineTotal),
+          pricedItems.map((item) => item.taxAmount),
+          pricedItems.map((item) => item.lineTotalWithTax),
+        ],
+      );
+      await client.query(
+        `INSERT INTO stock_reservations
+          (reservation_id, order_id, product_id, store_id, quantity,
+           reserved_at, expires_at, status)
+         SELECT reservation.reservation_id, $1, reservation.product_id, $2,
+                reservation.quantity, NOW(), NOW() + INTERVAL '30 minutes',
+                'ACTIVE'
+           FROM unnest($3::text[], $4::uuid[], $5::integer[])
+                AS reservation(reservation_id, product_id, quantity)`,
+        [
+          order.rows[0].id,
+          input.storeId,
+          pricedItems.map(() => `RES-${randomUUID()}`),
+          pricedItems.map((item) => item.product_id),
+          pricedItems.map((item) => item.quantity),
+        ],
+      );
       await client.query(
         `UPDATE shopping_carts SET status = 'CONVERTED', updated_at = NOW() WHERE id = $1`,
         [input.cartId],
