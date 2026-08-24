@@ -29,11 +29,29 @@ function runDocker(args) {
   }).trim();
 }
 
-async function checkHttp(label, url) {
-  const response = await fetch(url);
-  if (!response.ok)
-    throw new Error(`${label} returned HTTP ${response.status}`);
-  return `${label}: HTTP ${response.status}`;
+async function checkHttp(label, url, attempts = 20) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (response.ok) return `${label}: HTTP ${response.status}`;
+      lastError = new Error(`${label} returned HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+  }
+
+  throw new Error(
+    `${label} did not become ready after ${attempts} attempts`,
+    { cause: lastError },
+  );
 }
 
 const results = [];

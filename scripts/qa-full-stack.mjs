@@ -19,7 +19,9 @@ function run(command, args) {
   const result = spawnSync(command, args, {
     stdio: "inherit",
     env: qaEnv,
-    shell: process.platform === "win32",
+    // Only npm.cmd needs the Windows command shell. Invoking node.exe through
+    // cmd.exe breaks when Node is installed beneath "C:\\Program Files".
+    shell: process.platform === "win32" && command === npm,
   });
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed`);
@@ -44,14 +46,14 @@ try {
       "backend",
       "frontend",
     ],
-    { stdio: "inherit", env: qaEnv, shell: process.platform === "win32" },
+    { stdio: "inherit", env: qaEnv },
   );
   throw error;
 } finally {
   const cleanup = spawnSync(
     process.execPath,
     ["scripts/qa-compose.mjs", "down", "--remove-orphans"],
-    { stdio: "inherit", env: qaEnv, shell: process.platform === "win32" },
+    { stdio: "inherit", env: qaEnv },
   );
   if (cleanup.status !== 0) {
     console.error("QA cleanup failed; inspect running containers manually");
