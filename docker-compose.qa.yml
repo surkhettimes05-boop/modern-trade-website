@@ -44,6 +44,8 @@ x-backend: &backend
     DEFAULT_LOCALE: en-NP
     DEFAULT_TIMEZONE: Asia/Kathmandu
     DEFAULT_TAX_REGIME: IRD
+    # Desktop and mobile release gates share one trusted Docker client.
+    RATE_LIMIT_MAX_REQUESTS: 10000
 
 services:
   postgres:
