@@ -44,7 +44,7 @@ export function OperationsTopbar() {
           </div>
         </div>
 
-        <div className="relative">
+        <div className="relative flex items-center gap-1">
           <button
             type="button"
             aria-label="Open staff account menu"
@@ -61,6 +61,16 @@ export function OperationsTopbar() {
             </span>
           </button>
 
+          <button
+            type="button"
+            aria-label="Logout"
+            disabled={loggingOut}
+            onClick={() => void logout()}
+            className="rounded-lg p-2 text-red-600 transition-colors hover:bg-red-50 disabled:text-gray-400 sm:hidden"
+          >
+            <LogOut className="h-5 w-5" aria-hidden="true" />
+          </button>
+
           {accountMenuOpen ? (
             <div className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
               <div className="border-b border-gray-200 px-4 py-2">
@@ -71,7 +81,7 @@ export function OperationsTopbar() {
                 type="button"
                 disabled={loggingOut}
                 onClick={() => void logout()}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 disabled:text-gray-400"
+                className="hidden w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 disabled:text-gray-400 sm:flex"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
                 {loggingOut ? 'Logging out…' : 'Logout'}
