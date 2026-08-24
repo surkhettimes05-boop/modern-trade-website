@@ -46,7 +46,7 @@ test.describe("release browser gate", () => {
     });
 
     for (const route of criticalRoutes) {
-      await page.goto(route, { waitUntil: "networkidle" });
+      await page.goto(route, { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toBeVisible();
     }
 
@@ -121,7 +121,7 @@ test.describe("release browser gate", () => {
   });
 
   test("loyalty is active and fails closed without a verified customer session", async ({ page }) => {
-    await page.goto("/loyalty", { waitUntil: "networkidle" });
+    await page.goto("/loyalty", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "StoreSync Rewards" })).toBeVisible();
     await expect(page.getByText("Sign in with your Nepal mobile number and OTP to view loyalty.", { exact: true })).toBeVisible();
     await expect(page.getByText(/coming soon/i)).toHaveCount(0);
