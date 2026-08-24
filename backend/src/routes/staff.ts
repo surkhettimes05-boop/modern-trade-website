@@ -21,7 +21,7 @@ export async function staffRoutes(fastify: FastifyInstance) {
         .optional(),
       hire_date: z.coerce.date().optional(),
       username: z.string().optional(),
-      password: z.string().optional(),
+      password: z.string().min(12).max(200).optional(),
       permissions: z.any().optional(),
       notes: z.string().optional(),
       metadata: z.any().optional(),
@@ -86,8 +86,8 @@ export async function staffRoutes(fastify: FastifyInstance) {
         .optional(),
       department: z.string().optional(),
       search: z.string().optional(),
-      limit: z.coerce.number().optional(),
-      offset: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      offset: z.coerce.number().int().min(0).max(100_000).default(0),
     });
 
     const filters = schema.parse(request.query);
@@ -145,7 +145,7 @@ export async function staffRoutes(fastify: FastifyInstance) {
     });
 
     const bodySchema = z.object({
-      new_password: z.string().min(8),
+      new_password: z.string().min(12).max(200),
     });
 
     const { staffId } = paramsSchema.parse(request.params);
@@ -197,25 +197,29 @@ export async function staffRoutes(fastify: FastifyInstance) {
   });
 
   // Staff: Verify password
-  fastify.post("/staff/:staffId/verify-password", async (request, reply) => {
-    const paramsSchema = z.object({
-      staffId: z.string().uuid(),
-    });
+  fastify.post(
+    "/staff/:staffId/verify-password",
+    { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const paramsSchema = z.object({
+        staffId: z.string().uuid(),
+      });
 
-    const bodySchema = z.object({
-      password: z.string(),
-    });
+      const bodySchema = z.object({
+        password: z.string(),
+      });
 
-    const { staffId } = paramsSchema.parse(request.params);
-    const { password } = bodySchema.parse(request.body);
+      const { staffId } = paramsSchema.parse(request.params);
+      const { password } = bodySchema.parse(request.body);
 
-    try {
-      const isValid = await staffService.verifyPassword(staffId, password);
-      return reply.send({ valid: isValid });
-    } catch {
-      return reply.status(500).send({ error: "Failed to verify password" });
-    }
-  });
+      try {
+        const isValid = await staffService.verifyPassword(staffId, password);
+        return reply.send({ valid: isValid });
+      } catch {
+        return reply.status(500).send({ error: "Failed to verify password" });
+      }
+    },
+  );
 
   // Staff: Terminate staff
   fastify.post("/staff/:staffId/terminate", async (request, reply) => {

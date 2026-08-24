@@ -4,5 +4,11 @@
 **/coverage
 **/.git
 **/*.log
+.git
+.local-run
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
 implementation/*.docx
 StoreSync_*.docx

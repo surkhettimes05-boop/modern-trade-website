@@ -57,6 +57,15 @@ describe("Public API Endpoints", () => {
       expect(response.statusCode).toBe(200);
       expect(Array.isArray(JSON.parse(response.payload))).toBe(true);
     });
+
+    it("rejects unbounded catalog pagination", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/public/products?limit=1000000",
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe("POST /api/public/contact", () => {

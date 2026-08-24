@@ -83,7 +83,7 @@ VALUES ('9812345678', encode(digest('9812345678', 'sha256'), 'hex'), '98XXXX5678
 ON CONFLICT (phone_normalized) DO NOTHING;
 
 INSERT INTO staff (staff_number, first_name, last_name, email, store_id, role, position, department, status, hire_date, username, password_hash, permissions, role_id, capabilities, scope_type, scope_store_ids, created_by)
-SELECT 'STF-LOCAL-ADMIN', 'Local', 'Administrator', 'admin@novamart.local', stores.id, 'ADMIN', 'System Administrator', 'Management', 'ACTIVE', CURRENT_DATE, 'admin', crypt('StoreSync@2026', gen_salt('bf', 12)), '{"all": true}'::jsonb, roles.id, roles.capabilities, 'GLOBAL', ARRAY[stores.id]::uuid[], 'development-seed'
+SELECT 'STF-LOCAL-ADMIN', 'Local', 'Administrator', 'admin@novamart.local', stores.id, 'ADMIN', 'System Administrator', 'Management', 'ACTIVE', CURRENT_DATE, 'admin', crypt(encode(gen_random_bytes(32), 'hex'), gen_salt('bf', 12)), '{"all": true}'::jsonb, roles.id, roles.capabilities, 'GLOBAL', ARRAY[stores.id]::uuid[], 'development-seed'
 FROM stores CROSS JOIN roles
 WHERE stores.name_en = 'NOVA MART Thamel' AND roles.role_key = 'platform_admin'
-ON CONFLICT (staff_number) DO UPDATE SET store_id = EXCLUDED.store_id, password_hash = EXCLUDED.password_hash, status = 'ACTIVE', role_id = EXCLUDED.role_id, capabilities = EXCLUDED.capabilities, scope_type = EXCLUDED.scope_type, scope_store_ids = EXCLUDED.scope_store_ids;
+ON CONFLICT (staff_number) DO UPDATE SET store_id = EXCLUDED.store_id, status = 'ACTIVE', role_id = EXCLUDED.role_id, capabilities = EXCLUDED.capabilities, scope_type = EXCLUDED.scope_type, scope_store_ids = EXCLUDED.scope_store_ids;

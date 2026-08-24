@@ -59,16 +59,12 @@ Recommended release order:
 5. Verify the Vercel site, `/api/health/ready` proxy, customer authentication,
    checkout, and staff capabilities before promoting the deployment.
 
-## Static Export
+## Runtime requirement
 
-For static hosting:
-
-```bash
-npm run build
-npm run export
-```
-
-Output will be in `out/` directory.
+This application is not compatible with a static export: its same-origin API
+proxy, Web Vitals ingestion route, staff-route proxy, and dynamic account routes
+require a Next.js server runtime. Deploy it to Vercel or run the verified
+standalone container behind a reverse proxy/CDN.
 
 ## Performance Optimization
 
@@ -86,6 +82,6 @@ Configure CDN to cache:
 
 ## Monitoring
 
-- Vercel Analytics (if using Vercel)
-- Custom error tracking
+- The built-in Web Vitals endpoint emits bounded, structured LCP/INP/CLS data.
+- Configure a Vercel Drain or an approved error/telemetry provider before launch.
 - Performance monitoring

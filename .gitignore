@@ -17,6 +17,8 @@ out/
 .npm/
 .cache/
 .turbo/
+.local-run/
+backend/.test-postgres-data-path
 
 # OS/editor files
 .DS_Store

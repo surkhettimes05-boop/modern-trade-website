@@ -47,5 +47,6 @@
     "../database/024_stock_reservation_contract.sql"
   ],
   ["025_hash_customer_otp", "../database/025_hash_customer_otp.sql"],
-  ["026_hash_session_tokens", "../database/026_hash_session_tokens.sql"]
+  ["026_hash_session_tokens", "../database/026_hash_session_tokens.sql"],
+  ["027_runtime_database_role", "../database/027_runtime_database_role.sql"]
 ]

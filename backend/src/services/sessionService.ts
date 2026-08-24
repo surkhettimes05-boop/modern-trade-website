@@ -69,9 +69,13 @@ export class SessionService {
       return null;
     }
 
-    // Update last activity
+    // Avoid a database write on every authenticated request while keeping the
+    // activity timestamp fresh enough for session-management displays.
     await query(
-      `UPDATE customer_sessions SET last_activity_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      `UPDATE customer_sessions
+       SET last_activity_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+         AND last_activity_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes'`,
       [result.rows[0].id],
     );
 

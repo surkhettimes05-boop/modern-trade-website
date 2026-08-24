@@ -1,4 +1,7 @@
-import { PILOT_FEATURES, validatePilotFeatureEnvironment } from "../releaseFeatures.js";
+import {
+  PILOT_FEATURES,
+  validatePilotFeatureEnvironment,
+} from "../releaseFeatures.js";
 
 describe("pilot feature controls", () => {
   it("enables only the certified first-release surface", () => {

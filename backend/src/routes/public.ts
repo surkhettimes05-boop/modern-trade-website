@@ -156,13 +156,24 @@ export async function publicRoutes(fastify: FastifyInstance) {
 
   // Get published products
   fastify.get("/products", async (request, reply) => {
-    const { lang, category, featured, store_id } = request.query as {
-      lang?: string;
-      category?: string;
-      featured?: string;
-      store_id?: string;
-    };
-    const validatedLang = langSchema.parse(lang);
+    const {
+      lang: validatedLang,
+      category,
+      featured,
+      store_id,
+      limit,
+      offset,
+    } = z
+      .object({
+        lang: langSchema,
+        category: z.string().uuid().optional(),
+        featured: z.enum(["true", "false"]).optional(),
+        store_id: z.string().uuid().optional(),
+        limit: z.coerce.number().int().min(1).max(200).default(100),
+        offset: z.coerce.number().int().min(0).max(100_000).default(0),
+      })
+      .strict()
+      .parse(request.query);
 
     try {
       const { query } = await import("../database/connection.js");
@@ -217,7 +228,8 @@ export async function publicRoutes(fastify: FastifyInstance) {
         queryText += ` AND is_featured = true`;
       }
 
-      queryText += ` ORDER BY products.name_en`;
+      params.push(limit, offset);
+      queryText += ` ORDER BY products.name_en LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
 
       const result = await query(queryText, params);
       return result.rows;
@@ -372,42 +384,51 @@ export async function publicRoutes(fastify: FastifyInstance) {
   });
 
   // Submit contact form
-  fastify.post("/contact", async (request, reply) => {
-    const contactSchema = z.object({
-      name: z.string().min(1).max(255),
-      email: z.string().email(),
-      phone: z.string().optional(),
-      subject: z.string().min(1).max(255),
-      message: z.string().min(1).max(5000),
-    });
+  fastify.post(
+    "/contact",
+    {
+      bodyLimit: 32 * 1024,
+      config: { rateLimit: { max: 10, timeWindow: "1 hour" } },
+    },
+    async (request, reply) => {
+      const contactSchema = z
+        .object({
+          name: z.string().min(1).max(255),
+          email: z.string().email(),
+          phone: z.string().optional(),
+          subject: z.string().min(1).max(255),
+          message: z.string().min(1).max(5000),
+        })
+        .strict();
 
-    try {
-      const body = contactSchema.parse(request.body);
-      const { query } = await import("../database/connection.js");
+      try {
+        const body = contactSchema.parse(request.body);
+        const { query } = await import("../database/connection.js");
 
-      const ip = request.ip;
+        const ip = request.ip;
 
-      await query(
-        `INSERT INTO contact_submissions (name, email, phone, subject, message, ip_address)
+        await query(
+          `INSERT INTO contact_submissions (name, email, phone, subject, message, ip_address)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          body.name,
-          body.email,
-          body.phone || null,
-          body.subject,
-          body.message,
-          ip,
-        ],
-      );
+          [
+            body.name,
+            body.email,
+            body.phone || null,
+            body.subject,
+            body.message,
+            ip,
+          ],
+        );
 
-      return { success: true, message: "Contact submission received" };
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        reply.status(400);
-        return { error: "Validation failed", details: error.issues };
+        return { success: true, message: "Contact submission received" };
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          reply.status(400);
+          return { error: "Validation failed", details: error.issues };
+        }
+        reply.status(500);
+        return { error: "Failed to submit contact form" };
       }
-      reply.status(500);
-      return { error: "Failed to submit contact form" };
-    }
-  });
+    },
+  );
 }

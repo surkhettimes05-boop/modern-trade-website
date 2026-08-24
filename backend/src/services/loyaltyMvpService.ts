@@ -11,7 +11,10 @@ type StaffActor = {
 };
 
 export class LoyaltyMvpError extends Error {
-  constructor(public readonly code: string, message: string) {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -26,17 +29,29 @@ export class LoyaltyMvpService {
         [customerId],
       );
       if (!customer.rowCount || customer.rows[0].status !== "ACTIVE")
-        throw new LoyaltyMvpError("CUSTOMER_NOT_FOUND", "Active customer not found");
+        throw new LoyaltyMvpError(
+          "CUSTOMER_NOT_FOUND",
+          "Active customer not found",
+        );
       if (customer.rows[0].verification_status !== "VERIFIED")
-        throw new LoyaltyMvpError("OTP_REQUIRED", "OTP verification is required before enrollment");
+        throw new LoyaltyMvpError(
+          "OTP_REQUIRED",
+          "OTP verification is required before enrollment",
+        );
       if (!customer.rows[0].home_store_id)
-        throw new LoyaltyMvpError("STORE_REQUIRED", "Choose a Nepal home store before enrollment");
-      const result = await client.query(`SELECT (loyalty_mvp_account($1, $2)).*`, [
-        customerId,
-        customer.rows[0].home_store_id,
-      ]);
+        throw new LoyaltyMvpError(
+          "STORE_REQUIRED",
+          "Choose a Nepal home store before enrollment",
+        );
+      const result = await client.query(
+        `SELECT (loyalty_mvp_account($1, $2)).*`,
+        [customerId, customer.rows[0].home_store_id],
+      );
       if (!result.rows[0]?.id)
-        throw new LoyaltyMvpError("PROGRAM_UNAVAILABLE", "No active Nepal loyalty program is available");
+        throw new LoyaltyMvpError(
+          "PROGRAM_UNAVAILABLE",
+          "No active Nepal loyalty program is available",
+        );
       await client.query("COMMIT");
       return this.getCustomerSummary(customerId);
     } catch (error) {
@@ -59,7 +74,8 @@ export class LoyaltyMvpService {
        ORDER BY a.enrolled_at DESC LIMIT 1`,
       [customerId],
     );
-    if (!account.rowCount) return { enrolled: false, market: "NP", currency: "NPR" };
+    if (!account.rowCount)
+      return { enrolled: false, market: "NP", currency: "NPR" };
     const history = await getPool().query(
       `SELECT id, points_signed, entry_type, effective_timestamp, source_type, source_id,
               source_amount, currency, balance_after, reason, reversal_reason,
@@ -78,19 +94,44 @@ export class LoyaltyMvpService {
     };
   }
 
-  private assertStaff(actor: StaffActor, capability: string, storeId: string, organizationId: string) {
-    const privileged = actor.roleKey === "platform_admin" || actor.capabilities?.includes("system.manage");
+  private assertStaff(
+    actor: StaffActor,
+    capability: string,
+    storeId: string,
+    organizationId: string,
+  ) {
+    const privileged =
+      actor.roleKey === "platform_admin" ||
+      actor.capabilities?.includes("system.manage");
     if (!privileged && !actor.capabilities?.includes(capability))
-      throw new LoyaltyMvpError("CAPABILITY_DENIED", `Missing capability: ${capability}`);
+      throw new LoyaltyMvpError(
+        "CAPABILITY_DENIED",
+        `Missing capability: ${capability}`,
+      );
     if (privileged || actor.scopeType === "GLOBAL") return;
-    if (actor.scopeOrganizationId && actor.scopeOrganizationId !== organizationId)
-      throw new LoyaltyMvpError("SCOPE_DENIED", "Organization is outside staff scope");
-    const stores = actor.scopeStoreIds || (actor.storeId ? [actor.storeId] : []);
-    if (["STORE", "OWN_REGISTER"].includes(String(actor.scopeType)) && !stores.includes(storeId))
+    if (
+      actor.scopeOrganizationId &&
+      actor.scopeOrganizationId !== organizationId
+    )
+      throw new LoyaltyMvpError(
+        "SCOPE_DENIED",
+        "Organization is outside staff scope",
+      );
+    const stores =
+      actor.scopeStoreIds || (actor.storeId ? [actor.storeId] : []);
+    if (
+      ["STORE", "OWN_REGISTER"].includes(String(actor.scopeType)) &&
+      !stores.includes(storeId)
+    )
       throw new LoyaltyMvpError("SCOPE_DENIED", "Store is outside staff scope");
   }
 
-  async redeemSale(saleId: string, requestedPoints: number, idempotencyKey: string, actor: StaffActor) {
+  async redeemSale(
+    saleId: string,
+    requestedPoints: number,
+    idempotencyKey: string,
+    actor: StaffActor,
+  ) {
     const client = await getPool().connect();
     try {
       await client.query("BEGIN");
@@ -98,12 +139,24 @@ export class LoyaltyMvpService {
         `SELECT s.*, st.organization_id FROM sales s JOIN stores st ON st.id = s.store_id WHERE s.id = $1 FOR UPDATE OF s`,
         [saleId],
       );
-      if (!saleResult.rowCount) throw new LoyaltyMvpError("SALE_NOT_FOUND", "Sale not found");
+      if (!saleResult.rowCount)
+        throw new LoyaltyMvpError("SALE_NOT_FOUND", "Sale not found");
       const sale = saleResult.rows[0];
-      this.assertStaff(actor, "loyalty.redeem", sale.store_id, sale.organization_id);
+      this.assertStaff(
+        actor,
+        "loyalty.redeem",
+        sale.store_id,
+        sale.organization_id,
+      );
       if (sale.sale_status !== "COMPLETED" || !sale.customer_id)
-        throw new LoyaltyMvpError("SALE_INELIGIBLE", "Only a completed customer sale can redeem points");
-      const prior = await client.query(`SELECT * FROM loyalty_ledger WHERE idempotency_key = $1`, [idempotencyKey]);
+        throw new LoyaltyMvpError(
+          "SALE_INELIGIBLE",
+          "Only a completed customer sale can redeem points",
+        );
+      const prior = await client.query(
+        `SELECT * FROM loyalty_ledger WHERE idempotency_key = $1`,
+        [idempotencyKey],
+      );
       if (prior.rowCount) {
         await client.query("COMMIT");
         return prior.rows[0];
@@ -115,43 +168,86 @@ export class LoyaltyMvpService {
          FOR UPDATE OF a`,
         [sale.customer_id, sale.organization_id],
       );
-      if (!accountResult.rowCount) throw new LoyaltyMvpError("ACCOUNT_NOT_FOUND", "Customer is not enrolled");
+      if (!accountResult.rowCount)
+        throw new LoyaltyMvpError(
+          "ACCOUNT_NOT_FOUND",
+          "Customer is not enrolled",
+        );
       const account = accountResult.rows[0];
       const points = Math.trunc(requestedPoints);
-      if (points < account.redemption_min_points || points > account.redemption_max_points)
-        throw new LoyaltyMvpError("REDEMPTION_LIMIT", `Redemption must be ${account.redemption_min_points}-${account.redemption_max_points} points`);
-      if (points > account.current_points) throw new LoyaltyMvpError("INSUFFICIENT_POINTS", "Insufficient points");
-      if (points > Number(sale.total_amount)) throw new LoyaltyMvpError("SALE_LIMIT", "Points cannot exceed the authoritative sale total");
+      if (
+        points < account.redemption_min_points ||
+        points > account.redemption_max_points
+      )
+        throw new LoyaltyMvpError(
+          "REDEMPTION_LIMIT",
+          `Redemption must be ${account.redemption_min_points}-${account.redemption_max_points} points`,
+        );
+      if (points > account.current_points)
+        throw new LoyaltyMvpError("INSUFFICIENT_POINTS", "Insufficient points");
+      if (points > Number(sale.total_amount))
+        throw new LoyaltyMvpError(
+          "SALE_LIMIT",
+          "Points cannot exceed the authoritative sale total",
+        );
       const entry = await client.query(
         `INSERT INTO loyalty_ledger(customer_id, account_id, program_id, organization_id, points_signed,
           entry_type, entry_status, effective_timestamp, source_type, source_id, location_id, rule_version,
           idempotency_key, actor, reason, source_amount, currency, balance_after, calculation_metadata)
          VALUES ($1,$2,$3,$4,$5,'REDEEM','POSTED',now(),'POS_SALE',$6,$7,$8,$9,$10,
           'Points redeemed against completed POS sale',$11,'NPR',$12,$13) RETURNING *`,
-        [sale.customer_id, account.id, account.program_id, account.organization_id, -points,
-          sale.id, sale.store_id, account.rule_version, idempotencyKey, actor.id,
-          sale.total_amount, account.current_points - points,
-          JSON.stringify({ sale_number: sale.sale_number, requested_points: points, authoritative_sale_total: sale.total_amount })],
+        [
+          sale.customer_id,
+          account.id,
+          account.program_id,
+          account.organization_id,
+          -points,
+          sale.id,
+          sale.store_id,
+          account.rule_version,
+          idempotencyKey,
+          actor.id,
+          sale.total_amount,
+          account.current_points - points,
+          JSON.stringify({
+            sale_number: sale.sale_number,
+            requested_points: points,
+            authoritative_sale_total: sale.total_amount,
+          }),
+        ],
       );
       await client.query(
         `UPDATE customer_loyalty_accounts SET current_points = current_points - $1,
          redeemed_points = redeemed_points + $1, last_activity_at = now() WHERE id = $2`,
         [points, account.id],
       );
-      await client.query(`UPDATE sales SET points_redeemed = points_redeemed + $1 WHERE id = $2`, [points, sale.id]);
+      await client.query(
+        `UPDATE sales SET points_redeemed = points_redeemed + $1 WHERE id = $2`,
+        [points, sale.id],
+      );
       await client.query(
         `INSERT INTO audit_events(event_type, entity_type, entity_id, actor_id, actor_role,
           actor_capabilities, actor_scope_type, actor_scope_store_ids, changes, correlation_id, feature_flags)
          VALUES ('LOYALTY_REDEEM','loyalty_ledger',$1,$2,$3,$4,$5,$6,$7,$8,'{"loyalty_mvp":true}')`,
-        [entry.rows[0].id, actor.id, actor.roleKey, JSON.stringify(actor.capabilities || []), actor.scopeType,
-          actor.scopeStoreIds || [], JSON.stringify({ sale_id: sale.id, points }), idempotencyKey],
+        [
+          entry.rows[0].id,
+          actor.id,
+          actor.roleKey,
+          JSON.stringify(actor.capabilities || []),
+          actor.scopeType,
+          actor.scopeStoreIds || [],
+          JSON.stringify({ sale_id: sale.id, points }),
+          idempotencyKey,
+        ],
       );
       await client.query("COMMIT");
       return entry.rows[0];
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
-    } finally { client.release(); }
+    } finally {
+      client.release();
+    }
   }
 
   async reconcile() {

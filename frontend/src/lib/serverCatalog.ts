@@ -2,14 +2,14 @@ import 'server-only';
 
 import { cache } from 'react';
 import { mapProduct, openingCategories, openingProducts, type Offer, type Product, type Store, type StorefrontCategory } from '@/lib/catalog';
+import { configuredServerApiUrl } from '@/lib/serverApiUrl';
 
 type CatalogData = { products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[] };
 
 function apiBaseUrl() {
-  const value = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
-  if (!value) return null;
   try {
-    const url = new URL(value);
+    const url = configuredServerApiUrl();
+    if (!url) return null;
     return url.hostname === 'api.example.com' ? null : url;
   } catch {
     return null;
@@ -41,12 +41,11 @@ export const getCatalog = cache(async (): Promise<CatalogData> => {
     fetchPublic<Offer>('offers'),
   ]);
   const apiProducts = productRows.map(mapProduct).filter((product) => product.price > 0);
-  const productsBySku = new Map([...openingProducts, ...apiProducts].map((product) => [product.sku || product.id, product]));
   const categoriesBySlug = new Map(categoryRows.map((category) => [category.slug, category]));
   const categories = openingCategories
     .map((opening) => ({ ...opening, ...categoriesBySlug.get(opening.slug), id: opening.id }))
     .concat(categoryRows.filter((category) => !openingCategories.some((opening) => opening.slug === category.slug)));
-  return { products: [...productsBySku.values()], categories, stores, offers };
+  return { products: apiProducts.length ? apiProducts : openingProducts, categories, stores, offers };
 });
 
 export const getProductBySlug = cache(async (slug: string) => {

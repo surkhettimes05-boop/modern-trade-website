@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import pg from "pg";
 
-export const LATEST_MIGRATION_ID = "026_hash_session_tokens";
+export const LATEST_MIGRATION_ID = "027_runtime_database_role";
 
 // Databases created before schema_migrations was introduced already contain
 // this fixed baseline. Never derive the baseline from the current manifest:
@@ -62,6 +62,18 @@ export async function runMigrations(
   const applied: string[] = [];
   try {
     await client.connect();
+    const expectedMigrationRole = process.env.DATABASE_MIGRATION_ROLE;
+    if (process.env.NODE_ENV === "production" || expectedMigrationRole) {
+      if (!expectedMigrationRole) {
+        throw new Error("DATABASE_MIGRATION_ROLE is required in production");
+      }
+      const identity = await client.query("SELECT current_user AS role_name");
+      if (identity.rows[0]?.role_name !== expectedMigrationRole) {
+        throw new Error(
+          "Migration database identity does not match DATABASE_MIGRATION_ROLE",
+        );
+      }
+    }
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       migration_id text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);

@@ -132,7 +132,7 @@ export class ProductSearchService {
       FROM product_search_index psi
       LEFT JOIN products p ON psi.product_id = p.id
       WHERE psi.${searchVector} @@ plainto_tsquery('english', $1)
-      ${store_id ? "AND p.id IN (SELECT product_id FROM store_inventory WHERE store_id = $3)" : ""}
+      ${store_id ? "AND p.id IN (SELECT product_id FROM store_inventory WHERE store_id = $4)" : ""}
       ORDER BY rank DESC, psi.name_en
       LIMIT $2 OFFSET $3
     `;
@@ -266,7 +266,13 @@ export class ProductSearchService {
   ): Promise<void> {
     // This would log to a separate table for analysis
     // For now, we'll just log to console
-    console.log(`Zero result search: "${searchQuery}" (language: ${language})`);
+    console.log(
+      JSON.stringify({
+        event: "zero_result_search",
+        language,
+        queryLength: searchQuery.length,
+      }),
+    );
   }
 
   /**

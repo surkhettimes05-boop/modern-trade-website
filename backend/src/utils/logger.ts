@@ -53,10 +53,9 @@ export function redactForLogs(value: unknown, key = ""): unknown {
   }
   if (typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([childKey, child]) => [
-        childKey,
-        redactForLogs(child, childKey),
-      ]),
+      Object.entries(value as Record<string, unknown>).map(
+        ([childKey, child]) => [childKey, redactForLogs(child, childKey)],
+      ),
     );
   }
   return value;

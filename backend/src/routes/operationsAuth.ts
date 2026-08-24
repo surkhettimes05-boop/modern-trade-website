@@ -12,12 +12,16 @@ import {
 import { CSRF_COOKIE } from "../utils/csrf.js";
 import { hashSessionToken } from "../utils/sessionToken.js";
 import { verifyTotp } from "../utils/totp.js";
+import { recordSecurityEvent } from "../services/securityEventService.js";
 
 // Used when a username is absent so password verification has comparable cost.
 const DUMMY_PASSWORD_HASH =
   "$2b$12$xivHf6wb78nEE2SHJHHUQeJHAbFq4JYxoOrAYVg6q6PHfwV2oWKky";
 
 export async function operationsAuthRoutes(fastify: FastifyInstance) {
+  fastify.addHook("onSend", async (_request, reply) => {
+    reply.header("cache-control", "private, no-store");
+  });
   fastify.post(
     "/login",
     {
@@ -28,7 +32,10 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
         .object({
           username: z.string().min(1).max(100),
           password: z.string().min(8).max(200),
-          mfa_code: z.string().regex(/^\d{6}$/).optional(),
+          mfa_code: z
+            .string()
+            .regex(/^\d{6}$/)
+            .optional(),
         })
         .parse(request.body);
 
@@ -57,13 +64,40 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
             [staff.id],
           );
         }
+        await recordSecurityEvent(request, {
+          eventType: "STAFF_LOGIN_FAILURE",
+          entityType: "staff_authentication",
+          actorId: staff?.id,
+          details: { reason: "credential_status_or_lockout" },
+        });
         return reply
           .status(401)
           .send({ error: "Invalid username or password" });
       }
 
       if (staff.mfa_enabled) {
-        if (!mfa_code || !staff.mfa_secret || !verifyTotp(staff.mfa_secret, mfa_code)) {
+        if (
+          !mfa_code ||
+          !staff.mfa_secret ||
+          !verifyTotp(staff.mfa_secret, mfa_code)
+        ) {
+          await query(
+            `UPDATE staff
+                SET failed_login_attempts = failed_login_attempts + 1,
+                    locked_until = CASE
+                      WHEN failed_login_attempts + 1 >= 5
+                      THEN NOW() + INTERVAL '15 minutes'
+                      ELSE locked_until
+                    END
+              WHERE id = $1`,
+            [staff.id],
+          );
+          await recordSecurityEvent(request, {
+            eventType: "STAFF_MFA_FAILURE",
+            entityType: "staff_authentication",
+            actorId: staff.id,
+            details: { reason: "invalid_or_missing_mfa" },
+          });
           return reply.status(403).send({
             error: "A valid MFA code is required",
             code: "MFA_REQUIRED",
@@ -94,6 +128,12 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
         userAgent: request.headers["user-agent"],
         expiresAt: new Date(Date.now() + STAFF_SESSION_TTL_SECONDS * 1000),
+      });
+      await recordSecurityEvent(request, {
+        eventType: "STAFF_LOGIN_SUCCESS",
+        entityType: "staff_authentication",
+        actorId: staff.id,
+        details: { mfaVerified: Boolean(staff.mfa_enabled) },
       });
       const csrfToken = newCsrfToken();
 
@@ -133,14 +173,31 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
         code: "CSRF_INVALID",
         requestId: request.id,
       });
+    let staffId: string | undefined;
     try {
       await request.jwtVerify({ onlyCookie: true });
+      staffId = (request.user as any).sub;
       await revokeStaffSession((request.user as any).jti, "logout");
     } catch {
       /* already logged out */
     }
-    reply.clearCookie("ops_session", { path: "/" });
-    reply.clearCookie(CSRF_COOKIE, { path: "/" });
+    reply.clearCookie("ops_session", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+    });
+    reply.clearCookie(CSRF_COOKIE, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+    });
+    await recordSecurityEvent(request, {
+      eventType: "STAFF_LOGOUT",
+      entityType: "staff_authentication",
+      actorId: staffId,
+    });
     return reply.send({ success: true });
   });
 

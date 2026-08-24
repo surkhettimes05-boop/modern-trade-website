@@ -68,7 +68,7 @@ sent with protected API requests. No backend or website changes are required.
 
 ## Release checklist
 
-1. Replace the generated Android and iOS launcher icons.
+1. Confirm the NOVA MART launcher icon is approved for Android, iOS, and web.
 2. Set final Android application ID and Apple bundle ID if they differ from
    `com.novamart.modern_trade_flutter`.
 3. Configure the production HTTPS API URL with `--dart-define`.

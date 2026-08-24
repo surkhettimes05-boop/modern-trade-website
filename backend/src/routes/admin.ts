@@ -12,6 +12,12 @@ const publicationStatusSchema = z.enum([
   "UNPUBLISHED",
   "EXPIRED",
 ]);
+const httpsUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => new URL(value).protocol === "https:", {
+    message: "URL must use HTTPS",
+  });
 
 export async function adminRoutes(fastify: FastifyInstance) {
   // Use centralized authentication middleware
@@ -290,7 +296,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       landmark_ne: z.string().max(255).optional(),
       phone: z.string().min(1).max(20),
       email: z.string().email().optional(),
-      map_url: z.string().url().optional(),
+      map_url: httpsUrlSchema.optional(),
       latitude: z.number().min(-90).max(90).optional(),
       longitude: z.number().min(-180).max(180).optional(),
       hours_en: z.record(z.string(), z.any()).optional(),
@@ -364,7 +370,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       pack_size_ne: z.string().max(100).optional(),
       unit_en: z.string().max(50).optional(),
       unit_ne: z.string().max(50).optional(),
-      image_url: z.string().url().optional(),
+      image_url: httpsUrlSchema.optional(),
       images: z.array(z.any()).optional(),
       status: publicationStatusSchema.default("DRAFT"),
       scheduled_for: z.string().datetime().optional(),

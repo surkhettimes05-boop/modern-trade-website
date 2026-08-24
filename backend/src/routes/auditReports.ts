@@ -133,8 +133,8 @@ export async function auditReportRoutes(fastify: FastifyInstance) {
       store_id: z.string().uuid().optional(),
       date_from: z.coerce.date().optional(),
       date_to: z.coerce.date().optional(),
-      limit: z.coerce.number().optional(),
-      offset: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      offset: z.coerce.number().int().min(0).max(100_000).default(0),
     });
 
     const filters = schema.parse(request.query);

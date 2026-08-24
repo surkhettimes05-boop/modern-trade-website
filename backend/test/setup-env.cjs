@@ -7,3 +7,5 @@ if (parsed.hostname !== '127.0.0.1' || parsed.port !== '55433' || parsed.pathnam
 process.env.TEST_DATABASE_URL = testUrl;
 process.env.PAYMENT_ENCRYPTION_KEY ||= '0'.repeat(64);
 process.env.OTP_HASH_SECRET ||= 'test-only-otp-hash-secret-at-least-32-bytes';
+process.env.ENCRYPTION_KEY ||= 'test-only-offline-encryption-key-at-least-32-bytes';
+process.env.SIGNATURE_SECRET ||= 'test-only-offline-signature-secret-at-least-32-bytes';

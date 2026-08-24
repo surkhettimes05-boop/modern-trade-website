@@ -69,6 +69,7 @@ async function sendTwilioSms(
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: form,
+      signal: AbortSignal.timeout(15_000),
     },
   );
 

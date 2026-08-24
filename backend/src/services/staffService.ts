@@ -61,7 +61,7 @@ export class StaffService {
     let passwordHash: string | null = null;
 
     if (staffData.password) {
-      passwordHash = await bcrypt.hash(staffData.password, 10);
+      passwordHash = await bcrypt.hash(staffData.password, 12);
     }
 
     const result = await query(
@@ -174,11 +174,12 @@ export class StaffService {
 
     const whereClause =
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const limitClause = filters.limit ? `LIMIT ${filters.limit}` : "";
-    const offsetClause = filters.offset ? `OFFSET ${filters.offset}` : "";
+    params.push(filters.limit ?? 50, filters.offset ?? 0);
+    const limitParameter = `$${paramIndex}`;
+    const offsetParameter = `$${paramIndex + 1}`;
 
     const result = await query(
-      `SELECT * FROM staff ${whereClause} ORDER BY created_at DESC ${limitClause} ${offsetClause}`,
+      `SELECT * FROM staff ${whereClause} ORDER BY created_at DESC LIMIT ${limitParameter} OFFSET ${offsetParameter}`,
       params,
     );
 
@@ -307,12 +308,19 @@ export class StaffService {
    * Update password
    */
   async updatePassword(staffId: string, newPassword: string): Promise<void> {
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const passwordHash = await bcrypt.hash(newPassword, 12);
 
     await query(
-      `UPDATE staff 
-       SET password_hash = $1, updated_at = NOW()
-       WHERE id = $2`,
+      `WITH changed_staff AS (
+         UPDATE staff
+            SET password_hash = $1, updated_at = NOW()
+          WHERE id = $2
+          RETURNING id
+       )
+       UPDATE sessions
+          SET is_revoked = TRUE, revoked_at = NOW(), revoked_reason = 'password_changed'
+        WHERE staff_id IN (SELECT id FROM changed_staff)
+          AND is_revoked = FALSE`,
       [passwordHash, staffId],
     );
   }
@@ -355,9 +363,10 @@ export class StaffService {
    * Verify password
    */
   async verifyPassword(staffId: string, password: string): Promise<boolean> {
-    const result = await query("SELECT password_hash FROM staff WHERE id = $1", [
-      staffId,
-    ]);
+    const result = await query(
+      "SELECT password_hash FROM staff WHERE id = $1",
+      [staffId],
+    );
     const passwordHash = result.rows[0]?.password_hash;
     if (!passwordHash) {
       return false;

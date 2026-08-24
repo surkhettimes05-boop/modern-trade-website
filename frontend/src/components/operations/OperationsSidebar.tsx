@@ -141,7 +141,7 @@ export function OperationsSidebar() {
   };
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+    <div className="hidden w-64 shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
       {/* Logo */}
       <div className="p-4 border-b border-gray-200">
         <h1 className="text-xl font-bold text-gray-900">NOVA MART Operations</h1>

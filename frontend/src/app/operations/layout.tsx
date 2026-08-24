@@ -13,10 +13,6 @@ export default function OperationsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // TODO: Add authentication check and redirect to /staff-login if not authenticated
-  // TODO: Fetch session data from /api/operations-auth/session
-  // TODO: Check capabilities and redirect if user doesn't have operations access
-
   return (<StaffSessionProvider area="operations">
     <div className="min-h-screen bg-gray-50">
       <div className="flex h-screen overflow-hidden">

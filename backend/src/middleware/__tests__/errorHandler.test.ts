@@ -3,7 +3,9 @@ import { errorHandler } from "../errorHandler.js";
 
 describe("error responses and request IDs", () => {
   it("returns a redacted 500 response with the correlation request ID", async () => {
-    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     const app = Fastify({ requestIdHeader: "x-request-id" });
     app.setErrorHandler(errorHandler);
     app.get("/failure", async () => {
@@ -23,7 +25,9 @@ describe("error responses and request IDs", () => {
       requestId: "release-test-request-1",
     });
     expect(response.payload).not.toContain("demo@example.com");
-    expect(consoleSpy.mock.calls.flat().join(" ")).not.toContain("demo@example.com");
+    expect(consoleSpy.mock.calls.flat().join(" ")).not.toContain(
+      "demo@example.com",
+    );
     consoleSpy.mockRestore();
     await app.close();
   });

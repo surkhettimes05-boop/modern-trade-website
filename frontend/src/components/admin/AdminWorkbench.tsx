@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useStaffSession } from '@/components/StaffSessionProvider';
 import { MARKET } from '@/lib/market';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 type RecordValue = Record<string, unknown>;
 type Resource = { title: string; endpoint?: string; capability?: string; fields?: string[]; unavailable?: string };
@@ -45,7 +46,7 @@ export function AdminWorkbench() {
     if (!resource.endpoint) { setLoading(false); return; }
     setLoading(true); setError('');
     try {
-      const response = await fetch(resource.endpoint, { credentials: 'include', cache: 'no-store' });
+      const response = await resilientFetch(resource.endpoint, { credentials: 'include', cache: 'no-store' });
       const body = await response.json() as RecordValue | RecordValue[];
       if (!response.ok) throw new Error(String((body as RecordValue).error || 'Unable to load data'));
       if (key === 'dashboard') setDashboard(body as RecordValue);
@@ -68,7 +69,7 @@ export function AdminWorkbench() {
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(resource.fields.map((field) => [field, String(form.get(field) || '')]));
     const csrf = document.cookie.split('; ').find((entry) => entry.startsWith('csrf_token='))?.split('=')[1];
-    const response = await fetch(resource.endpoint, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf || '' }, body: JSON.stringify(payload) });
+    const response = await resilientFetch(resource.endpoint, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf || '' }, body: JSON.stringify(payload) });
     const body = await response.json() as RecordValue;
     if (!response.ok) { setError(String(body.error || 'Create failed')); return; }
     setNotice(`${resource.title.slice(0, -1)} created successfully.`); (event.currentTarget as HTMLFormElement).reset(); await load();

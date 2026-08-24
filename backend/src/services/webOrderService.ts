@@ -372,7 +372,11 @@ export class WebOrderService {
       );
       const order = current.rows[0];
       if (!order) throw new Error("Order not found");
-      if (!this.validPaymentTransitions[order.payment_status]?.includes(paymentStatus)) {
+      if (
+        !this.validPaymentTransitions[order.payment_status]?.includes(
+          paymentStatus,
+        )
+      ) {
         throw new Error(
           `Invalid payment transition from ${order.payment_status} to ${paymentStatus}`,
         );

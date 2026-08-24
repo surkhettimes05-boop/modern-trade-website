@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
@@ -16,7 +17,7 @@ export default function ContactPage() {
     e.preventDefault();
     
     try {
-      const response = await fetch('/api/public/contact', {
+      const response = await resilientFetch('/api/public/contact', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

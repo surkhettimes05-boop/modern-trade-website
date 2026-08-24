@@ -224,7 +224,7 @@ export class PaymentService {
       await query(
         `UPDATE payment_webhook_logs
          SET processing_status = 'FAILED', processing_error = 'Invalid signature'
-         WHERE id = $2`,
+         WHERE id = $1`,
         [webhookLogId],
       );
       return { success: false, message: "Invalid signature" };
@@ -250,7 +250,7 @@ export class PaymentService {
       await query(
         `UPDATE payment_webhook_logs
          SET processing_status = 'FAILED', processing_error = $1, processed_at = NOW()
-         WHERE id = $1`,
+         WHERE id = $2`,
         [
           error instanceof Error ? error.message : "Unknown error",
           webhookLogId,

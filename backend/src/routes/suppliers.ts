@@ -59,8 +59,8 @@ export async function supplierRoutes(fastify: FastifyInstance) {
       status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]).optional(),
       approval_status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
       search: z.string().optional(),
-      limit: z.coerce.number().optional(),
-      offset: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      offset: z.coerce.number().int().min(0).max(100_000).default(0),
     });
 
     const filters = schema.parse(request.query);

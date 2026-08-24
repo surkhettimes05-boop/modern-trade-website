@@ -26,6 +26,7 @@ import { fiscalSignatureRoutes } from "../routes/fiscalSignatures.js";
 import { complianceReportRoutes } from "../routes/complianceReports.js";
 import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
 import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
+import { recordSecurityEvent } from "../services/securityEventService.js";
 
 export async function requirePrivilegedAdministration(
   request: FastifyRequest,
@@ -44,6 +45,11 @@ export async function requirePrivilegedAdministration(
     user.roleKey === "platform_admin" ||
     user.capabilities?.includes("system.manage");
   if (!privileged) {
+    await recordSecurityEvent(request, {
+      eventType: "ADMIN_ACCESS_DENIED",
+      entityType: "authorization",
+      details: { route: request.url.split("?", 1)[0], reason: "capability" },
+    });
     await reply.status(403).send({
       error: "Privileged administration access required",
       code: "ADMIN_CAPABILITY_REQUIRED",
@@ -52,6 +58,11 @@ export async function requirePrivilegedAdministration(
   }
 
   if (!user.mfaEnabled || !user.mfaVerified) {
+    await recordSecurityEvent(request, {
+      eventType: "ADMIN_ACCESS_DENIED",
+      entityType: "authorization",
+      details: { route: request.url.split("?", 1)[0], reason: "mfa" },
+    });
     await reply.status(403).send({
       error: "Verified MFA is required for privileged administration",
       code: "MFA_REQUIRED",
@@ -60,6 +71,11 @@ export async function requirePrivilegedAdministration(
   }
 
   if (!csrfMatches(request)) {
+    await recordSecurityEvent(request, {
+      eventType: "ADMIN_ACCESS_DENIED",
+      entityType: "authorization",
+      details: { route: request.url.split("?", 1)[0], reason: "csrf" },
+    });
     await reply.status(403).send({
       error: "CSRF validation failed",
       code: "CSRF_INVALID",
@@ -77,6 +93,23 @@ export async function privilegedAdministration(fastify: FastifyInstance) {
   fastify.addHook("onRequest", requirePrivilegedAdministration);
   fastify.addHook("preHandler", async (request) => {
     bindAuthenticatedAuditActor(request);
+  });
+  fastify.addHook("onResponse", async (request, reply) => {
+    if (
+      !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+      reply.statusCode < 400 &&
+      request.user
+    ) {
+      await recordSecurityEvent(request, {
+        eventType: "PRIVILEGED_MUTATION",
+        entityType: "administration",
+        details: {
+          route: request.routeOptions.url,
+          method: request.method,
+          statusCode: reply.statusCode,
+        },
+      });
+    }
   });
 
   await fastify.register(stockReservationRoutes);

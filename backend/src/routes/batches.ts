@@ -33,8 +33,8 @@ export async function batchRoutes(fastify: FastifyInstance) {
       product_id: z.string().uuid().optional(),
       batch_id: z.string().optional(),
       expiring_soon_days: z.number().positive().optional(),
-      limit: z.coerce.number().optional(),
-      offset: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      offset: z.coerce.number().int().min(0).max(100_000).default(0),
     });
 
     const filters = schema.parse(request.query);
@@ -174,7 +174,7 @@ export async function batchRoutes(fastify: FastifyInstance) {
       product_id: z.string().uuid().optional(),
       batch_id: z.string().optional(),
       status: z.enum(["OPEN", "RESOLVED"]).optional(),
-      limit: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
     });
 
     const filters = schema.parse(request.query);
@@ -295,7 +295,7 @@ export async function batchRoutes(fastify: FastifyInstance) {
     });
 
     const querySchema = z.object({
-      limit: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
     });
 
     const { batchId } = paramsSchema.parse(request.params);

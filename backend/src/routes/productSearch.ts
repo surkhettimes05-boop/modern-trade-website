@@ -37,8 +37,8 @@ export async function productSearchRoutes(fastify: FastifyInstance) {
     const schema = z.object({
       query: z.string().min(2),
       language: z.enum(["en", "ne", "romanized"]).optional(),
-      limit: z.coerce.number().optional(),
-      offset: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+      offset: z.coerce.number().int().min(0).max(100_000).default(0),
       store_id: z.string().uuid().optional(),
     });
 
@@ -66,8 +66,8 @@ export async function productSearchRoutes(fastify: FastifyInstance) {
     const schema = z.object({
       query: z.string().min(2),
       language: z.enum(["en", "ne", "romanized"]).optional(),
-      limit: z.coerce.number().optional(),
-      offset: z.coerce.number().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+      offset: z.coerce.number().int().min(0).max(100_000).default(0),
       similarity_threshold: z.number().min(0).max(1).optional(),
     });
 

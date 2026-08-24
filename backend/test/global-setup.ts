@@ -20,7 +20,7 @@ export default async function globalSetup() {
   const postgres = postgresBinary("postgres");
   const dataPath = await mkdtemp(join(tmpdir(), "storesync-jest-postgres-"));
   await writeFile(join(process.cwd(), ".test-postgres-data-path"), dataPath, "utf8");
-  execFileSync(initdb, ["-D", dataPath, "-U", "postgres", "-A", "trust", "--no-locale", "--encoding=UTF8"], { timeout: 60_000 });
+  execFileSync(initdb, ["-D", dataPath, "-U", "postgres", "-A", "trust", "--no-locale", "--encoding=UTF8"], { timeout: 180_000 });
   let ready = false;
   try {
     execFileSync(pgIsReady, ["-h", "127.0.0.1", "-p", String(TEST_PG_PORT), "-d", "postgres"], { timeout: 3_000 });

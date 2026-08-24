@@ -8,7 +8,9 @@ const criticalRoutes = [
   "/loyalty",
   "/cart",
   "/checkout",
+  "/whatsapp-order",
   "/account",
+  "/account/addresses",
   "/account/dashboard",
   "/account/orders",
 ];
@@ -44,7 +46,7 @@ test.describe("release browser gate", () => {
     });
 
     for (const route of criticalRoutes) {
-      await page.goto(route, { waitUntil: "networkidle" });
+      await page.goto(route, { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toBeVisible();
     }
 
@@ -78,6 +80,27 @@ test.describe("release browser gate", () => {
     await expect(page.getByRole("heading", { name: "Your cart is empty" })).toBeVisible();
   });
 
+  test("guest can prepare a complete WhatsApp order request", async ({ page }) => {
+    await page.goto("/shop", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Loading products...")).toHaveCount(0, { timeout: 12_000 });
+    await page.locator(".product-card").first().getByRole("button", { name: /add to cart/i }).click();
+    await page.goto("/whatsapp-order");
+
+    await page.getByLabel("Full name").fill("Ram Sharma");
+    await page.getByLabel("Delivery phone").fill("9812345678");
+    await page.getByLabel("Complete address").fill("Baneshwor, Kathmandu");
+    await page.getByLabel(/Google Maps link/i).fill("https://maps.google.com/?q=27.6915,85.3420");
+    await page.getByLabel(/Delivery notes/i).fill("Call before delivery");
+    await page.getByRole("button", { name: "Review WhatsApp message" }).click();
+
+    await expect(page.getByRole("heading", { name: "Ready to open WhatsApp" })).toBeVisible();
+    await expect(page.getByLabel("Prepared WhatsApp message")).toContainText("Ram Sharma");
+    await expect(page.getByLabel("Prepared WhatsApp message")).toContainText("Baneshwor, Kathmandu");
+    const href = await page.getByRole("link", { name: /Open WhatsApp/i }).getAttribute("href");
+    expect(href).toMatch(/^https:\/\/wa\.me\/9779822403262\?text=/);
+    expect(decodeURIComponent(href || "")).toContain("Delivery charge: To be confirmed");
+  });
+
   test("product detail, navigation, protected-page redirect, and keyboard focus work", async ({ page }) => {
     await page.goto("/shop");
     await expect(page.getByText("Loading products...")).toHaveCount(0, { timeout: 12_000 });
@@ -98,22 +121,40 @@ test.describe("release browser gate", () => {
   });
 
   test("loyalty is active and fails closed without a verified customer session", async ({ page }) => {
-    await page.goto("/loyalty", { waitUntil: "networkidle" });
+    await page.goto("/loyalty", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "StoreSync Rewards" })).toBeVisible();
     await expect(page.getByText("Sign in with your Nepal mobile number and OTP to view loyalty.", { exact: true })).toBeVisible();
     await expect(page.getByText(/coming soon/i)).toHaveCount(0);
   });
 
+  test("staff pages reject a request without a staff session cookie", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await page.goto("/operations");
+    await expect(page).toHaveURL(/\/staff-login\?next=%2Foperations$/);
+
+    await page.goto("/admin");
+    await expect(page).toHaveURL(/\/staff-login\?next=%2Fadmin$/);
+  });
+
   test("staff can sign in, access scoped operations, and sign out", async ({ page }) => {
+    const qaPassword = process.env.QA_BOOTSTRAP_ADMIN_PASSWORD;
+    if (!qaPassword) {
+      throw new Error("QA_BOOTSTRAP_ADMIN_PASSWORD is required for the staff release gate");
+    }
     await page.goto("/staff-login");
     await page.getByLabel("Username").fill("admin");
-    await page.getByLabel("Password").fill("StoreSync@2026");
+    await page.getByLabel("Password").fill(qaPassword);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/operations/);
+    await expect(page).toHaveURL(/\/operations\/dashboard$/);
     const accountMenu = page.getByRole("button", { name: /staff account menu/i });
     await expect(accountMenu).toContainText("Local Administrator");
-    await accountMenu.click();
-    await page.getByRole("button", { name: /logout/i }).click();
+    const isMobile = (page.viewportSize()?.width ?? 1280) < 640;
+    if (!isMobile) await accountMenu.click();
+    const logoutButton = page.getByRole("button", { name: /logout/i });
+    await expect(logoutButton).toBeVisible();
+    await logoutButton.click();
     await expect(page).toHaveURL(/\/staff-login/);
   });
 });

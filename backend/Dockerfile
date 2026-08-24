@@ -9,6 +9,7 @@ COPY backend/ ./
 COPY database/ /app/database/
 RUN npm run build
 RUN mkdir -p dist/database && cp src/database/schema.sql dist/database/schema.sql
+RUN npm prune --omit=dev
 
 FROM node:22-alpine AS runner
 
@@ -23,8 +24,13 @@ COPY --from=builder /app/backend/package.json ./package.json
 COPY --from=builder /app/database /app/database
 COPY --from=builder /app/backend/src/database/migrations.json ./dist/database/migrations.json
 COPY --from=builder /app/backend/src/database/schema.sql ./dist/database/schema.sql
-RUN mkdir -p /var/backups/storesync
+RUN mkdir -p /var/backups/storesync && chown -R node:node /app/backend /var/backups/storesync
+
+USER node
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "node dist/database/deployMigrate.js && node dist/index.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3001/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/start.js"]

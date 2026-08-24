@@ -7,9 +7,20 @@ describe("shopping cart price authority", () => {
   it("ignores client price and discount values", async () => {
     const mockedQuery = query as jest.Mock;
     mockedQuery
-      .mockResolvedValueOnce({ rows: [{ price: "100", availability_status: "AVAILABLE" }] })
+      .mockResolvedValueOnce({
+        rows: [{ price: "100", availability_status: "AVAILABLE" }],
+      })
       .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ id: "item-1", unit_price: 100, discount_amount: 0, line_total: 200 }] });
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "item-1",
+            unit_price: 100,
+            discount_amount: 0,
+            line_total: 200,
+          },
+        ],
+      });
 
     await new ShoppingCartService().addToCart({
       cart_id: "cart-1",

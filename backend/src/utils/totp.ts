@@ -23,7 +23,11 @@ function decodeBase32(value: string): Buffer {
 export function encryptMfaSecret(secret: string): string {
   decodeBase32(secret);
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", masterEncryptionKey(), iv);
+  const cipher = crypto.createCipheriv(
+    "aes-256-gcm",
+    masterEncryptionKey(),
+    iv,
+  );
   const encrypted = Buffer.concat([
     cipher.update(secret.trim().toUpperCase(), "utf8"),
     cipher.final(),
@@ -72,7 +76,8 @@ export function verifyTotp(
         digest[offset + 3]) %
       1_000_000;
     const expected = value.toString().padStart(6, "0");
-    if (crypto.timingSafeEqual(Buffer.from(code), Buffer.from(expected))) return true;
+    if (crypto.timingSafeEqual(Buffer.from(code), Buffer.from(expected)))
+      return true;
   }
   return false;
 }

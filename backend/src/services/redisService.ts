@@ -1,4 +1,5 @@
 import Redis from "ioredis";
+import { logger } from "../utils/logger.js";
 
 class RedisService {
   private client: Redis | null = null;
@@ -19,6 +20,8 @@ class RedisService {
     this.client = new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
+      connectTimeout: 5_000,
+      commandTimeout: 5_000,
       retryStrategy: (times: number) => {
         const delay = Math.min(times * 50, 2000);
         return delay;
@@ -26,23 +29,25 @@ class RedisService {
     });
 
     this.client.on("connect", () => {
-      console.log("Redis connected");
+      logger.info("Redis connected");
     });
 
     this.client.on("error", (err: Error) => {
-      console.error("Redis connection error:", err);
+      logger.error("Redis connection error", { error: err.message });
     });
 
     this.client.on("close", () => {
-      console.log("Redis connection closed");
+      logger.info("Redis connection closed");
     });
 
     // Test connection
     try {
       await this.client.ping();
-      console.log("Redis connection test successful");
+      logger.info("Redis connection test successful");
     } catch (error) {
-      console.error("Redis connection test failed:", error);
+      logger.error("Redis connection test failed", {
+        error: error instanceof Error ? error.message : "UNKNOWN_REDIS_ERROR",
+      });
       throw error;
     }
   }
@@ -116,7 +121,9 @@ class RedisService {
     try {
       return JSON.parse(value) as T;
     } catch (error) {
-      console.error("Failed to parse JSON from Redis:", error);
+      logger.warn("Failed to parse JSON from Redis", {
+        error: error instanceof Error ? error.message : "INVALID_REDIS_JSON",
+      });
       return null;
     }
   }
@@ -334,7 +341,9 @@ class RedisService {
       await client.ping();
       return true;
     } catch (error) {
-      console.error("Redis health check failed:", error);
+      logger.warn("Redis health check failed", {
+        error: error instanceof Error ? error.message : "REDIS_HEALTH_ERROR",
+      });
       return false;
     }
   }

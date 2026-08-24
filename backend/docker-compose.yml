@@ -7,9 +7,9 @@ services:
     environment:
       POSTGRES_DB: storesync
       POSTGRES_USER: storesync
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +24,7 @@ services:
     image: redis:7-alpine
     container_name: storesync-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -42,12 +42,12 @@ services:
       dockerfile: backend/Dockerfile
     container_name: storesync-backend
     environment:
-      DATABASE_URL: postgresql://storesync:${DB_PASSWORD:-changeme}@postgres:5432/storesync
+      DATABASE_URL: postgresql://storesync:${DB_PASSWORD:?Set DB_PASSWORD}@postgres:5432/storesync
       REDIS_URL: redis://redis:6379
       REDIS_NAMESPACE: storesync
       PORT: 3001
       HOST: 0.0.0.0
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-development}
       JWT_SECRET: ${JWT_SECRET}
       COOKIE_SECRET: ${COOKIE_SECRET}
       JWT_ISSUER: ${JWT_ISSUER:-storesync-backend}
@@ -79,13 +79,24 @@ services:
       DEFAULT_MAP_PROVIDER: ${DEFAULT_MAP_PROVIDER:-}
       ENABLE_ADMIN_API: true
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 35s
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 768m
+    cpus: 1.0
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    volumes:
+      - backend_backups:/var/backups/storesync
     networks:
       - storesync-network
     healthcheck:
@@ -94,6 +105,30 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  migrate:
+    profiles: ["release"]
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      MIGRATION_DATABASE_URL: postgresql://storesync:${DB_PASSWORD:?Set DB_PASSWORD}@postgres:5432/storesync
+      DATABASE_BACKUP_DIR: /var/backups/storesync
+    command: ["node", "dist/database/deployMigrate.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    volumes:
+      - backend_backups:/var/backups/storesync
+    networks:
+      - storesync-network
 
   frontend:
     build:
@@ -104,18 +139,30 @@ services:
     container_name: storesync-frontend
     environment:
       NODE_ENV: production
+      ALLOW_INSECURE_INTERNAL_API: "1"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 35s
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /app/.next/cache:size=128m,noexec,nosuid,nodev,uid=1000,gid=1000
     networks:
       - storesync-network
 
 volumes:
   postgres_data:
   redis_data:
+  backend_backups:
 
 networks:
   storesync-network:

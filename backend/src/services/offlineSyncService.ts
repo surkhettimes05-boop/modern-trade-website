@@ -45,10 +45,16 @@ interface OfflineTransaction {
 }
 
 export class OfflineSyncService {
-  private readonly ENCRYPTION_KEY =
-    process.env.ENCRYPTION_KEY || "default-key-change-in-production";
-  private readonly SIGNATURE_SECRET =
-    process.env.SIGNATURE_SECRET || "default-secret-change-in-production";
+  private readonly ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || "";
+  private readonly SIGNATURE_SECRET = process.env.SIGNATURE_SECRET || "";
+
+  constructor() {
+    if (!this.ENCRYPTION_KEY || !this.SIGNATURE_SECRET) {
+      throw new Error(
+        "ENCRYPTION_KEY and SIGNATURE_SECRET are required for offline sync",
+      );
+    }
+  }
 
   /**
    * Register or update device

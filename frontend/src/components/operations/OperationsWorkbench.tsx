@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useStaffSession } from '@/components/StaffSessionProvider';
 import { MARKET } from '@/lib/market';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 type Row = Record<string, unknown>;
 type Module = { title: string; endpoint?: string; capability: string; description: string; create?: { endpoint: string; label: string; fields: Array<{ name: string; label: string; type?: string; defaultValue?: string }> } };
@@ -33,7 +34,7 @@ export function OperationsWorkbench({ route }: { route: string }) {
   const [notice, setNotice] = useState('');
 
   const request = useCallback(async (url: string, options?: RequestInit) => {
-    const response = await fetch(url, { credentials: 'include', ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } });
+    const response = await resilientFetch(url, { credentials: 'include', ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || body.message || `Request failed (${response.status})`);
     return body;

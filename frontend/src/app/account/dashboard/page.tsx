@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 interface Customer {
   id: string;
@@ -10,7 +11,7 @@ interface Customer {
   email?: string;
   language: string;
   verification_status: string;
-  enrolled_at: string;
+  enrolled_at?: string;
 }
 
 interface Balance {
@@ -27,6 +28,21 @@ interface LedgerEntry {
   reason?: string;
 }
 
+interface LoyaltySummary {
+  enrolled: boolean;
+  account?: {
+    current_points: number;
+    earned_points: number;
+  };
+  history?: Array<{
+    id: string;
+    points_signed: number;
+    source_type: string;
+    effective_timestamp: string;
+    reason?: string;
+  }>;
+}
+
 export default function AccountDashboard() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [balance, setBalance] = useState<Balance | null>(null);
@@ -41,7 +57,7 @@ export default function AccountDashboard() {
 
     try {
       // Fetch customer profile
-      const customerResponse = await fetch('/api/auth/session/validate', {
+      const customerResponse = await resilientFetch('/api/auth/session/validate', {
       });
 
       if (!customerResponse.ok) {
@@ -52,15 +68,27 @@ export default function AccountDashboard() {
       const customerData = await customerResponse.json();
       setCustomer(customerData.customer);
 
-      // Fetch balance
-      const balanceResponse = await fetch(`/api/ledger/customer/${customerData.customer.id}/balance`);
-      const balanceData = await balanceResponse.json();
-      setBalance(balanceData);
+      const loyaltyResponse = await resilientFetch('/api/loyalty/me', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const loyaltyData = await loyaltyResponse.json() as LoyaltySummary & { error?: string };
+      if (!loyaltyResponse.ok) {
+        throw new Error(loyaltyData.error || 'Failed to load loyalty account');
+      }
 
-      // Fetch ledger
-      const ledgerResponse = await fetch(`/api/ledger/customer/${customerData.customer.id}?limit=20`);
-      const ledgerData = await ledgerResponse.json();
-      setLedger(ledgerData);
+      setBalance({
+        available: loyaltyData.account?.current_points ?? 0,
+        pending: 0,
+        lifetime_earned: loyaltyData.account?.earned_points ?? 0,
+      });
+      setLedger((loyaltyData.history ?? []).map((entry) => ({
+        id: entry.id,
+        points_signed: entry.points_signed,
+        entry_type: entry.source_type,
+        effective_timestamp: entry.effective_timestamp,
+        reason: entry.reason,
+      })));
     } catch {
       setError('Failed to load account data');
     } finally {
@@ -75,7 +103,7 @@ export default function AccountDashboard() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', {
+      await resilientFetch('/api/auth/logout', {
         method: 'POST',
         headers: { 'x-csrf-token': document.cookie.match(/(?:^|; )customer_csrf=([^;]+)/)?.[1] || '' },
       });
@@ -168,12 +196,14 @@ export default function AccountDashboard() {
                 {customer.verification_status}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Member Since</span>
-              <span className="font-medium">
-                {new Date(customer.enrolled_at).toLocaleDateString()}
-              </span>
-            </div>
+            {customer.enrolled_at && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Member Since</span>
+                <span className="font-medium">
+                  {new Date(customer.enrolled_at).toLocaleDateString()}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -212,7 +242,14 @@ export default function AccountDashboard() {
         </div>
 
         {/* Quick Links */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <a
+            href="/account/addresses"
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow cursor-pointer"
+          >
+            <h3 className="font-semibold text-gray-900 mb-2">Saved Addresses</h3>
+            <p className="text-sm text-gray-600">Manage Home, Work, and mapped delivery locations</p>
+          </a>
           <a
             href="/account/consent"
             className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow cursor-pointer"

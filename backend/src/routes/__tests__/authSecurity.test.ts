@@ -44,6 +44,18 @@ describe("Auth route security", () => {
     await app.close();
   });
 
+  it("rejects unused public OTP purposes that could send arbitrary SMS", async () => {
+    const app = await buildApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/otp/request",
+      payload: { phone: "9812345678", purpose: "ENROLLMENT" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    await app.close();
+  });
+
   it("rejects a valid but non-privileged staff session", async () => {
     const app = await buildApp();
     (query as jest.Mock).mockResolvedValue({
@@ -75,7 +87,7 @@ describe("Auth route security", () => {
     await app.close();
   });
 
-  it("allows a privileged active staff session", async () => {
+  it("allows a privileged active MFA-verified staff session", async () => {
     const app = await buildApp();
     (query as jest.Mock)
       .mockResolvedValueOnce({
@@ -88,14 +100,18 @@ describe("Auth route security", () => {
             capabilities: ["system.manage"],
             scope_type: "GLOBAL",
             scope_store_ids: [],
-            mfa_enabled: false,
+            mfa_enabled: true,
             status: "ACTIVE",
           },
         ],
         rowCount: 1,
       })
       .mockResolvedValueOnce({ rows: [], rowCount: 0 });
-    const token = app.jwt.sign({ sub: "staff-admin", jti: "session-admin" });
+    const token = app.jwt.sign({
+      sub: "staff-admin",
+      jti: "session-admin",
+      mfaVerified: true,
+    });
 
     const response = await app.inject({
       method: "GET",
@@ -105,6 +121,41 @@ describe("Auth route security", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([]);
+    await app.close();
+  });
+
+  it("requires CSRF for privileged cleanup mutations", async () => {
+    const app = await buildApp();
+    (query as jest.Mock).mockResolvedValueOnce({
+      rows: [
+        {
+          id: "staff-admin",
+          username: "admin",
+          role_id: "role-admin",
+          role_key: "platform_admin",
+          capabilities: ["system.manage"],
+          scope_type: "GLOBAL",
+          scope_store_ids: [],
+          mfa_enabled: true,
+          status: "ACTIVE",
+        },
+      ],
+      rowCount: 1,
+    });
+    const token = app.jwt.sign({
+      sub: "staff-admin",
+      jti: "session-admin",
+      mfaVerified: true,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/admin/session/cleanup",
+      cookies: { ops_session: token },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().code).toBe("CSRF_INVALID");
     await app.close();
   });
 

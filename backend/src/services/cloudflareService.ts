@@ -1,4 +1,18 @@
 import axios from "axios";
+import { logger } from "../utils/logger.js";
+
+function logCloudflareError(operation: string, error: unknown): void {
+  if (axios.isAxiosError(error)) {
+    logger.error(`Cloudflare ${operation} failed`, {
+      code: error.code,
+      status: error.response?.status,
+    });
+    return;
+  }
+  logger.error(`Cloudflare ${operation} failed`, {
+    error: error instanceof Error ? error.name : "UNKNOWN_PROVIDER_ERROR",
+  });
+}
 
 interface CloudflareConfig {
   apiToken: string;
@@ -42,7 +56,7 @@ export class CloudflareService {
 
       return response.data;
     } catch (error) {
-      console.error("Failed to purge Cloudflare cache:", error);
+      logCloudflareError("cache purge", error);
       throw error;
     }
   }
@@ -72,7 +86,7 @@ export class CloudflareService {
 
       return response.data;
     } catch (error) {
-      console.error("Failed to purge Cloudflare cache by prefix:", error);
+      logCloudflareError("prefix cache purge", error);
       throw error;
     }
   }
@@ -102,7 +116,7 @@ export class CloudflareService {
 
       return response.data;
     } catch (error) {
-      console.error("Failed to purge entire Cloudflare cache:", error);
+      logCloudflareError("full cache purge", error);
       throw error;
     }
   }
@@ -140,7 +154,7 @@ export class CloudflareService {
 
       return response.data;
     } catch (error) {
-      console.error("Failed to create Cloudflare cache rule:", error);
+      logCloudflareError("cache rule creation", error);
       throw error;
     }
   }
@@ -191,7 +205,7 @@ export class CloudflareService {
 
       return response.data;
     } catch (error) {
-      console.error("Failed to get Cloudflare zone analytics:", error);
+      logCloudflareError("analytics request", error);
       throw error;
     }
   }
@@ -224,7 +238,7 @@ export class CloudflareService {
 
       return response.data;
     } catch (error) {
-      console.error("Failed to set Cloudflare security level:", error);
+      logCloudflareError("security level update", error);
       throw error;
     }
   }
@@ -262,7 +276,7 @@ export class CloudflareService {
 
       return response.data;
     } catch (error) {
-      console.error("Failed to create Cloudflare firewall rule:", error);
+      logCloudflareError("firewall rule creation", error);
       throw error;
     }
   }
@@ -288,7 +302,7 @@ export class CloudflareService {
 
       return response.data;
     } catch (error) {
-      console.error("Failed to get Cloudflare firewall rules:", error);
+      logCloudflareError("firewall rule request", error);
       throw error;
     }
   }
