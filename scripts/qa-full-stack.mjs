@@ -31,6 +31,22 @@ try {
   run(process.execPath, ["scripts/qa-compose.mjs", "up", "-d", "--build"]);
   run(process.execPath, ["scripts/qa-verify.mjs"]);
   run(npm, ["run", "test:e2e:chromium", "--prefix", "frontend"]);
+} catch (error) {
+  spawnSync(
+    process.execPath,
+    [
+      "scripts/qa-compose.mjs",
+      "logs",
+      "--no-color",
+      "qa-migrate",
+      "qa-seed",
+      "qa-bootstrap",
+      "backend",
+      "frontend",
+    ],
+    { stdio: "inherit", env: qaEnv, shell: process.platform === "win32" },
+  );
+  throw error;
 } finally {
   const cleanup = spawnSync(
     process.execPath,

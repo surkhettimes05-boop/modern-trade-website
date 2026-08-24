@@ -10,6 +10,7 @@ BEGIN;
 -- extension used by migration 001 here so the migration role itself never
 -- needs CREATE privilege on the database.
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 DO $$
 BEGIN

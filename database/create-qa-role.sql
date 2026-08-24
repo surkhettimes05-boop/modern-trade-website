@@ -1,5 +1,9 @@
 \set ON_ERROR_STOP on
 
+-- Extensions are provisioned by the privileged database owner, never by the
+-- least-privilege runtime role used by the seed and application containers.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 SELECT format(
   'CREATE ROLE storesync_app LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
   :'app_password'
