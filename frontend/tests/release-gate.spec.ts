@@ -147,11 +147,13 @@ test.describe("release browser gate", () => {
     await page.getByLabel("Username").fill("admin");
     await page.getByLabel("Password").fill(qaPassword);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/operations/);
+    await expect(page).toHaveURL(/\/operations\/dashboard$/);
     const accountMenu = page.getByRole("button", { name: /staff account menu/i });
     await expect(accountMenu).toContainText("Local Administrator");
     await accountMenu.click();
-    await page.getByRole("button", { name: /logout/i }).click();
+    const logoutButton = page.getByRole("button", { name: /logout/i });
+    await expect(logoutButton).toBeVisible();
+    await logoutButton.click();
     await expect(page).toHaveURL(/\/staff-login/);
   });
 });
