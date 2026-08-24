@@ -168,6 +168,7 @@ services:
     pids_limit: 256
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
+      - /app/.next/cache:size=128m,noexec,nosuid,nodev,uid=1000,gid=1000
     ports:
       - "127.0.0.1:53000:3000"
     depends_on:

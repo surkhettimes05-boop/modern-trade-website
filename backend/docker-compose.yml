@@ -155,6 +155,7 @@ services:
     cpus: 1.0
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
+      - /app/.next/cache:size=128m,noexec,nosuid,nodev,uid=1000,gid=1000
     networks:
       - storesync-network
 
