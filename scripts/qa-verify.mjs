@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const compose = ["compose", "-f", "docker-compose.qa.yml"];
 const composeEnv = {
@@ -55,6 +56,12 @@ async function checkHttp(label, url, attempts = 20) {
 }
 
 const results = [];
+const expectedMigrationCount = JSON.parse(
+  readFileSync(
+    new URL("../backend/src/database/migrations.json", import.meta.url),
+    "utf8",
+  ),
+).length;
 results.push(
   await checkHttp(
     "backend readiness",
@@ -85,10 +92,15 @@ const postgresLines = postgres
   .split(/\r?\n/)
   .map((line) => line.trim())
   .filter(Boolean);
-if (postgresLines.join("\n") !== "21\norder_events\n2\n1") {
+if (
+  postgresLines.join("\n") !==
+  `${expectedMigrationCount}\norder_events\n2\n1`
+) {
   throw new Error(`Unexpected PostgreSQL QA verification output:\n${postgres}`);
 }
-results.push("PostgreSQL: 21 migrations, order_events, 2 stores, 1 staff");
+results.push(
+  `PostgreSQL: ${expectedMigrationCount} migrations, order_events, 2 stores, 1 staff`,
+);
 
 const roleVerification = runDocker([
   "exec",
