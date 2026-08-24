@@ -150,7 +150,8 @@ test.describe("release browser gate", () => {
     await expect(page).toHaveURL(/\/operations\/dashboard$/);
     const accountMenu = page.getByRole("button", { name: /staff account menu/i });
     await expect(accountMenu).toContainText("Local Administrator");
-    await accountMenu.click();
+    const isMobile = (page.viewportSize()?.width ?? 1280) < 640;
+    if (!isMobile) await accountMenu.click();
     const logoutButton = page.getByRole("button", { name: /logout/i });
     await expect(logoutButton).toBeVisible();
     await logoutButton.click();
