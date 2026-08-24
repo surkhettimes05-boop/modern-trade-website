@@ -48,8 +48,11 @@ not need to be installed on your laptop.
 The Blueprint creates `storesync-redis`. Supply `DATABASE_URL` for a managed
 PostgreSQL database reachable by the Web Service. Use a private/internal URL
 when the database shares the Render region; otherwise use the provider's TLS
-URL. The deployment migration command requires a PostgreSQL URL and working
-TLS certificate validation.
+URL. The Blueprint uses `DATABASE_SSL=true` with
+`DATABASE_SSL_REJECT_UNAUTHORIZED=false`, equivalent to PostgreSQL
+`sslmode=require`: the connection remains encrypted, but Node does not require
+a provider CA bundle. If your database provider supplies a CA certificate to
+the container, set rejection back to `true` for identity verification.
 
 ### 2. Create the backend Web Service
 

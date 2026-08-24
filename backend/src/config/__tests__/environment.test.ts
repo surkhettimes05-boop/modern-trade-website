@@ -127,6 +127,24 @@ describe("environment safety", () => {
     ).not.toThrow();
   });
 
+  it("allows TLS require mode for a managed database without a CA bundle", () => {
+    expect(() =>
+      validateProductionEnvironment({
+        ...productionEnvironment,
+        DATABASE_SSL_REJECT_UNAUTHORIZED: "false",
+      }),
+    ).not.toThrow();
+  });
+
+  it("still requires encrypted database transport in production", () => {
+    expect(() =>
+      validateProductionEnvironment({
+        ...productionEnvironment,
+        DATABASE_SSL: "false",
+      }),
+    ).toThrow("DATABASE_SSL=true is required in production");
+  });
+
   it("requires unique cryptographic secrets and bounded rate limits", () => {
     expect(() =>
       validateProductionEnvironment({
