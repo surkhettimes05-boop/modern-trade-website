@@ -204,6 +204,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         .optional(),
       date_from: z.coerce.date().optional(),
       date_to: z.coerce.date().optional(),
+      search: z.string().trim().max(100).optional(),
       limit: z.coerce.number().int().min(1).max(200).default(50),
       offset: z.coerce.number().int().min(0).max(100_000).default(0),
     });
