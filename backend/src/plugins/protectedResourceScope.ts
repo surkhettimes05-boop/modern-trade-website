@@ -422,6 +422,19 @@ export async function assertProtectedResourceScope(
     return;
   }
 
+  // These administration handlers derive the actor's allowed store IDs and
+  // apply them directly in every query. Requiring a caller-supplied store ID
+  // here would break authorized all-store/organization views and would make a
+  // client-controlled value the source of truth.
+  const path = request.url.split("?", 1)[0].replace(/^\/api/, "");
+  if (
+    /^\/admin\/(?:dashboard|context\/stores|notifications(?:\/read)?|search|products(?:\/[^/]+)?|categories(?:\/[^/]+)?|stores(?:\/[^/]+)?|inventory|inventory-adjustments|customers(?:\/[^/]+(?:\/orders)?)?|roles(?:\/[^/]+)?|audit(?:\/[^/]+)?|pages(?:\/[^/]+)?|orders(?:\/[^/]+(?:\/items)?)?|batches|suppliers(?:\/[^/]+)?|purchase-orders(?:\/[^/]+(?:\/items)?)?|receiving(?:\/[^/]+(?:\/items)?)?|staff(?:\/[^/]+)?)$/.test(
+      path,
+    )
+  ) {
+    return;
+  }
+
   const authoritativeResourceStores = await resolvedResourceStoreIds(request);
   const opaque = opaqueResourceParam(request.params);
   if (opaque && !authoritativeResourceStores) {
