@@ -65,6 +65,12 @@ export default {
     context: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+    // Liveness must only prove that the Worker runtime is reachable. Keep it
+    // independent from Fastify/plugin/database initialization so a startup
+    // failure cannot turn the platform health probe into an opaque 1101.
+    if (request.method === "GET" && url.pathname === "/api/health/live") {
+      return Response.json({ status: "ok" });
+    }
     const isHealthCheck = url.pathname.startsWith("/api/health/");
     if (request.method !== "OPTIONS" && !isHealthCheck) {
       const authenticationRequest =
