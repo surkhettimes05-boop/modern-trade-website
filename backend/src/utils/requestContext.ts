@@ -15,6 +15,10 @@ export function runWithRequestContext(
   requestContext.run({ requestId }, callback);
 }
 
+export function enterRequestContext(requestId: string): void {
+  requestContext.enterWith({ requestId });
+}
+
 export function currentRequestId(): string | undefined {
   return requestContext.getStore()?.requestId;
 }

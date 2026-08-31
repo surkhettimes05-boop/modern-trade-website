@@ -25,6 +25,7 @@ import { verifyDatabaseSecurityPosture } from "./database/databaseSecurity.js";
 import { getResilienceConfig } from "./config/resilience.js";
 import { closePool } from "./database/connection.js";
 import {
+  enterRequestContext,
   closeCurrentRequestDatabasePool,
   runWithRequestContext,
 } from "./utils/requestContext.js";
@@ -79,9 +80,15 @@ export async function buildApp(
         : false,
   });
 
-  fastify.addHook("onRequest", (request, _reply, done) => {
-    runWithRequestContext(request.id, done);
-  });
+  if (workerRuntime) {
+    fastify.addHook("onRequest", async (request) => {
+      enterRequestContext(request.id);
+    });
+  } else {
+    fastify.addHook("onRequest", (request, _reply, done) => {
+      runWithRequestContext(request.id, done);
+    });
+  }
 
   if (workerRuntime) {
     fastify.addHook("onResponse", async () => {
