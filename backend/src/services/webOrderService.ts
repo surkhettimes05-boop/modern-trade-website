@@ -223,6 +223,7 @@ export class WebOrderService {
     payment_status?: string;
     date_from?: Date;
     date_to?: Date;
+    search?: string;
     limit?: number;
     offset?: number;
   }): Promise<WebOrder[]> {
@@ -231,38 +232,46 @@ export class WebOrderService {
     let paramIndex = 1;
 
     if (filters.customer_id) {
-      conditions.push(`customer_id = $${paramIndex}`);
+      conditions.push(`wo.customer_id = $${paramIndex}`);
       params.push(filters.customer_id);
       paramIndex++;
     }
 
     if (filters.store_id) {
-      conditions.push(`store_id = $${paramIndex}`);
+      conditions.push(`wo.store_id = $${paramIndex}`);
       params.push(filters.store_id);
       paramIndex++;
     }
 
     if (filters.status) {
-      conditions.push(`status = $${paramIndex}`);
+      conditions.push(`wo.status = $${paramIndex}`);
       params.push(filters.status);
       paramIndex++;
     }
 
     if (filters.payment_status) {
-      conditions.push(`payment_status = $${paramIndex}`);
+      conditions.push(`wo.payment_status = $${paramIndex}`);
       params.push(filters.payment_status);
       paramIndex++;
     }
 
     if (filters.date_from) {
-      conditions.push(`order_date >= $${paramIndex}`);
+      conditions.push(`wo.order_date >= $${paramIndex}`);
       params.push(filters.date_from);
       paramIndex++;
     }
 
     if (filters.date_to) {
-      conditions.push(`order_date <= $${paramIndex}`);
+      conditions.push(`wo.order_date <= $${paramIndex}`);
       params.push(filters.date_to);
+      paramIndex++;
+    }
+
+    if (filters.search) {
+      conditions.push(
+        `(wo.order_number ILIKE $${paramIndex} OR wo.shipping_name ILIKE $${paramIndex} OR c.preferred_name ILIKE $${paramIndex})`,
+      );
+      params.push(`%${filters.search}%`);
       paramIndex++;
     }
 
@@ -275,7 +284,9 @@ export class WebOrderService {
     const offsetClause = `OFFSET $${paramIndex + 1}`;
 
     const result = await query(
-      `SELECT * FROM web_orders ${whereClause} ORDER BY order_date DESC ${limitClause} ${offsetClause}`,
+      `SELECT wo.*, c.preferred_name AS customer_name, s.name_en AS store_name
+       FROM web_orders wo LEFT JOIN customers c ON c.id = wo.customer_id LEFT JOIN stores s ON s.id = wo.store_id
+       ${whereClause} ORDER BY wo.order_date DESC ${limitClause} ${offsetClause}`,
       params,
     );
 

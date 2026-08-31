@@ -194,6 +194,32 @@ describe("protected resource scope", () => {
     expect(mockedQuery).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "/api/admin/dashboard",
+    "/api/admin/context/stores",
+    "/api/admin/products",
+    "/api/admin/customers/customer-a/orders",
+    "/api/admin/notifications/read",
+  ])(
+    "allows an internally scoped admin handler to derive scope for %s",
+    async (url) => {
+      await expect(
+        assertProtectedResourceScope(
+          request({ url, params: {}, query: {}, body: {} }),
+        ),
+      ).resolves.toBeUndefined();
+      expect(mockedRequireStoreAccess).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not treat arbitrary admin handlers as internally scoped", async () => {
+    await expect(
+      assertProtectedResourceScope(
+        request({ url: "/api/admin/unscoped-export", params: {}, query: {} }),
+      ),
+    ).rejects.toMatchObject({ code: "STORE_ID_REQUIRED" });
+  });
+
   it("uses the target staff store instead of a supplied store", async () => {
     mockedQuery.mockResolvedValue({
       rows: [
