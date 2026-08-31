@@ -44,26 +44,28 @@ export async function buildApp(
   }
 
   const fastify = Fastify({
-    logger: {
-      redact: {
-        paths: [
-          "req.headers.authorization",
-          "req.headers.cookie",
-          "request.headers.authorization",
-          "request.headers.cookie",
-          "res.headers.set-cookie",
-          "response.headers.set-cookie",
-          "body.password",
-          "body.otp_code",
-          "body.phone",
-          "body.email",
-          "*.password",
-          "*.token",
-          "*.secret",
-        ],
-        censor: "[REDACTED]",
-      },
-    },
+    logger: workerRuntime
+      ? false
+      : {
+          redact: {
+            paths: [
+              "req.headers.authorization",
+              "req.headers.cookie",
+              "request.headers.authorization",
+              "request.headers.cookie",
+              "res.headers.set-cookie",
+              "response.headers.set-cookie",
+              "body.password",
+              "body.otp_code",
+              "body.phone",
+              "body.email",
+              "*.password",
+              "*.token",
+              "*.secret",
+            ],
+            censor: "[REDACTED]",
+          },
+        },
     bodyLimit: 1024 * 1024,
     requestIdHeader: "x-request-id",
     requestTimeout: resilience.httpRequestTimeoutMs,
