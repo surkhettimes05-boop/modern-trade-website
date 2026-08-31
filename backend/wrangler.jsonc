@@ -16,8 +16,8 @@
     "DEFAULT_LOCALE": "en-NP",
     "DEFAULT_TIMEZONE": "Asia/Kathmandu",
     "DEFAULT_TAX_REGIME": "IRD",
-    "CORS_ORIGIN": "https://your-project.vercel.app",
-    "APP_URL": "https://your-project.vercel.app",
+    "CORS_ORIGIN": "https://storesync-modern-trade.vercel.app",
+    "APP_URL": "https://storesync-modern-trade.vercel.app",
     "ENABLE_ADMIN_API": "true",
     "ENABLE_ELECTRONIC_PAYMENTS": "false",
     "ENABLE_ADVANCED_ANALYTICS": "false",
@@ -40,7 +40,7 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "00000000000000000000000000000000",
+      "id": "4191937a359d47dda4c75f2ba1395d18",
     },
   ],
   "ratelimits": [
