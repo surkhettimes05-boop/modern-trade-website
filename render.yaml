@@ -13,7 +13,7 @@ services:
     dockerContext: .
     region: singapore
     plan: free
-    healthCheckPath: /api/health/ready
+    healthCheckPath: /api/health/live
     envVars:
       - key: NODE_ENV
         value: production

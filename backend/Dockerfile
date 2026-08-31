@@ -28,9 +28,9 @@ RUN mkdir -p /var/backups/storesync && chown -R node:node /app/backend /var/back
 
 USER node
 
-EXPOSE 3001
+EXPOSE 10000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3001/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:10000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/start.js"]
+CMD ["node", "dist/index.js"]
