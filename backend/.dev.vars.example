@@ -1,0 +1,13 @@
+# Copy to .dev.vars for local `npm run worker:dev`. Never commit .dev.vars.
+JWT_SECRET=replace-with-at-least-32-random-bytes
+COOKIE_SECRET=replace-with-a-different-32-byte-value
+ENCRYPTION_KEY=replace-with-a-different-32-byte-value
+SIGNATURE_SECRET=replace-with-a-different-32-byte-value
+OTP_HASH_SECRET=replace-with-a-different-32-byte-value
+PAYMENT_ENCRYPTION_KEY=replace-with-64-hexadecimal-characters
+
+# Optional production integrations
+SMS_PROVIDER=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_VERIFY_SERVICE_SID=

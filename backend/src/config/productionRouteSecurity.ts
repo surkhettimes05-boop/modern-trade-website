@@ -8,7 +8,7 @@ export type ProductionRouteBoundary =
   | "MIXED_EXPLICIT";
 
 /**
- * Every Fastify plugin registered by index.ts must appear here. The matching
+ * Every Fastify plugin registered by app.ts must appear here. The matching
  * test fails when a new production plugin is registered without an explicit
  * security-boundary review.
  */

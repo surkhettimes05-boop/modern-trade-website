@@ -182,7 +182,7 @@ export class StrapiService {
     _mimeType: string,
   ): Promise<StrapiResponse<any>> {
     const formData = new FormData();
-    formData.append("files", file, filename);
+    formData.append("files", new Blob([new Uint8Array(file)]), filename);
 
     const response = await axios.post(
       `${this.config.apiUrl}/upload`,

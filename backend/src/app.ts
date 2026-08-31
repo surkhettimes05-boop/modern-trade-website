@@ -1,0 +1,189 @@
+import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
+import jwt from "@fastify/jwt";
+import cookie from "@fastify/cookie";
+
+import { healthRoutes } from "./routes/health.js";
+import { publicRoutes } from "./routes/public.js";
+import { authRoutes } from "./routes/auth.js";
+import { shoppingCartRoutes } from "./routes/shoppingCart.js";
+import { webOrderRoutes } from "./routes/webOrders.js";
+import { operationsAuthRoutes } from "./routes/operationsAuth.js";
+import { checkoutRoutes } from "./routes/checkout.js";
+import { addressRoutes } from "./routes/addresses.js";
+import { protectedOperations } from "./plugins/protectedOperations.js";
+import { privilegedAdministration } from "./plugins/privilegedAdministration.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { validateProductionEnvironment } from "./config/environment.js";
+import { redisService } from "./services/redisService.js";
+import { loyaltyMvpRoutes } from "./routes/loyaltyMvp.js";
+import { paymentWebhookRoutes } from "./routes/payments.js";
+import { deferredFeatureEnabled } from "./config/releaseFeatures.js";
+import { verifyDatabaseSecurityPosture } from "./database/databaseSecurity.js";
+import { getResilienceConfig } from "./config/resilience.js";
+import { closePool } from "./database/connection.js";
+import {
+  closeCurrentRequestDatabasePool,
+  runWithRequestContext,
+} from "./utils/requestContext.js";
+
+export type BackendRuntime = "node" | "cloudflare-worker";
+
+export async function buildApp(
+  runtime: BackendRuntime = "node",
+): Promise<FastifyInstance> {
+  validateProductionEnvironment();
+  const resilience = getResilienceConfig();
+  const workerRuntime = runtime === "cloudflare-worker";
+
+  if (!workerRuntime) {
+    await verifyDatabaseSecurityPosture();
+    await redisService.connect();
+  }
+
+  const fastify = Fastify({
+    logger: {
+      redact: {
+        paths: [
+          "req.headers.authorization",
+          "req.headers.cookie",
+          "request.headers.authorization",
+          "request.headers.cookie",
+          "res.headers.set-cookie",
+          "response.headers.set-cookie",
+          "body.password",
+          "body.otp_code",
+          "body.phone",
+          "body.email",
+          "*.password",
+          "*.token",
+          "*.secret",
+        ],
+        censor: "[REDACTED]",
+      },
+    },
+    bodyLimit: 1024 * 1024,
+    requestIdHeader: "x-request-id",
+    requestTimeout: resilience.httpRequestTimeoutMs,
+    connectionTimeout: resilience.httpConnectionTimeoutMs,
+    keepAliveTimeout: resilience.httpKeepAliveTimeoutMs,
+    return503OnClosing: true,
+    trustProxy: workerRuntime
+      ? true
+      : process.env.TRUST_PROXY_HOPS
+        ? Number.parseInt(process.env.TRUST_PROXY_HOPS, 10)
+        : false,
+  });
+
+  fastify.addHook("onRequest", (request, _reply, done) => {
+    runWithRequestContext(request.id, done);
+  });
+
+  if (workerRuntime) {
+    fastify.addHook("onResponse", async () => {
+      await closeCurrentRequestDatabasePool();
+    });
+    fastify.addHook("onRequestAbort", async () => {
+      await closeCurrentRequestDatabasePool();
+    });
+  }
+
+  await fastify.register(cors, {
+    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    credentials: true,
+  });
+
+  await fastify.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+      },
+    },
+  });
+
+  if (!workerRuntime) {
+    await fastify.register(rateLimit, {
+      max: Number(process.env.RATE_LIMIT_MAX_REQUESTS || "100"),
+      timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS || "900000"),
+      redis: redisService.getClient(),
+      skipOnError: false,
+    });
+  }
+
+  await fastify.register(jwt, {
+    secret:
+      process.env.JWT_SECRET ||
+      (() => {
+        throw new Error("JWT_SECRET is required");
+      })(),
+    cookie: { cookieName: "ops_session", signed: false },
+    sign: {
+      iss: process.env.JWT_ISSUER || "storesync-backend",
+      aud: process.env.JWT_AUDIENCE || "storesync-operations",
+    },
+    verify: {
+      allowedIss: process.env.JWT_ISSUER || "storesync-backend",
+      allowedAud: process.env.JWT_AUDIENCE || "storesync-operations",
+    },
+  });
+
+  await fastify.register(cookie, {
+    secret:
+      process.env.COOKIE_SECRET ||
+      (() => {
+        throw new Error("COOKIE_SECRET is required");
+      })(),
+    hook: "onRequest",
+  });
+
+  fastify.setErrorHandler(errorHandler);
+  await fastify.register(healthRoutes, { prefix: "/api/health" });
+  await fastify.register(publicRoutes, { prefix: "/api/public" });
+  if (deferredFeatureEnabled("ENABLE_ELECTRONIC_PAYMENTS")) {
+    await fastify.register(paymentWebhookRoutes, { prefix: "/api" });
+  }
+
+  if (!workerRuntime) {
+    fastify.addHook("onClose", async () => {
+      const { shutdownObservability } = await import("./instrumentation.js");
+      const results = await Promise.allSettled([
+        redisService.disconnect(),
+        closePool(),
+        shutdownObservability(),
+      ]);
+      const failures = results.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failures.length) {
+        throw new AggregateError(
+          failures.map((failure) => failure.reason),
+          "One or more backend dependencies failed to close",
+        );
+      }
+    });
+  }
+
+  await fastify.register(authRoutes, { prefix: "/api/auth" });
+  await fastify.register(shoppingCartRoutes, { prefix: "/api" });
+  await fastify.register(checkoutRoutes, { prefix: "/api" });
+  await fastify.register(addressRoutes, { prefix: "/api" });
+  await fastify.register(loyaltyMvpRoutes, { prefix: "/api" });
+
+  if (process.env.ENABLE_ADMIN_API === "true") {
+    await fastify.register(operationsAuthRoutes, {
+      prefix: "/api/operations-auth",
+    });
+    await fastify.register(protectedOperations, { prefix: "/api" });
+    await fastify.register(webOrderRoutes, { prefix: "/api" });
+    await fastify.register(privilegedAdministration, { prefix: "/api" });
+  }
+
+  return fastify;
+}

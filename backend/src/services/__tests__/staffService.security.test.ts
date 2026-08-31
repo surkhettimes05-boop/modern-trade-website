@@ -15,7 +15,11 @@ describe("staff credential security", () => {
     expect(query).toHaveBeenCalledTimes(1);
     const [sql, parameters] = (query as jest.Mock).mock.calls[0];
     expect(sql).toContain("WITH changed_staff AS");
+    expect(sql).toContain("public.crypt($1, public.gen_salt('bf', 12))");
     expect(sql).toContain("is_revoked = TRUE");
-    expect(parameters[0]).not.toBe("a-long-private-password");
+    expect(parameters).toEqual([
+      "a-long-private-password",
+      "10000000-0000-4000-8000-000000000001",
+    ]);
   });
 });
