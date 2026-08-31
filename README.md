@@ -36,6 +36,15 @@ provide `DATABASE_URL`, the HTTPS `APP_URL` and `CORS_ORIGIN`, and an exactly
 [`backend/DEPLOYMENT.md`](backend/DEPLOYMENT.md) for the full variable groups,
 optional integration rules, migration startup behavior, and health checks.
 
+## Vercel + Cloudflare deployment
+
+The frontend can run on Vercel while the Fastify API runs on Cloudflare
+Workers with Hyperdrive and Cloudflare rate-limit bindings. Use
+[`docs/VERCEL_CLOUDFLARE_DEPLOYMENT.md`](docs/VERCEL_CLOUDFLARE_DEPLOYMENT.md)
+for database preparation, secrets, one-command validation, deployment, and
+smoke-test instructions. The Vercel project should use `frontend` as its Root
+Directory and keep the Worker URL in the server-only `API_URL` variable.
+
 ## Local development
 
 Prerequisites: Node.js 22+, PostgreSQL 14+, and a Redis 7-compatible service.
@@ -67,6 +76,6 @@ Disposable PostgreSQL/Redis/container certification: `npm run qa:certify`.
 
 Native Windows QA, when PostgreSQL, Memurai and Playwright browsers are installed: `npm run qa:local`.
 
-The Compose stack performs a backup before migration, applies the canonical migration manifest, seeds Nepal data, waits for PostgreSQL and Redis health, and does not start the frontend until backend readiness passes. Readiness checks database connectivity, migration 020, and Redis. Liveness is `/api/health/live`; integration state is `/api/health/integrations`.
+The Compose stack performs a backup before migration, applies the canonical migration manifest, seeds Nepal data, waits for PostgreSQL and Redis health, and does not start the frontend until backend readiness passes. Readiness checks database connectivity, the latest canonical migration, and Redis (Redis is replaced by platform rate limiting in the Worker runtime). Liveness is `/api/health/live`; integration state is `/api/health/integrations`.
 
 See `implementation/RELEASE_GATE.md`, `docs/PRODUCTION_RECOVERY_RUNBOOK.md`, and `docs/PAYMENT_EXTERNAL_REQUIREMENTS.md` before approving a pilot release. A command is not certified until its result is recorded in the release evidence.
