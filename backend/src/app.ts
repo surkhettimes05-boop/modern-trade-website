@@ -99,10 +99,12 @@ export async function buildApp(
     });
   }
 
-  await fastify.register(cors, {
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-    credentials: true,
-  });
+  if (!workerRuntime) {
+    await fastify.register(cors, {
+      origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+      credentials: true,
+    });
+  }
 
   await fastify.register(helmet, {
     contentSecurityPolicy: {
