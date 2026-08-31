@@ -94,7 +94,7 @@ export async function buildApp(
     fastify.addHook("onResponse", async () => {
       await closeCurrentRequestDatabasePool();
     });
-    fastify.addHook("onRequestAbort", async () => {
+    fastify.addHook("onRequestAbort", async (_request) => {
       await closeCurrentRequestDatabasePool();
     });
   }
