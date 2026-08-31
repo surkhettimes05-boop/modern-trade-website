@@ -2,45 +2,63 @@ import pg from "pg";
 import { logger } from "../utils/logger.js";
 import { getDatabaseUrl } from "../config/environment.js";
 import { getResilienceConfig } from "../config/resilience.js";
-import { currentRequestId } from "../utils/requestContext.js";
+import {
+  currentRequestDatabasePool,
+  currentRequestId,
+  setCurrentRequestDatabasePool,
+} from "../utils/requestContext.js";
 
 const { Pool } = pg;
 
 let pool: pg.Pool | null = null;
 
+function createPool(): pg.Pool {
+  const limits = getResilienceConfig();
+  const createdPool = new Pool({
+    connectionString: getDatabaseUrl(),
+    ssl:
+      process.env.CLOUDFLARE_WORKER !== "true" &&
+      process.env.DATABASE_SSL === "true"
+        ? {
+            rejectUnauthorized:
+              process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
+          }
+        : false,
+    max: limits.databasePoolMax,
+    idleTimeoutMillis: limits.databaseIdleTimeoutMs,
+    connectionTimeoutMillis: limits.databaseConnectionTimeoutMs,
+    statement_timeout: limits.databaseStatementTimeoutMs,
+    query_timeout: limits.databaseQueryTimeoutMs,
+    lock_timeout: limits.databaseLockTimeoutMs,
+    idle_in_transaction_session_timeout:
+      limits.databaseIdleTransactionTimeoutMs,
+  });
+
+  createdPool.on("error", (err: Error) => {
+    logger.error("Unexpected error on idle client", err);
+  });
+
+  createdPool.on("connect", () => {
+    logger.debug("New database client connected");
+  });
+
+  createdPool.on("remove", () => {
+    logger.debug("Database client removed");
+  });
+  return createdPool;
+}
+
 export const getPool = (): pg.Pool => {
+  if (process.env.CLOUDFLARE_WORKER === "true") {
+    const requestPool = currentRequestDatabasePool();
+    if (requestPool) return requestPool;
+    const createdPool = createPool();
+    setCurrentRequestDatabasePool(createdPool);
+    return createdPool;
+  }
+
   if (!pool) {
-    const limits = getResilienceConfig();
-    pool = new Pool({
-      connectionString: getDatabaseUrl(),
-      ssl:
-        process.env.DATABASE_SSL === "true"
-          ? {
-              rejectUnauthorized:
-                process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
-            }
-          : false,
-      max: limits.databasePoolMax,
-      idleTimeoutMillis: limits.databaseIdleTimeoutMs,
-      connectionTimeoutMillis: limits.databaseConnectionTimeoutMs,
-      statement_timeout: limits.databaseStatementTimeoutMs,
-      query_timeout: limits.databaseQueryTimeoutMs,
-      lock_timeout: limits.databaseLockTimeoutMs,
-      idle_in_transaction_session_timeout:
-        limits.databaseIdleTransactionTimeoutMs,
-    });
-
-    pool.on("error", (err: Error) => {
-      logger.error("Unexpected error on idle client", err);
-    });
-
-    pool.on("connect", () => {
-      logger.debug("New database client connected");
-    });
-
-    pool.on("remove", () => {
-      logger.debug("Database client removed");
-    });
+    pool = createPool();
   }
 
   return pool;

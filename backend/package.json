@@ -21,7 +21,12 @@
     "verify:database-role": "node dist/database/verifyDatabaseRole.js",
     "security:verify-db-role": "tsx src/database/verifyDatabaseRole.ts",
     "seed": "tsx src/database/seed.ts",
-    "bootstrap-admin": "tsx src/database/bootstrapAdmin.ts"
+    "bootstrap-admin": "tsx src/database/bootstrapAdmin.ts",
+    "worker:types": "wrangler types src/worker-configuration.d.ts --strict-vars false",
+    "worker:dev": "wrangler dev",
+    "worker:type-check": "tsc --project tsconfig.worker.json --noEmit",
+    "worker:check": "wrangler deploy --dry-run --outdir dist-worker",
+    "worker:deploy": "node scripts/validate-worker-config.mjs && wrangler deploy"
   },
   "keywords": [],
   "author": "",
@@ -62,6 +67,7 @@
     "prettier": "^3.9.6",
     "ts-jest": "^29.4.12",
     "tsx": "^4.23.11",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "wrangler": "^4.127.1"
   }
 }
