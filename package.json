@@ -1,6 +1,9 @@
 {
   "name": "storesync-qa",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "security:static": "node scripts/security-static-check.mjs",
     "qa:up": "node scripts/qa-compose.mjs up -d --build",
