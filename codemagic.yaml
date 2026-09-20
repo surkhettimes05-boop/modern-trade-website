@@ -5,10 +5,13 @@ workflows:
     environment:
       flutter: stable
       vars:
+        APP_ENV: staging
         API_BASE_URL: https://storesync-backend-dg8z.onrender.com
     scripts:
       - name: Install dependencies
-        script: cd modern_trade_flutter && flutter pub get
+        script: cd modern_trade_flutter && flutter pub get --enforce-lockfile
+      - name: Scan for committed credentials
+        script: cd modern_trade_flutter && dart run tool/check_secrets.dart
       - name: Verify formatting
         script: cd modern_trade_flutter && dart format --output=none --set-exit-if-changed .
       - name: Analyze
@@ -16,7 +19,7 @@ workflows:
       - name: Test
         script: cd modern_trade_flutter && flutter test
       - name: Build debug APK
-        script: cd modern_trade_flutter && flutter build apk --debug --dart-define=API_BASE_URL="$API_BASE_URL"
+        script: cd modern_trade_flutter && flutter build apk --debug --dart-define=APP_ENV="$APP_ENV" --dart-define=API_BASE_URL="$API_BASE_URL"
     artifacts:
       - modern_trade_flutter/build/app/outputs/flutter-apk/app-debug.apk
 
@@ -28,12 +31,13 @@ workflows:
       groups:
         - nova_mart_android_signing
       vars:
+        APP_ENV: production
         API_BASE_URL: https://storesync-backend-dg8z.onrender.com
         ANDROID_KEYSTORE_PATH: /tmp/nova-mart-release.jks
     scripts:
       - name: Validate release configuration
         script: |
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD API_BASE_URL PRIVACY_POLICY_URL TERMS_URL; do
             if [ -z "$(printenv "$name")" ]; then
               echo "Missing required Codemagic secret: $name"
               exit 1
@@ -42,7 +46,9 @@ workflows:
       - name: Restore signing keystore
         script: echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
       - name: Install dependencies
-        script: cd modern_trade_flutter && flutter pub get
+        script: cd modern_trade_flutter && flutter pub get --enforce-lockfile
+      - name: Scan for committed credentials
+        script: cd modern_trade_flutter && dart run tool/check_secrets.dart
       - name: Verify formatting
         script: cd modern_trade_flutter && dart format --output=none --set-exit-if-changed .
       - name: Analyze
@@ -50,6 +56,7 @@ workflows:
       - name: Test
         script: cd modern_trade_flutter && flutter test
       - name: Build signed app bundle
-        script: cd modern_trade_flutter && flutter build appbundle --release --dart-define=API_BASE_URL="$API_BASE_URL" --dart-define=SUPPORT_PHONE="$SUPPORT_PHONE" --dart-define=PRIVACY_POLICY_URL="$PRIVACY_POLICY_URL" --dart-define=TERMS_URL="$TERMS_URL"
+        script: cd modern_trade_flutter && flutter build appbundle --release --obfuscate --split-debug-info=build/symbols/android --dart-define=APP_ENV="$APP_ENV" --dart-define=API_BASE_URL="$API_BASE_URL" --dart-define=SUPPORT_PHONE="$SUPPORT_PHONE" --dart-define=PRIVACY_POLICY_URL="$PRIVACY_POLICY_URL" --dart-define=TERMS_URL="$TERMS_URL"
     artifacts:
       - modern_trade_flutter/build/app/outputs/bundle/release/app-release.aab
+      - modern_trade_flutter/build/symbols/android/**

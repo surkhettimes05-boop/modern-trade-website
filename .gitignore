@@ -19,7 +19,6 @@ out/
 .turbo/
 .local-run/
 backend/.test-postgres-data-path
-backend/dist-worker/
 
 # OS/editor files
 .DS_Store
