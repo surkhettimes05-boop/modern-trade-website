@@ -16,6 +16,10 @@ export async function healthRoutes(fastify: FastifyInstance) {
   };
   fastify.get("/", liveness);
   fastify.get("/live", liveness);
+  // If this route is reachable, Fastify completed plugin registration and the
+  // HTTP server is capable of serving probes. Dependency gating belongs to the
+  // separate readiness endpoint below.
+  fastify.get("/startup", async () => ({ status: "started" }));
 
   fastify.get("/db", async (_, reply) => {
     try {

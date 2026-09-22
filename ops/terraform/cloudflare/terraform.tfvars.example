@@ -1,0 +1,9 @@
+zone_id                      = "replace-with-cloudflare-zone-id"
+storefront_hostname          = "shop.example.com"
+storefront_origin_hostname   = "example-frontend.vercel.app"
+api_hostname                 = "api.example.com"
+api_origin_hostname          = "example-api.onrender.com"
+enable_managed_waf           = false
+api_requests_per_minute      = 120
+auth_requests_per_minute     = 10
+rate_limit_mitigation_seconds = 600

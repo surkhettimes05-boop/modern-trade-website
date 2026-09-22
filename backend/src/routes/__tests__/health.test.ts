@@ -34,6 +34,15 @@ describe("Health Endpoints", () => {
     expect(response.json().status).toBe("ok");
   });
 
+  it("exposes a distinct startup endpoint", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/health/startup",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: "started" });
+  });
+
   it("reports readiness failure when Redis or migrations are unavailable", async () => {
     const response = await app.inject({
       method: "GET",

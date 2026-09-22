@@ -47,7 +47,7 @@ export default function LoyaltyDashboard() {
       <div className="mx-auto max-w-5xl space-y-8">
         <section className="rounded-3xl bg-gradient-to-br from-red-700 via-red-600 to-rose-500 p-8 text-white shadow-xl sm:p-12">
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-red-100">Nepal pilot · NPR</p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">StoreSync Rewards</h1>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">Pasalho Rewards</h1>
           <p className="mt-4 max-w-2xl text-lg text-red-50">Earn points only after a POS sale is completed or a cash-on-delivery order is delivered. Every adjustment remains visible in your history.</p>
         </section>
         {error && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">{error}</div>}

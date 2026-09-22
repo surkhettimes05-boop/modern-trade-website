@@ -1,5 +1,11 @@
 import { query } from "../database/connection.js";
 import { redisService } from "./redisService.js";
+import {
+  normalizeTelemetryEndpoint,
+  sanitizeMetricTags,
+  scrubTelemetryString,
+  scrubTelemetryValue,
+} from "../utils/telemetrySanitizer.js";
 
 interface Metric {
   name: string;
@@ -21,12 +27,13 @@ export class ObservabilityService {
    * Record metric
    */
   async recordMetric(metric: Metric): Promise<void> {
+    const tags = sanitizeMetricTags(metric.tags);
     // Store in Redis for real-time monitoring
     const key = `metrics:${metric.name}`;
     const value = JSON.stringify({
       value: metric.value,
       timestamp: metric.timestamp,
-      tags: metric.tags,
+      tags,
     });
 
     await redisService.set(key, value, 300); // 5 minutes TTL
@@ -35,12 +42,7 @@ export class ObservabilityService {
     await query(
       `INSERT INTO metrics (metric_name, value, timestamp, tags)
        VALUES ($1, $2, $3, $4)`,
-      [
-        metric.name,
-        metric.value,
-        metric.timestamp,
-        JSON.stringify(metric.tags || {}),
-      ],
+      [metric.name, metric.value, metric.timestamp, JSON.stringify(tags)],
     );
   }
 
@@ -93,13 +95,16 @@ export class ObservabilityService {
    * Log entry
    */
   async log(entry: LogEntry): Promise<void> {
+    const message = scrubTelemetryString(entry.message);
+    const context = scrubTelemetryValue(entry.context);
+    const tags = sanitizeMetricTags(entry.tags);
     // Store in Redis for real-time monitoring
     const key = `logs:${entry.level}`;
     const value = JSON.stringify({
-      message: entry.message,
+      message,
       timestamp: entry.timestamp,
-      context: entry.context,
-      tags: entry.tags,
+      context,
+      tags,
     });
 
     await redisService.set(key, value, 300); // 5 minutes TTL
@@ -110,10 +115,10 @@ export class ObservabilityService {
        VALUES ($1, $2, $3, $4, $5)`,
       [
         entry.level,
-        entry.message,
+        message,
         entry.timestamp,
-        JSON.stringify(entry.context || {}),
-        JSON.stringify(entry.tags || {}),
+        JSON.stringify(context || {}),
+        JSON.stringify(tags),
       ],
     );
   }
@@ -321,11 +326,12 @@ export class ObservabilityService {
       `INSERT INTO api_logs (endpoint, method, status_code, response_time_ms, user_id, timestamp)
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [
-        data.endpoint,
+        normalizeTelemetryEndpoint(data.endpoint),
         data.method,
         data.status_code,
         data.response_time_ms,
-        data.user_id || null,
+        // User identity belongs in audit records, not telemetry dimensions.
+        null,
       ],
     );
   }

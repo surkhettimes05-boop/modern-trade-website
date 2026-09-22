@@ -76,8 +76,8 @@ export default function ErrorRecovery({
         role="alert"
         style={styles.card}
       >
-        <p style={{ color: '#075d43', fontSize: '12px', fontWeight: 800 }}>
-          NOVA MART
+        <p style={{ color: '#063B5C', fontSize: '12px', fontWeight: 800 }}>
+          PASALHO
         </p>
         <h1 id="recovery-title" ref={headingRef} tabIndex={-1}>
           We couldn&apos;t load this page

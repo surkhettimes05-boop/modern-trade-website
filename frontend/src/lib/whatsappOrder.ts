@@ -27,7 +27,7 @@ export type RememberedWhatsAppDetails = {
   mapUrl: string;
 };
 
-export const REMEMBERED_DETAILS_KEY = "novamart-whatsapp-details:v1";
+export const REMEMBERED_DETAILS_KEY = "pasalho-whatsapp-details:v1";
 
 const nepaliPhonePattern = /^(?:\+?977[- ]?)?(?:9[678]\d{8})$/;
 

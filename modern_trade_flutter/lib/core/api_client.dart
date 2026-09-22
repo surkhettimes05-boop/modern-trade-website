@@ -15,12 +15,16 @@ enum ApiErrorKind {
   timeout,
   network,
   invalidResponse,
-  other
+  other,
 }
 
 class ApiException implements Exception {
-  const ApiException(this.message,
-      {this.statusCode, this.kind = ApiErrorKind.other, this.diagnostic});
+  const ApiException(
+    this.message, {
+    this.statusCode,
+    this.kind = ApiErrorKind.other,
+    this.diagnostic,
+  });
   final String message;
   final int? statusCode;
   final ApiErrorKind kind;
@@ -37,8 +41,14 @@ abstract interface class SecureSessionStore {
 }
 
 class FlutterSecureSessionStore implements SecureSessionStore {
-  const FlutterSecureSessionStore(
-      [this.storage = const FlutterSecureStorage()]);
+  const FlutterSecureSessionStore([
+    this.storage = const FlutterSecureStorage(
+      aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      iOptions: IOSOptions(
+        accessibility: KeychainAccessibility.unlocked_this_device,
+      ),
+    ),
+  ]);
   final FlutterSecureStorage storage;
   @override
   Future<String?> read(String key) => storage.read(key: key);
@@ -51,6 +61,27 @@ class FlutterSecureSessionStore implements SecureSessionStore {
 
 typedef SessionExpiredCallback = FutureOr<void> Function();
 
+enum ApiRequestOutcome { success, clientError, serverError, timeout, network }
+
+class ApiRequestMetric {
+  const ApiRequestMetric({
+    required this.method,
+    required this.statusCode,
+    required this.duration,
+    required this.outcome,
+  });
+
+  /// Deliberately excludes URLs, request bodies, headers, user identifiers,
+  /// trace identifiers, and error messages to keep telemetry low-cardinality
+  /// and free of customer data.
+  final String method;
+  final int? statusCode;
+  final Duration duration;
+  final ApiRequestOutcome outcome;
+}
+
+typedef ApiRequestObserver = void Function(ApiRequestMetric metric);
+
 String userMessage(Object error) {
   if (error is ApiException) return error.message;
   if (kDebugMode) debugPrint('Unexpected error: $error');
@@ -58,12 +89,14 @@ String userMessage(Object error) {
 }
 
 class ApiClient {
-  ApiClient(
-      {required String baseUrl,
-      http.Client? client,
-      SecureSessionStore? sessionStore,
-      this.onSessionExpired})
-      : baseUrl = validateApiBaseUrl(baseUrl),
+  ApiClient({
+    required String baseUrl,
+    http.Client? client,
+    SecureSessionStore? sessionStore,
+    this.onSessionExpired,
+    this.onRequestMetric,
+    this.retryDelays = const [Duration(milliseconds: 250)],
+  })  : baseUrl = validateApiBaseUrl(baseUrl),
         _client = client ?? http.Client(),
         _store = sessionStore ?? const FlutterSecureSessionStore();
 
@@ -71,6 +104,8 @@ class ApiClient {
   final http.Client _client;
   final SecureSessionStore _store;
   SessionExpiredCallback? onSessionExpired;
+  final ApiRequestObserver? onRequestMetric;
+  final List<Duration> retryDelays;
   String? _sessionToken;
   String? _csrfToken;
   bool _handlingUnauthorized = false;
@@ -92,7 +127,7 @@ class ApiClient {
   Map<String, String> _headers({bool mutation = false}) {
     final headers = <String, String>{
       'accept': 'application/json',
-      'content-type': 'application/json'
+      'content-type': 'application/json',
     };
     if (_sessionToken != null) {
       final cookies = <String>['customer_session=$_sessionToken'];
@@ -104,40 +139,110 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, {Map<String, String>? query}) => _send(
-      () => _client.get(_uri(path, query), headers: _headers()),
-      const Duration(seconds: 15));
+        'GET',
+        () => _client.get(_uri(path, query), headers: _headers()),
+        const Duration(seconds: 15),
+        retrySafe: true,
+      );
   Future<dynamic> post(String path, {Object? body}) => _send(
-      () => _client.post(_uri(path),
+        'POST',
+        () => _client.post(
+          _uri(path),
           headers: _headers(mutation: true),
-          body: jsonEncode(body ?? const {})),
-      const Duration(seconds: 20));
+          body: jsonEncode(body ?? const {}),
+        ),
+        const Duration(seconds: 20),
+      );
   Future<dynamic> put(String path, {Object? body}) => _send(
-      () => _client.put(_uri(path),
+        'PUT',
+        () => _client.put(
+          _uri(path),
           headers: _headers(mutation: true),
-          body: jsonEncode(body ?? const {})),
-      const Duration(seconds: 20));
+          body: jsonEncode(body ?? const {}),
+        ),
+        const Duration(seconds: 20),
+      );
   Future<dynamic> delete(String path) => _send(
-      () => _client.delete(_uri(path), headers: _headers(mutation: true)),
-      const Duration(seconds: 15));
+        'DELETE',
+        () => _client.delete(_uri(path), headers: _headers(mutation: true)),
+        const Duration(seconds: 15),
+      );
 
   Future<dynamic> _send(
-      Future<http.Response> Function() request, Duration timeout) async {
+    String method,
+    Future<http.Response> Function() request,
+    Duration timeout, {
+    bool retrySafe = false,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    int? statusCode;
+    var outcome = ApiRequestOutcome.network;
     try {
-      final response = await request().timeout(timeout);
-      await _captureCookies(response);
-      if (response.statusCode == 401) await _handleUnauthorized();
-      return _decode(response);
+      for (var attempt = 0;; attempt++) {
+        try {
+          final response = await request().timeout(timeout);
+          statusCode = response.statusCode;
+          await _captureCookies(response);
+          if (response.statusCode == 401) await _handleUnauthorized();
+          if (retrySafe &&
+              const {502, 503, 504}.contains(response.statusCode) &&
+              attempt < retryDelays.length) {
+            await Future<void>.delayed(retryDelays[attempt]);
+            continue;
+          }
+          outcome = response.statusCode < 400
+              ? ApiRequestOutcome.success
+              : response.statusCode < 500
+                  ? ApiRequestOutcome.clientError
+                  : ApiRequestOutcome.serverError;
+          return _decode(response);
+        } on TimeoutException catch (error) {
+          outcome = ApiRequestOutcome.timeout;
+          if (retrySafe && attempt < retryDelays.length) {
+            await Future<void>.delayed(retryDelays[attempt]);
+            continue;
+          }
+          throw ApiException(
+            'The request timed out. Please try again.',
+            kind: ApiErrorKind.timeout,
+            diagnostic: '$error',
+          );
+        } on SocketException catch (error) {
+          outcome = ApiRequestOutcome.network;
+          if (retrySafe && attempt < retryDelays.length) {
+            await Future<void>.delayed(retryDelays[attempt]);
+            continue;
+          }
+          throw ApiException(
+            'You appear to be offline. Check your connection.',
+            kind: ApiErrorKind.network,
+            diagnostic: '$error',
+          );
+        } on http.ClientException catch (error) {
+          outcome = ApiRequestOutcome.network;
+          if (retrySafe && attempt < retryDelays.length) {
+            await Future<void>.delayed(retryDelays[attempt]);
+            continue;
+          }
+          throw ApiException(
+            'Could not connect to NOVA MART. Please try again.',
+            kind: ApiErrorKind.network,
+            diagnostic: '$error',
+          );
+        }
+      }
     } on ApiException {
       rethrow;
-    } on TimeoutException catch (error) {
-      throw ApiException('The request timed out. Please try again.',
-          kind: ApiErrorKind.timeout, diagnostic: '$error');
-    } on SocketException catch (error) {
-      throw ApiException('You appear to be offline. Check your connection.',
-          kind: ApiErrorKind.network, diagnostic: '$error');
-    } on http.ClientException catch (error) {
-      throw ApiException('Could not connect to NOVA MART. Please try again.',
-          kind: ApiErrorKind.network, diagnostic: '$error');
+    } finally {
+      stopwatch.stop();
+      onRequestMetric?.call(
+        ApiRequestMetric(
+          method: method,
+          statusCode: statusCode,
+          duration: stopwatch.elapsed,
+          outcome: outcome,
+        ),
+      );
     }
   }
 
@@ -205,8 +310,12 @@ class ApiClient {
       if (kDebugMode && diagnostic != null) {
         debugPrint('API ${response.statusCode}: $diagnostic');
       }
-      throw ApiException(message,
-          statusCode: response.statusCode, kind: kind, diagnostic: diagnostic);
+      throw ApiException(
+        message,
+        statusCode: response.statusCode,
+        kind: kind,
+        diagnostic: diagnostic,
+      );
     }
     return data;
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/app_config.dart';
 import '../core/api_client.dart';
 import '../models/models.dart';
 import '../repositories/auth_repository.dart';
@@ -113,13 +114,7 @@ const _fallbackProducts = <Product>[
 
 class AppState extends ChangeNotifier {
   AppState({ApiClient? api})
-      : api = api ??
-            ApiClient(
-              baseUrl: const String.fromEnvironment(
-                'API_BASE_URL',
-                defaultValue: 'https://storesync-backend-dg8z.onrender.com',
-              ),
-            ) {
+      : api = api ?? ApiClient(baseUrl: AppConfig.apiBaseUrl) {
     authRepository = AuthRepository(this.api);
     catalogRepository = CatalogRepository(this.api);
     checkoutRepository = CheckoutRepository(this.api);
@@ -153,8 +148,10 @@ class AppState extends ChangeNotifier {
       .whereType<CartLine>()
       .toList(growable: false);
 
-  int get cartCount => cartController.quantities.values
-      .fold(0, (sum, quantity) => sum + quantity);
+  int get cartCount => cartController.quantities.values.fold(
+        0,
+        (sum, quantity) => sum + quantity,
+      );
   int get cartSubtotalMinor =>
       cart.fold(0, (sum, line) => sum + line.totalMinor);
   double get cartSubtotal => cartSubtotalMinor / 100;
@@ -281,8 +278,10 @@ class AppState extends ChangeNotifier {
     String? notes,
   }) async {
     if (customer == null) {
-      throw const ApiException('Please sign in to checkout.',
-          kind: ApiErrorKind.authentication);
+      throw const ApiException(
+        'Please sign in to checkout.',
+        kind: ApiErrorKind.authentication,
+      );
     }
     final store = selectedStore;
     if (store == null || store.id == 'offline-store') {
@@ -294,14 +293,15 @@ class AppState extends ChangeNotifier {
       customer: customer!,
       lines: cart,
       details: CheckoutDetails(
-          deliveryType: deliveryType,
-          name: name,
-          phone: phone,
-          address: address,
-          city: city,
-          state: state,
-          postalCode: postalCode,
-          notes: notes),
+        deliveryType: deliveryType,
+        name: name,
+        phone: phone,
+        address: address,
+        city: city,
+        state: state,
+        postalCode: postalCode,
+        notes: notes,
+      ),
     );
     await clearCart();
     return order;
@@ -335,9 +335,17 @@ const _fallbackCategories = <ProductCategory>[
     skuCount: 25,
   ),
   ProductCategory(
-      id: 'opening-5', name: 'Laundry', slug: 'laundry', skuCount: 25),
+    id: 'opening-5',
+    name: 'Laundry',
+    slug: 'laundry',
+    skuCount: 25,
+  ),
   ProductCategory(
-      id: 'opening-6', name: 'Hair care', slug: 'hair-care', skuCount: 25),
+    id: 'opening-6',
+    name: 'Hair care',
+    slug: 'hair-care',
+    skuCount: 25,
+  ),
 ];
 
 extension _FirstOrNull<T> on Iterable<T> {

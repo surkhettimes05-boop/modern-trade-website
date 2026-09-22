@@ -28,7 +28,7 @@ Override it for local development at run or build time:
 
 ```powershell
 flutter run --dart-define=API_BASE_URL=http://192.168.1.20:3001
-flutter build apk --release --dart-define=API_BASE_URL=https://api.example.com
+flutter run --dart-define=APP_ENV=staging --dart-define=API_BASE_URL=https://staging-api.example.com
 ```
 
 Use HTTPS for every production build. A physical phone must use a network URL
@@ -50,7 +50,7 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3001
 Build and serve the Flutter app locally:
 
 ```powershell
-flutter build web --release --dart-define=API_BASE_URL=http://127.0.0.1:3001
+flutter build web --release --dart-define=APP_ENV=staging --dart-define=API_BASE_URL=http://127.0.0.1:3001
 py -3 -m http.server 52123 --bind 127.0.0.1 --directory build\web
 ```
 
@@ -79,11 +79,40 @@ sent with protected API requests. No backend or website changes are required.
 
 ### Required release configuration
 
-Codemagic expects a secured `nova_mart_android_signing` variable group containing
-`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
-`ANDROID_KEY_PASSWORD`. Set `API_BASE_URL` to the production HTTPS API. Optional
-`SUPPORT_PHONE`, `PRIVACY_POLICY_URL`, and `TERMS_URL` values control the support
-and external policy actions. No signing value belongs in source control.
+Release binaries must explicitly set `APP_ENV=production` and a production
+HTTPS `API_BASE_URL`. Android release builds additionally require
+`ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
+`ANDROID_KEY_PASSWORD` in the process environment. No signing value belongs in
+source control.
+
+The protected Codemagic `nova_mart_android_signing` variable group requires
+these secrets:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+It also requires protected variables for `API_BASE_URL`,
+`PRIVACY_POLICY_URL`, and `TERMS_URL`; `SUPPORT_PHONE` is optional. The pipeline
+creates a signed Android App Bundle, enables R8/resource shrinking, applies Dart
+obfuscation, and retains the matching symbols as a restricted build artifact.
+
+For a local production build, set the signing environment variables and run:
+
+```powershell
+flutter build appbundle --release `
+  --obfuscate `
+  --split-debug-info=build/symbols/android `
+  --dart-define=APP_ENV=production `
+  --dart-define=API_BASE_URL=https://api.example.com `
+  --dart-define=PRIVACY_POLICY_URL=https://example.com/privacy `
+  --dart-define=TERMS_URL=https://example.com/terms
+```
+
+See `docs/PRODUCTION_READINESS.md` for the client controls completed here and
+the backend, cloud, security-assurance, and store-operation gates that must be
+closed before launch.
 
 Prices are parsed from numeric or string API values and totals use integer paisa
 internally. This supports decimal prices while avoiding floating-point total drift.

@@ -8,23 +8,30 @@ import { absoluteUrl, SITE } from "@/lib/seo";
 import WebVitals from "@/components/WebVitals";
 import RouteChrome from "@/components/RouteChrome";
 
-const inter = localFont({
-  src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+const montserrat = localFont({
+  src: "../../node_modules/@fontsource/montserrat/files/montserrat-latin-wght-normal.woff2",
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-montserrat",
+  weight: "100 900",
+});
+
+const notoSansDevanagari = localFont({
+  src: "../../node_modules/@fontsource/noto-sans-devanagari/files/noto-sans-devanagari-devanagari-wght-normal.woff2",
+  display: "swap",
+  variable: "--font-noto-sans-devanagari",
   weight: "100 900",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "NOVA MART — Everyday value for every home",
-    template: "%s | NOVA MART",
+    default: "PASALHO — Your Money Deserves Proper Value.",
+    template: "%s | PASALHO",
   },
   description: SITE.description,
   metadataBase: new URL(SITE.url),
   alternates: { canonical: absoluteUrl("/") },
   openGraph: {
-    title: "NOVA MART — Everyday value for every home",
+    title: "PASALHO — Your Money Deserves Proper Value.",
     description: SITE.description,
     url: absoluteUrl("/"),
     siteName: SITE.name,
@@ -33,7 +40,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "NOVA MART — Everyday value for every home",
+    title: "PASALHO — Your Money Deserves Proper Value.",
     description: SITE.description,
   },
   robots: { index: true, follow: true },
@@ -64,7 +71,7 @@ export default async function RootLayout({
   };
   return (
     <html lang="en-NP" className="antialiased">
-      <body className={`${inter.variable} min-h-screen flex flex-col`}>
+      <body className={`${montserrat.variable} ${notoSansDevanagari.variable} min-h-screen flex flex-col`}>
         <JsonLd data={[organization, website]} />
         <WebVitals />
         <CommerceProvider

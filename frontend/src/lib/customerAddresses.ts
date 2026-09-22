@@ -59,16 +59,11 @@ export async function loadCustomerSession(): Promise<CustomerSession | null> {
   return result.customer;
 }
 
-export async function loadCustomerAddresses(
-  customerId: string,
-): Promise<CustomerAddress[]> {
-  const response = await resilientFetch(
-    `/api/addresses/customer/${encodeURIComponent(customerId)}`,
-    {
-      credentials: "include",
-      cache: "no-store",
-    },
-  );
+export async function loadCustomerAddresses(): Promise<CustomerAddress[]> {
+  const response = await resilientFetch("/api/customer/addresses", {
+    credentials: "include",
+    cache: "no-store",
+  });
   const result = await readJson<CustomerAddress[] & ApiError>(response);
   if (!response.ok)
     throw new Error(result.error || "Could not load saved addresses");

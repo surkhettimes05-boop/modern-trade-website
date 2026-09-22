@@ -45,7 +45,8 @@ export const getCatalog = cache(async (): Promise<CatalogData> => {
   const categories = openingCategories
     .map((opening) => ({ ...opening, ...categoriesBySlug.get(opening.slug), id: opening.id }))
     .concat(categoryRows.filter((category) => !openingCategories.some((opening) => opening.slug === category.slug)));
-  return { products: apiProducts.length ? apiProducts : openingProducts, categories, stores, offers };
+  const products = apiProducts.length || process.env.NODE_ENV === 'production' ? apiProducts : openingProducts;
+  return { products, categories, stores, offers };
 });
 
 export const getProductBySlug = cache(async (slug: string) => {

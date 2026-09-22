@@ -5,30 +5,95 @@ import Image from 'next/image'; import Link from 'next/link';
 import { ChevronDown, Heart, MapPin, Menu, MessageCircle, Minus, Plus, Search, ShoppingCart, Star, X } from 'lucide-react';
 import { formatPrice, mapProduct, openingCategories, openingProducts, Product, StorefrontCategory, Store, slugify } from '@/lib/catalog';
 import { resilientFetch } from '@/lib/resilientFetch';
+import { trackStorefrontEvent } from '@/lib/analytics';
 
-type CartItem = { product: Product; qty: number };
-type ShopContext = { items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; stores: Store[]; selectedStore: Store | null; setSelectedStore: (store: Store) => void; add: (product: Product) => void; change: (id: string, delta: number) => void; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean };
+type CartItem = { product: Product; qty: number; backendItemId?: string };
+type ShopContext = { items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; stores: Store[]; selectedStore: Store | null; setSelectedStore: (store: Store) => void; add: (product: Product) => void; change: (id: string, delta: number) => void; cartId: string | null; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean };
 const Ctx = createContext<ShopContext | null>(null);
 
+function csrfToken() {
+  return decodeURIComponent(document.cookie.match(/(?:^|; )customer_csrf=([^;]+)/)?.[1] || '');
+}
+
+async function authenticatedCart(storeId: string) {
+  const session = await resilientFetch('/api/auth/session/validate', { credentials: 'include', cache: 'no-store', retries: 0 });
+  if (!session.ok) return null;
+  const response = await resilientFetch('/api/shopping-cart', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({ store_id: storeId }) });
+  if (!response.ok) return null;
+  return await response.json() as { id: string };
+}
+
 export function CommerceProvider({ children, initialProducts = [], initialCategories = [], initialStores = [] }: { children: React.ReactNode; initialProducts?: Product[]; initialCategories?: StorefrontCategory[]; initialStores?: Store[] }) {
-  const [products, setProducts] = useState<Product[]>(initialProducts); const [categories, setCategories] = useState<StorefrontCategory[]>(initialCategories); const [stores, setStores] = useState<Store[]>(initialStores); const [loading, setLoading] = useState(!(initialProducts.length && initialCategories.length)); const [items, setItems] = useState<CartItem[]>([]); const [drawer, setDrawer] = useState(false); const [selectedStore, setSelectedStoreState] = useState<Store | null>(initialStores[0] || null); const [hydrated, setHydrated] = useState(false);
-  useEffect(() => { const timer = window.setTimeout(() => { try { const saved = localStorage.getItem('novamart-cart-v2'); if (saved) setItems(JSON.parse(saved)); const storeId = localStorage.getItem('novamart-store'); if (storeId) setSelectedStoreState({ id: storeId, name: 'Selected store' }); } catch { /* ignore malformed browser state */ } finally { setHydrated(true); } }, 0); return () => window.clearTimeout(timer); }, []);
-  useEffect(() => { if (hydrated) localStorage.setItem('novamart-cart-v2', JSON.stringify(items)); }, [hydrated, items]);
+  const [products, setProducts] = useState<Product[]>(initialProducts); const [categories, setCategories] = useState<StorefrontCategory[]>(initialCategories); const [stores, setStores] = useState<Store[]>(initialStores); const [loading, setLoading] = useState(!(initialProducts.length && initialCategories.length)); const [items, setItems] = useState<CartItem[]>([]); const [cartId, setCartId] = useState<string | null>(null); const [drawer, setDrawer] = useState(false); const [selectedStore, setSelectedStoreState] = useState<Store | null>(initialStores[0] || null); const [hydrated, setHydrated] = useState(false);
+  useEffect(() => { const timer = window.setTimeout(() => { try { const saved = localStorage.getItem('pasalho-cart-v2'); if (saved) setItems(JSON.parse(saved)); const storeId = localStorage.getItem('pasalho-store'); if (storeId) setSelectedStoreState({ id: storeId, name: 'Selected store' }); } catch { /* ignore malformed browser state */ } finally { setHydrated(true); } }, 0); return () => window.clearTimeout(timer); }, []);
+  useEffect(() => { if (hydrated) localStorage.setItem('pasalho-cart-v2', JSON.stringify(items)); }, [hydrated, items]);
   useEffect(() => { if (!hydrated || !products.length) return; const timer = window.setTimeout(() => { const productsBySku = new Map(products.map((product) => [product.sku || product.id, product])); setItems((current) => current.flatMap((item) => { const product = productsBySku.get(item.product.sku || item.product.id); return product ? [{ ...item, product }] : []; })); }, 0); return () => window.clearTimeout(timer); }, [hydrated, products]);
-  useEffect(() => { if (initialProducts.length && initialCategories.length && initialStores.length) return; const controller = new AbortController(); Promise.all([resilientFetch('/api/public/products', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/categories', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/stores', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : [])]).then(([productRows, categoryRows, storeRows]) => { const nextStores = storeRows as Store[]; const apiProducts = (productRows as Record<string, unknown>[]).map(mapProduct).filter((p) => p.price > 0); const apiCategories = categoryRows as StorefrontCategory[]; const bySlug = new Map(apiCategories.map((c) => [c.slug, c])); setProducts(apiProducts.length ? apiProducts : openingProducts); setCategories(openingCategories.map((opening) => ({ ...opening, ...bySlug.get(opening.slug), id: opening.id })).concat(apiCategories.filter((c) => !openingCategories.some((opening) => opening.slug === c.slug)))); setStores(nextStores); setSelectedStoreState((current) => current?.id && nextStores.find((s) => s.id === current.id) || nextStores[0] || null); }).catch(() => { if (!controller.signal.aborted) { setProducts(openingProducts); setCategories(openingCategories); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [initialCategories.length, initialProducts.length, initialStores.length]);
-  const selected = (store: Store) => { setSelectedStoreState(store); localStorage.setItem('novamart-store', store.id); };
-  const add = (product: Product) => { setItems((current) => { const found = current.find((item) => item.product.id === product.id); return found ? current.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item) : [...current, { product, qty: 1 }]; }); setDrawer(true); };
-  const change = (id: string, delta: number) => setItems((current) => current.map((item) => item.product.id === id ? { ...item, qty: item.qty + delta } : item).filter((item) => item.qty > 0));
-  return <Ctx.Provider value={{ items, products, categories, stores, selectedStore, setSelectedStore: selected, add, change, drawer, setDrawer, loading }}>{children}<CartDrawer /></Ctx.Provider>;
+  useEffect(() => { if (initialProducts.length && initialCategories.length && initialStores.length) return; const controller = new AbortController(); Promise.all([resilientFetch('/api/public/products', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/categories', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/stores', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : [])]).then(([productRows, categoryRows, storeRows]) => { const nextStores = storeRows as Store[]; const apiProducts = (productRows as Record<string, unknown>[]).map(mapProduct).filter((p) => p.price > 0); const apiCategories = categoryRows as StorefrontCategory[]; const bySlug = new Map(apiCategories.map((c) => [c.slug, c])); setProducts(apiProducts.length || process.env.NODE_ENV === 'production' ? apiProducts : openingProducts); setCategories(openingCategories.map((opening) => ({ ...opening, ...bySlug.get(opening.slug), id: opening.id })).concat(apiCategories.filter((c) => !openingCategories.some((opening) => opening.slug === c.slug)))); setStores(nextStores); setSelectedStoreState((current) => current?.id && nextStores.find((s) => s.id === current.id) || nextStores[0] || null); }).catch(() => { if (!controller.signal.aborted && process.env.NODE_ENV !== 'production') { setProducts(openingProducts); setCategories(openingCategories); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [initialCategories.length, initialProducts.length, initialStores.length]);
+  const selected = (store: Store) => { setSelectedStoreState(store); localStorage.setItem('pasalho-store', store.id); };
+  const add = (product: Product) => {
+    trackStorefrontEvent('ADD_TO_CART', { product_id: product.id, product_name: product.name, quantity: 1 });
+    setItems((current) => {
+      const found = current.find((item) => item.product.id === product.id);
+      return found ? current.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item) : [...current, { product, qty: 1 }];
+    });
+    setDrawer(true);
+    void (async () => {
+      if (!selectedStore) return;
+      const cart = await authenticatedCart(selectedStore.id);
+      if (!cart) return;
+      setCartId(cart.id);
+      const response = await resilientFetch(`/api/shopping-cart/${cart.id}/items`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({ product_id: product.id, quantity: 1 }) });
+      if (response.ok) {
+        const item = await response.json() as { id: string };
+        setItems((current) => current.map((entry) => entry.product.id === product.id ? { ...entry, backendItemId: item.id } : entry));
+      }
+    })().catch(() => undefined);
+  };
+  const change = (id: string, delta: number) => {
+    const current = items.find((item) => item.product.id === id);
+    if (!current) return;
+    const quantity = current.qty + delta;
+    setItems((entries) => entries.map((item) => item.product.id === id ? { ...item, qty: quantity } : item).filter((item) => item.qty > 0));
+    trackStorefrontEvent(quantity > 0 ? 'ADD_TO_CART' : 'REMOVE_FROM_CART', { product_id: id, quantity: Math.max(quantity, 0) });
+    void (async () => {
+      if (!current.backendItemId) return;
+      if (quantity > 0) {
+        await resilientFetch(`/api/shopping-cart/items/${current.backendItemId}`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({ quantity }) });
+      } else {
+        await resilientFetch(`/api/shopping-cart/items/${current.backendItemId}`, { method: 'DELETE', credentials: 'include', headers: { 'x-csrf-token': csrfToken() } });
+      }
+    })().catch(() => undefined);
+  };
+  return <Ctx.Provider value={{ items, products, categories, stores, selectedStore, setSelectedStore: selected, add, change, cartId, drawer, setDrawer, loading }}>{children}<CartDrawer /></Ctx.Provider>;
 }
 export const useShop = () => { const value = useContext(Ctx); if (!value) throw new Error('shop provider missing'); return value; };
 
 export function SearchBox() {
-  const { products } = useShop();
+  const { products, selectedStore } = useShop();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Product[]>([]);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const result = useMemo(() => products.filter((p) => `${p.name} ${p.brand} ${p.category}`.toLowerCase().includes(query.toLowerCase())).slice(0, 6), [products, query]);
+  const localResults = useMemo(() => products.filter((p) => `${p.name} ${p.brand} ${p.category}`.toLowerCase().includes(query.toLowerCase())).slice(0, 6), [products, query]);
+  useEffect(() => {
+    const term = query.trim();
+    if (!term) {
+      setResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      trackStorefrontEvent('SEARCH', { query: term, store_id: selectedStore?.id });
+      const params = new URLSearchParams({ q: term, limit: '6' });
+      if (selectedStore?.id) params.set('store_id', selectedStore.id);
+      resilientFetch(`/api/public/products?${params.toString()}`, { signal: controller.signal, timeoutMs: 5000, retries: 1 })
+        .then((response) => response.ok ? response.json() : [])
+        .then((rows: unknown) => setResults(Array.isArray(rows) ? rows.map((row) => mapProduct(row as Record<string, unknown>)).filter((product) => product.price > 0) : []))
+        .catch(() => { if (!controller.signal.aborted) setResults([]); });
+    }, 180);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [query, selectedStore?.id]);
+  const result = query.trim() ? (results.length ? results : localResults) : [];
   useEffect(() => {
     const dismiss = (event: PointerEvent) => {
       if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);

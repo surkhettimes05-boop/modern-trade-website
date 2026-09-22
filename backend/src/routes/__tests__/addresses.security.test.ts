@@ -69,6 +69,21 @@ describe("address route ownership", () => {
     await app.close();
   });
 
+  it("lists addresses without accepting a customer ID from the client", async () => {
+    const list = jest
+      .spyOn(AddressService.prototype, "getCustomerAddresses")
+      .mockResolvedValue([]);
+    const app = await buildApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/customer/addresses",
+      headers: { "x-test-customer-id": customerA },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(list).toHaveBeenCalledWith(customerA);
+    await app.close();
+  });
+
   it("rejects client-supplied ownership and verification fields", async () => {
     const app = await buildApp();
     const createResponse = await app.inject({

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "22.x"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "next dev",
@@ -19,8 +19,8 @@
     "test:performance": "playwright test tests/performance.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=1"
   },
   "dependencies": {
-    "@fontsource-variable/inter": "^5.2.8",
-    "lucide-react": "^1.31.0",
+    "@fontsource-variable/inter": "^5.1.1",
+    "lucide-react": "^0.468.0",
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -29,12 +29,12 @@
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.6",
+    "@types/react-dom": "^19.0.2",
+    "eslint": "^9.17.0",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5.7.2"
   }
 }

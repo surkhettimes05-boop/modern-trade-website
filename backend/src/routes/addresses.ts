@@ -10,6 +10,42 @@ import { requirePrivilegedAdministration } from "../plugins/privilegedAdministra
 const addressService = new AddressService();
 
 export async function addressRoutes(fastify: FastifyInstance) {
+  // Session-derived routes are the canonical customer contract. They avoid
+  // accepting an owner identifier from an untrusted client altogether.
+  fastify.get(
+    "/customer/addresses",
+    { onRequest: authenticateCustomer },
+    async (request, reply) => {
+      try {
+        return reply.send(
+          await addressService.getCustomerAddresses(customerId(request)),
+        );
+      } catch {
+        return reply.status(500).send({ error: "Failed to get addresses" });
+      }
+    },
+  );
+
+  fastify.get(
+    "/customer/addresses/default",
+    { onRequest: authenticateCustomer },
+    async (request, reply) => {
+      try {
+        const address = await addressService.getDefaultAddress(
+          customerId(request),
+        );
+        if (!address) {
+          return reply.status(404).send({ error: "Default address not found" });
+        }
+        return reply.send(address);
+      } catch {
+        return reply
+          .status(500)
+          .send({ error: "Failed to get default address" });
+      }
+    },
+  );
+
   // Address: Create address
   fastify.post(
     "/addresses",
@@ -77,7 +113,8 @@ export async function addressRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // Address: Get customer addresses
+  // Compatibility route for older clients. Remove after the supported mobile
+  // version has migrated to /customer/addresses.
   fastify.get(
     "/addresses/customer/:customerId",
     { onRequest: authenticateCustomer },

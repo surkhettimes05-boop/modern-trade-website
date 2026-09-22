@@ -1,8 +1,13 @@
 # Backend security requirements
 
-The deployed API currently exposes `GET /api/addresses/customer/{customerId}`; no session-derived address-list route was found in the existing Flutter contract. The app never accepts a customer ID from user input and isolates this compatibility call in `CustomerRepository`, but this is not an authorization boundary.
+The canonical address-list contract is now `GET /api/customer/addresses`, which
+derives ownership entirely from the authenticated session. The former
+`GET /api/addresses/customer/{customerId}` route remains temporarily for older
+clients and must be removed after the supported-client migration window.
 
-The checked-out backend currently compares the path customer ID with the authenticated session and scopes get/update/delete queries by the session customer. These checks must be retained. A future `GET /api/customer/addresses` endpoint derived entirely from the session is preferred so the client never sends a customer ID at all. Every address list, create, update, set-default, and delete request must continue to reject cross-customer access, including when an address UUID is guessed directly.
+Every address list, create, update, set-default, and delete request must continue
+to reject cross-customer access, including when an address UUID is guessed
+directly. Never reintroduce client-supplied ownership into the canonical route.
 
 The backend must also enforce stock and the maximum permitted item quantity; the Flutter limit is only a UX safeguard. Checkout must atomically enforce the idempotency key per customer and return the original order for a repeated key, including after a client timeout.
 

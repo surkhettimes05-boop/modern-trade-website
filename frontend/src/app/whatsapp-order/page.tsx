@@ -85,7 +85,7 @@ export default function WhatsAppOrderPage() {
         setCustomer(session);
         if (session.preferred_name)
           setName((current) => current || session.preferred_name || "");
-        const saved = await loadCustomerAddresses(session.id);
+        const saved = await loadCustomerAddresses();
         if (!active) return;
         setAddresses(saved);
         const defaultAddress =
