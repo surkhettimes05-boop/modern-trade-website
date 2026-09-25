@@ -134,7 +134,10 @@ export function validateProductionIntegrations(
     if (!["twilio", "twilio_verify", "demo"].includes(env.SMS_PROVIDER)) {
       throw new Error("SMS_PROVIDER must be twilio, twilio_verify, or demo");
     }
-    if (env.SMS_PROVIDER === "demo") {
+    if (
+      env.SMS_PROVIDER === "demo" &&
+      env.ALLOW_DEMO_SMS_IN_PRODUCTION !== "true"
+    ) {
       throw new Error(
         "SMS_PROVIDER=demo is forbidden in production; configure a real OTP provider",
       );
