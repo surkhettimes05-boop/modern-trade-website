@@ -1,6 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" fill="none">
-  <rect x="0" y="0" width="60" height="60" rx="12" fill="#063B5C"/>
-  <path d="M18 15C18 11.6863 20.6863 9 24 9H33C38.25 9 43 13.75 43 19C43 24.25 38.25 29 33 29H27.5V45C27.5 48.3137 24.8137 51 21.5 51C18.1863 51 15.5 48.3137 15.5 45V15H18ZM27.5 18.5V24.5H33C35.25 24.5 37 22.75 37 20.5C37 18.25 35.25 16.5 33 16.5H27.5V18.5Z" fill="#F7F5EF"/>
-  <text x="72" y="38" font-family="Montserrat, Arial, sans-serif" font-weight="900" font-size="26" fill="#063B5C" letter-spacing="-0.5">PASALHO</text>
-  <text x="72" y="62" font-family="Noto Sans Devanagari, Arial, sans-serif" font-weight="600" font-size="20" fill="#16A98D">पासाल्हो</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 180" fill="none">
+  <rect x="10" y="30" width="120" height="120" rx="24" fill="#063B5C"/>
+  <path d="M52 42C52 38.6863 54.6863 36 58 36H72C90.7777 36 106 51.2223 106 70C106 88.7777 90.7777 104 72 104H57V118C57 121.314 54.3137 124 51 124C47.6863 124 45 121.314 45 118V42H52ZM57 48V98H72C84.1503 98 94 88.1503 94 76C94 63.8497 84.1503 54 72 54H57V48Z" fill="#F7F5EF"/>
+  <path d="M35 102C35 89.2975 44.2975 80 57 80C62.6831 80 67.8554 81.7305 72.1886 85.068L67.9784 92.5528C65.3315 90.6175 61.8775 89.6034 58 89.6034C51.4718 89.6034 46 95.0752 46 101.603V111H35V102Z" fill="#16A98D"/>
+  <text x="170" y="97" font-family="Montserrat, Arial, sans-serif" font-weight="900" font-size="74" fill="#063B5C" letter-spacing="-2">PASALHO</text>
+  <text x="235" y="118" font-family="Montserrat, Arial, sans-serif" font-size="82" font-weight="800" letter-spacing="1" fill="#063B5C">PASALHO</text>
 </svg>

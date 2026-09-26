@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" role="img" aria-labelledby="title desc">
+  <title id="title">Pasalho logo</title>
+  <desc id="desc">PASALHO wordmark with a white P inside a rounded navy square.</desc>
+  <rect x="0" y="30" width="120" height="120" rx="27" fill="#073F5D"/>
+  <path d="M38 48H68C85.949 48 100.5 62.551 100.5 80.5C100.5 98.449 85.949 113 68 113H57V121C57 126.523 52.523 131 47 131C41.477 131 37 126.523 37 121V48H38ZM57 68V93H68C74.904 93 80.5 87.404 80.5 80.5C80.5 73.596 74.904 68 68 68H57Z" fill="#F7F5EF"/>
+  <text x="155" y="108" font-family="Montserrat, Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="1" fill="#073F5D">PASALHO</text>
+</svg>

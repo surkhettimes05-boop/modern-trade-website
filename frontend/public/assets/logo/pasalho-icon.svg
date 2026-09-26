@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Pasalho icon</title>
+  <desc id="desc">White P inside a rounded navy square.</desc>
   <rect width="512" height="512" rx="112" fill="#073F5D"/>
   <path d="M164 112H292C365.454 112 425 171.546 425 245C425 318.454 365.454 378 292 378H244V412C244 434.091 226.091 452 204 452C181.909 452 164 434.091 164 412V112ZM244 192V298H292C321.271 298 345 274.271 345 245C345 215.729 321.271 192 292 192H244Z" fill="#F7F5EF"/>
 </svg>

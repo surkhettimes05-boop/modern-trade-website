@@ -38,14 +38,16 @@ export function ProductGallery({ product }: { product: Product }) {
 export function BuyBox({ product }: { product: Product }) {
   const { add } = useShop();
   const [quantity, setQuantity] = useState(1);
-  const save = product.originalPrice ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
+  const genuineOriginalPrice = product.originalPrice && product.originalPrice > product.price ? product.originalPrice : null;
+  const save = genuineOriginalPrice ? Math.round((1 - product.price / genuineOriginalPrice) * 100) : 0;
+  const hasReviews = product.rating > 0 && product.reviews > 0;
   const unavailable = product.availability.toLowerCase().includes('out of');
   useEffect(() => { trackStorefrontEvent('PRODUCT_VIEWED', { product_id: product.id, product_name: product.name }); }, [product.id, product.name]);
   return <div className="buy-box">
     <span className="brand">{product.brand}</span><h1>{product.name}</h1>
-    <div className="pdp-rating">★ {product.rating || '—'} <a href="#reviews">{product.reviews} reviews</a></div>
-    <div className="pdp-price"><strong>{formatPrice(product.price)}</strong>{product.originalPrice && <><del>{formatPrice(product.originalPrice)}</del><span>Save {save}%</span></>}</div>
-    <small>Inclusive of all taxes · {product.unit}</small>
+    {hasReviews ? <div className="pdp-rating">★ {product.rating} <span>{product.reviews} reviews</span></div> : null}
+    <div className="pdp-price"><strong>{formatPrice(product.price)}</strong>{genuineOriginalPrice && <><del>{formatPrice(genuineOriginalPrice)}</del><span>Save {save}%</span></>}</div>
+    <small>Inclusive of all taxes{product.unit ? ` · ${product.unit}` : ''}</small>
     <div className="availability"><b>● {product.availability}</b><span>Based on your selected store</span></div>
     <div className="fulfilment"><div><Truck /><span><b>Delivery</b><small>Eligibility shown at checkout</small></span><strong>CHECK</strong></div><div><ShoppingBag /><span><b>Store pickup</b><small>Ready time depends on store stock</small></span><strong>CHECK</strong></div></div>
     <div className="buy-actions"><div className="quantity standalone"><button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus /></button><span>{quantity}</span><button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)}><Plus /></button></div><button className="primary-btn" disabled={unavailable} onClick={() => { Array.from({ length: quantity }).forEach(() => add(product)); trackStorefrontEvent('ADD_TO_CART', { product_id: product.id, quantity }); }}>Add to cart</button></div>
