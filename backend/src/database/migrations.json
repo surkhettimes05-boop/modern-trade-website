@@ -54,6 +54,14 @@
     "../database/028_admin_notification_reads.sql"
   ],
   [
+    "029_sales_rep_retailer_orders",
+    "../database/sales_rep_retailer_orders_schema.sql"
+  ],
+  [
+    "030_customer_address_contract",
+    "src/database/030_customer_address_contract.sql"
+  ],
+  [
     "031_pasalho_fulfillment_integration",
     "src/database/031_pasalho_fulfillment_integration.sql"
   ]
