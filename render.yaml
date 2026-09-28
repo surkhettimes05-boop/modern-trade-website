@@ -47,6 +47,8 @@ services:
         value: IRD
       - key: TRUST_PROXY_HOPS
         value: "1"
+      # Set to the commerce logical database on the shared PostgreSQL server;
+      # this is the least-privilege runtime role, not the migration role.
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_RUNTIME_ROLE
@@ -77,6 +79,8 @@ services:
         value: "30000"
       - key: DATABASE_SLOW_QUERY_MS
         value: "750"
+      # Pilot services may share one Redis server; this service uses a unique
+      # REDIS_NAMESPACE below.
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -84,6 +88,14 @@ services:
           property: connectionString
       - key: REDIS_NAMESPACE
         value: storesync-production
+      # Required for the PASALO pilot. Values are set in the
+      # Render service environment; PASALHO_API_KEY equals PASALO_INTEGRATION_SECRET.
+      - key: PASALHO_API_URL
+        sync: false
+      - key: PASALHO_API_KEY
+        sync: false
+      - key: PASALHO_TIMEOUT_MS
+        value: "10000"
       # Render's service URL is private but may use redis://. Validation only
       # permits this exception for private hostnames; public Redis must use TLS.
       - key: REDIS_ALLOW_PLAINTEXT_PRIVATE
