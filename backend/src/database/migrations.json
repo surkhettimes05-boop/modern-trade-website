@@ -52,5 +52,9 @@
   [
     "028_admin_notification_reads",
     "../database/028_admin_notification_reads.sql"
+  ],
+  [
+    "031_pasalho_fulfillment_integration",
+    "src/database/031_pasalho_fulfillment_integration.sql"
   ]
 ]
