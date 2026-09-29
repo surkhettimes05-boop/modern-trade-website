@@ -1,10 +1,11 @@
+import "dotenv/config";
+
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import jwt from "@fastify/jwt";
 import cookie from "@fastify/cookie";
-import dotenv from "dotenv";
 
 import { healthRoutes } from "./routes/health.js";
 import { publicRoutes } from "./routes/public.js";
@@ -29,8 +30,6 @@ import { closePool } from "./database/connection.js";
 import { runWithRequestContext } from "./utils/requestContext.js";
 import { createShutdownHandler } from "./utils/lifecycle.js";
 import { shutdownObservability } from "./instrumentation.js";
-
-dotenv.config();
 
 validateProductionEnvironment();
 await verifyDatabaseSecurityPosture();

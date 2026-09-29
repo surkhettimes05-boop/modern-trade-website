@@ -235,7 +235,7 @@ export async function publicRoutes(fastify: FastifyInstance) {
         SELECT 
           products.id,
           products.sku,
-          NULL::varchar AS brand,
+          products.brand_name AS brand,
           COALESCE(products.name_${validatedLang}, products.name_en) as name,
           COALESCE(products.description_${validatedLang}, products.description_en) as description,
           products.category_id,
@@ -244,6 +244,7 @@ export async function publicRoutes(fastify: FastifyInstance) {
           COALESCE(products.unit_${validatedLang}, products.unit_en) as unit,
           products.image_url,
           products.images,
+          products.barcode,
           products.is_featured,
           organization_price.price as price,
           organization_price.original_price as original_price,
@@ -338,6 +339,8 @@ export async function publicRoutes(fastify: FastifyInstance) {
           COALESCE(unit_${validatedLang}, unit_en) as unit,
           image_url,
           images,
+          brand_name AS brand,
+          barcode,
           is_featured,
           COALESCE(meta_title_${validatedLang}, meta_title_en) as meta_title,
           COALESCE(meta_description_${validatedLang}, meta_description_en) as meta_description

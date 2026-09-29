@@ -89,6 +89,11 @@ export const openingProducts: Product[] = [
 ];
 export function mapProduct(row: Record<string, unknown>): Product {
   const name = String(row.name || 'Product');
-  const image = String(row.image_url || (Array.isArray(row.images) ? row.images[0] : '') || '/placeholder-product.svg');
+  const suppliedImage = String(row.image_url || (Array.isArray(row.images) ? row.images[0] : '') || '');
+  const artwork = suppliedImage || (name.toLowerCase().includes('avaru') ? '/products/avaru-momo-achar-masala-50g.webp'
+    : name.toLowerCase().includes('saanjh') && name.toLowerCase().includes('chana') ? '/products/saanjh-whole-chana-1kg.webp'
+    : name.toLowerCase().includes('gharchamak') && name.toLowerCase().includes('toilet') ? '/products/gharchamak-toilet-cleaner-500ml.webp'
+    : '/placeholder-product.svg');
+  const image = artwork;
   return { id: String(row.id), slug: slugify(name), sku: row.sku ? String(row.sku) : undefined, name, brand: String(row.brand || 'Pasalho'), category: String(row.category_name || 'Everyday essentials'), categoryId: row.category_id ? String(row.category_id) : undefined, description: String(row.description || ''), image, price: Number(row.price || 0), originalPrice: row.original_price ? Number(row.original_price) : undefined, rating: Number(row.rating || 0), reviews: Number(row.review_count || 0), availability: String(row.availability_status || 'OUT_OF_STOCK').replaceAll('_', ' '), tags: row.is_featured ? ['Featured'] : [], unit: row.unit ? String(row.unit) : undefined, specifications: { SKU: String(row.sku || '—'), Pack: String(row.pack_size || '—'), Department: String(row.category_name || 'Everyday essentials') } };
 }
