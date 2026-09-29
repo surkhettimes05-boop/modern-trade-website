@@ -1,10 +1,10 @@
 import 'server-only';
 
 import { cache } from 'react';
-import { mapProduct, openingCategories, openingProducts, type Offer, type Product, type Store, type StorefrontCategory } from '@/lib/catalog';
+import { mapProduct, openingCategories, openingProducts, type Offer, type Product, type StorefrontCategory } from '@/lib/catalog';
 import { configuredServerApiUrl } from '@/lib/serverApiUrl';
 
-type CatalogData = { products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[] };
+type CatalogData = { products: Product[]; categories: StorefrontCategory[]; offers: Offer[]; stores: import('@/lib/catalog').Store[] };
 
 function apiBaseUrl() {
   try {
@@ -34,11 +34,11 @@ async function fetchPublic<T>(path: string): Promise<T[]> {
 }
 
 export const getCatalog = cache(async (): Promise<CatalogData> => {
-  const [productRows, categoryRows, stores, offers] = await Promise.all([
+  const [productRows, categoryRows, offers, stores] = await Promise.all([
     fetchPublic<Record<string, unknown>>('products'),
     fetchPublic<StorefrontCategory>('categories'),
-    fetchPublic<Store>('stores'),
     fetchPublic<Offer>('offers'),
+    fetchPublic<import('@/lib/catalog').Store>('stores'),
   ]);
   const apiProducts = productRows.map(mapProduct).filter((product) => product.price > 0);
   const categoriesBySlug = new Map(categoryRows.map((category) => [category.slug, category]));
@@ -46,7 +46,7 @@ export const getCatalog = cache(async (): Promise<CatalogData> => {
     .map((opening) => ({ ...opening, ...categoriesBySlug.get(opening.slug), id: opening.id }))
     .concat(categoryRows.filter((category) => !openingCategories.some((opening) => opening.slug === category.slug)));
   const products = apiProducts.length || process.env.NODE_ENV === 'production' ? apiProducts : openingProducts;
-  return { products, categories, stores, offers };
+  return { products, categories, offers, stores };
 });
 
 export const getProductBySlug = cache(async (slug: string) => {

@@ -41,7 +41,7 @@ type PreparedOrder = {
 };
 
 export default function WhatsAppOrderPage() {
-  const { items, selectedStore } = useShop();
+  const { items } = useShop();
   const subtotal = items.reduce(
     (total, item) => total + item.product.price * item.qty,
     0,
@@ -593,12 +593,9 @@ export default function WhatsAppOrderPage() {
               <strong>Payment:</strong> Confirmed by admin
             </p>
           </div>
-          {selectedStore ? (
-            <p className="mt-5 flex gap-2 text-sm text-slate-600">
-              <MapPin className="shrink-0" size={17} /> Availability based on{" "}
-              {selectedStore.name}
-            </p>
-          ) : null}
+          <p className="mt-5 flex gap-2 text-sm text-slate-600">
+            <MapPin className="shrink-0" size={17} /> Stock is confirmed by the central warehouse after your request.
+          </p>
           <p className="mt-5 text-xs leading-5 text-slate-500">
             The website prepares the message. You must press Send in WhatsApp,
             and the admin must confirm your request.

@@ -8,7 +8,6 @@ describe("checkout query batching", () => {
   const clientQuery = jest.fn();
   const checkoutInput = {
     customerId: "customer-1",
-    storeId: "00000000-0000-0000-0000-000000000010",
     cartId: "00000000-0000-0000-0000-000000000020",
     idempotencyKey: "12345678-idempotency",
     deliveryType: "DELIVERY" as const,
@@ -30,7 +29,7 @@ describe("checkout query batching", () => {
     });
   });
 
-  it("locks, validates, inserts items, and reserves stock in fixed query batches", async () => {
+  it("locks a storeless cart, prices from the organization catalog, and leaves stock to PASALO", async () => {
     const productOne = "00000000-0000-0000-0000-000000000001";
     const productTwo = "00000000-0000-0000-0000-000000000002";
     clientQuery.mockImplementation(async (sql: string) => {
@@ -42,12 +41,6 @@ describe("checkout query batching", () => {
           { product_id: productTwo, name_en: "Tea", quantity: 1, authoritative_price: "50.00" },
         ] };
       }
-      if (sql.includes("COALESCE(inventory.stock")) {
-        return { rows: [
-          { product_id: productOne, stock: 10, reserved: 1 },
-          { product_id: productTwo, stock: 5, reserved: 0 },
-        ] };
-      }
       if (sql.includes("INSERT INTO web_orders")) return { rows: [{ id: "order-1", status: "PENDING_PAYMENT" }] };
       return { rows: [], rowCount: 1 };
     });
@@ -56,10 +49,11 @@ describe("checkout query batching", () => {
 
     expect(order.id).toBe("order-1");
     const calls = clientQuery.mock.calls.map(([sql]) => String(sql));
-    expect(calls.filter((sql) => sql.includes("pg_advisory_xact_lock"))).toHaveLength(1);
-    expect(calls.filter((sql) => sql.includes("COALESCE(inventory.stock"))).toHaveLength(1);
+    expect(calls.some((sql) => sql.includes("store_id IS NULL"))).toBe(true);
+    expect(calls.some((sql) => sql.includes("batch_inventory"))).toBe(false);
+    expect(calls.some((sql) => sql.includes("pg_advisory_xact_lock"))).toBe(false);
     expect(calls.filter((sql) => sql.includes("INSERT INTO web_order_items"))).toHaveLength(1);
-    expect(calls.filter((sql) => sql.includes("INSERT INTO stock_reservations"))).toHaveLength(1);
+    expect(calls.filter((sql) => sql.includes("INSERT INTO stock_reservations"))).toHaveLength(0);
     expect(clientQuery).toHaveBeenCalledWith("COMMIT");
     expect(release).toHaveBeenCalledTimes(1);
   });
@@ -67,7 +61,7 @@ describe("checkout query batching", () => {
   it("replays an identical idempotent checkout without creating another order", async () => {
     const existing = {
       id: "order-1",
-      store_id: checkoutInput.storeId,
+      store_id: null,
       cart_id: checkoutInput.cartId,
       delivery_type: checkoutInput.deliveryType,
       shipping_name: checkoutInput.shippingName,
@@ -93,7 +87,7 @@ describe("checkout query batching", () => {
     clientQuery.mockImplementation(async (sql: string) =>
       sql.includes("FROM web_orders WHERE idempotency_key")
         ? { rows: [{
-            store_id: checkoutInput.storeId,
+            store_id: null,
             cart_id: checkoutInput.cartId,
             delivery_type: checkoutInput.deliveryType,
             shipping_name: checkoutInput.shippingName,

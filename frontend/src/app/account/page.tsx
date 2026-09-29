@@ -75,7 +75,9 @@ export default function AccountPage() {
         throw new Error(typeof data.error === 'string' ? data.error : 'Failed to verify OTP');
       }
 
-      router.push('/account/dashboard');
+      const requestedNext = new URLSearchParams(window.location.search).get('next');
+      const next = requestedNext?.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/account/dashboard';
+      router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify OTP');
     } finally {

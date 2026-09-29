@@ -3,33 +3,32 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image'; import Link from 'next/link';
 import { ChevronDown, Heart, House, MapPin, Menu, MessageCircle, Minus, Plus, Search, ShoppingCart, Star, UserRound, X } from 'lucide-react';
-import { formatPrice, mapProduct, openingCategories, openingProducts, Product, StorefrontCategory, Store, slugify } from '@/lib/catalog';
+import { formatPrice, mapProduct, openingCategories, openingProducts, Product, StorefrontCategory, slugify } from '@/lib/catalog';
 import { resilientFetch } from '@/lib/resilientFetch';
 import { trackStorefrontEvent } from '@/lib/analytics';
 
 type CartItem = { product: Product; qty: number; backendItemId?: string };
-type ShopContext = { items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; stores: Store[]; selectedStore: Store | null; setSelectedStore: (store: Store) => void; add: (product: Product) => void; change: (id: string, delta: number) => void; cartId: string | null; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean };
+type ShopContext = { items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; add: (product: Product) => void; change: (id: string, delta: number) => void; cartId: string | null; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean };
 const Ctx = createContext<ShopContext | null>(null);
 
 function csrfToken() {
   return decodeURIComponent(document.cookie.match(/(?:^|; )customer_csrf=([^;]+)/)?.[1] || '');
 }
 
-async function authenticatedCart(storeId: string) {
+async function authenticatedCart() {
   const session = await resilientFetch('/api/auth/session/validate', { credentials: 'include', cache: 'no-store', retries: 0 });
   if (!session.ok) return null;
-  const response = await resilientFetch('/api/shopping-cart', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({ store_id: storeId }) });
+  const response = await resilientFetch('/api/shopping-cart', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({}) });
   if (!response.ok) return null;
   return await response.json() as { id: string };
 }
 
-export function CommerceProvider({ children, initialProducts = [], initialCategories = [], initialStores = [], initialCatalogLoaded = false }: { children: React.ReactNode; initialProducts?: Product[]; initialCategories?: StorefrontCategory[]; initialStores?: Store[]; initialCatalogLoaded?: boolean }) {
-  const [products, setProducts] = useState<Product[]>(initialProducts); const [categories, setCategories] = useState<StorefrontCategory[]>(initialCategories); const [stores, setStores] = useState<Store[]>(initialStores); const [loading, setLoading] = useState(!initialCatalogLoaded); const [items, setItems] = useState<CartItem[]>([]); const [cartId, setCartId] = useState<string | null>(null); const [drawer, setDrawer] = useState(false); const [selectedStore, setSelectedStoreState] = useState<Store | null>(initialStores[0] || null); const [hydrated, setHydrated] = useState(false);
-  useEffect(() => { const timer = window.setTimeout(() => { try { const saved = localStorage.getItem('pasalho-cart-v2'); if (saved) setItems(JSON.parse(saved)); const storeId = localStorage.getItem('pasalho-store'); if (storeId) setSelectedStoreState({ id: storeId, name: 'Selected store' }); } catch { /* ignore malformed browser state */ } finally { setHydrated(true); } }, 0); return () => window.clearTimeout(timer); }, []);
+export function CommerceProvider({ children, initialProducts = [], initialCategories = [], initialCatalogLoaded = false }: { children: React.ReactNode; initialProducts?: Product[]; initialCategories?: StorefrontCategory[]; initialCatalogLoaded?: boolean }) {
+  const [products, setProducts] = useState<Product[]>(initialProducts); const [categories, setCategories] = useState<StorefrontCategory[]>(initialCategories); const [loading, setLoading] = useState(!initialCatalogLoaded); const [items, setItems] = useState<CartItem[]>([]); const [cartId, setCartId] = useState<string | null>(null); const [drawer, setDrawer] = useState(false); const [hydrated, setHydrated] = useState(false);
+  useEffect(() => { const timer = window.setTimeout(() => { try { const saved = localStorage.getItem('pasalho-cart-v2'); if (saved) setItems(JSON.parse(saved)); localStorage.removeItem('pasalho-store'); } catch { /* ignore malformed browser state */ } finally { setHydrated(true); } }, 0); return () => window.clearTimeout(timer); }, []);
   useEffect(() => { if (hydrated) localStorage.setItem('pasalho-cart-v2', JSON.stringify(items)); }, [hydrated, items]);
   useEffect(() => { if (!hydrated || !products.length) return; const timer = window.setTimeout(() => { const productsBySku = new Map(products.map((product) => [product.sku || product.id, product])); setItems((current) => current.flatMap((item) => { const product = productsBySku.get(item.product.sku || item.product.id); return product ? [{ ...item, product }] : []; })); }, 0); return () => window.clearTimeout(timer); }, [hydrated, products]);
-  useEffect(() => { if (initialCatalogLoaded) return; const controller = new AbortController(); Promise.all([resilientFetch('/api/public/products', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/categories', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/stores', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : [])]).then(([productRows, categoryRows, storeRows]) => { const nextStores = storeRows as Store[]; const apiProducts = (productRows as Record<string, unknown>[]).map(mapProduct).filter((p) => p.price > 0); const apiCategories = categoryRows as StorefrontCategory[]; const bySlug = new Map(apiCategories.map((c) => [c.slug, c])); setProducts(apiProducts.length || process.env.NODE_ENV === 'production' ? apiProducts : openingProducts); setCategories(openingCategories.map((opening) => ({ ...opening, ...bySlug.get(opening.slug), id: opening.id })).concat(apiCategories.filter((c) => !openingCategories.some((opening) => opening.slug === c.slug)))); setStores(nextStores); setSelectedStoreState((current) => current?.id && nextStores.find((s) => s.id === current.id) || nextStores[0] || null); }).catch(() => { if (!controller.signal.aborted && process.env.NODE_ENV !== 'production') { setProducts(openingProducts); setCategories(openingCategories); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [initialCatalogLoaded]);
-  const selected = (store: Store) => { setSelectedStoreState(store); localStorage.setItem('pasalho-store', store.id); };
+  useEffect(() => { if (initialCatalogLoaded) return; const controller = new AbortController(); Promise.all([resilientFetch('/api/public/products', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/categories', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : [])]).then(([productRows, categoryRows]) => { const apiProducts = (productRows as Record<string, unknown>[]).map(mapProduct).filter((p) => p.price > 0); const apiCategories = categoryRows as StorefrontCategory[]; const bySlug = new Map(apiCategories.map((c) => [c.slug, c])); setProducts(apiProducts.length || process.env.NODE_ENV === 'production' ? apiProducts : openingProducts); setCategories(openingCategories.map((opening) => ({ ...opening, ...bySlug.get(opening.slug), id: opening.id })).concat(apiCategories.filter((c) => !openingCategories.some((opening) => opening.slug === c.slug)))); }).catch(() => { if (!controller.signal.aborted && process.env.NODE_ENV !== 'production') { setProducts(openingProducts); setCategories(openingCategories); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [initialCatalogLoaded]);
   const add = (product: Product) => {
     trackStorefrontEvent('ADD_TO_CART', { product_id: product.id, product_name: product.name, quantity: 1 });
     setItems((current) => {
@@ -38,8 +37,7 @@ export function CommerceProvider({ children, initialProducts = [], initialCatego
     });
     setDrawer(true);
     void (async () => {
-      if (!selectedStore) return;
-      const cart = await authenticatedCart(selectedStore.id);
+      const cart = await authenticatedCart();
       if (!cart) return;
       setCartId(cart.id);
       const response = await resilientFetch(`/api/shopping-cart/${cart.id}/items`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({ product_id: product.id, quantity: 1 }) });
@@ -64,12 +62,12 @@ export function CommerceProvider({ children, initialProducts = [], initialCatego
       }
     })().catch(() => undefined);
   };
-  return <Ctx.Provider value={{ items, products, categories, stores, selectedStore, setSelectedStore: selected, add, change, cartId, drawer, setDrawer, loading }}>{children}<CartDrawer /></Ctx.Provider>;
+  return <Ctx.Provider value={{ items, products, categories, add, change, cartId, drawer, setDrawer, loading }}>{children}<CartDrawer /></Ctx.Provider>;
 }
 export const useShop = () => { const value = useContext(Ctx); if (!value) throw new Error('shop provider missing'); return value; };
 
 export function SearchBox() {
-  const { products, selectedStore } = useShop();
+  const { products } = useShop();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [remoteSearch, setRemoteSearch] = useState<{ query: string; products: Product[] }>({ query: '', products: [] });
@@ -81,16 +79,15 @@ export function SearchBox() {
     if (!term) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      trackStorefrontEvent('SEARCH', { query: term, store_id: selectedStore?.id });
+      trackStorefrontEvent('SEARCH', { query: term });
       const params = new URLSearchParams({ q: term, limit: '6' });
-      if (selectedStore?.id) params.set('store_id', selectedStore.id);
       resilientFetch(`/api/public/products?${params.toString()}`, { signal: controller.signal, timeoutMs: 5000, retries: 1 })
         .then((response) => response.ok ? response.json() : [])
         .then((rows: unknown) => setRemoteSearch({ query: term, products: Array.isArray(rows) ? rows.map((row) => mapProduct(row as Record<string, unknown>)).filter((product) => product.price > 0) : [] }))
         .catch(() => { if (!controller.signal.aborted) setRemoteSearch({ query: term, products: [] }); });
     }, 180);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [query, selectedStore?.id]);
+  }, [query]);
   const result = query.trim() ? (remoteSearch.query === query.trim() && remoteSearch.products.length ? remoteSearch.products : localResults) : [];
   useEffect(() => {
     const dismiss = (event: PointerEvent) => {
@@ -154,4 +151,4 @@ function CartDrawer() {
   return <><button className="drawer-backdrop" onClick={() => setDrawer(false)} aria-label="Close cart" /><aside className="cart-drawer open" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title" ref={dialogRef}><header><div><p className="eyebrow">Your basket</p><h2 id="cart-drawer-title">Cart ({items.length})</h2></div><button onClick={() => setDrawer(false)} aria-label="Close" ref={closeRef}><X /></button></header>{items.length ? <><div className="drawer-items">{items.map((item) => <div className="drawer-item" key={item.product.id}><Image src={item.product.image} width={80} height={80} alt="" /><div><b>{item.product.name}</b><strong>{formatPrice(item.product.price)}</strong><Quantity id={item.product.id} qty={item.qty} /></div></div>)}</div><div className="drawer-summary"><p><span>Subtotal</span><strong>{formatPrice(subtotal)}</strong></p><Link href="/whatsapp-order" onClick={() => setDrawer(false)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white"><MessageCircle size={19} /> Order on WhatsApp</Link><Link href="/cart" onClick={() => setDrawer(false)} className="mt-3 block text-center text-sm font-bold text-emerald-800">View and edit cart</Link></div></> : <div className="empty-cart"><ShoppingCart size={48} /><h3>Your cart is ready for good things</h3><button className="primary-btn" onClick={() => setDrawer(false)}>Start shopping</button></div>}</aside></>;
 }
 export function MobileNav() { const { items, setDrawer } = useShop(); return <nav className="mobile-nav" aria-label="Quick navigation"><Link href="/"><House size={20} strokeWidth={2} /><span>Home</span></Link><Link href="/shop"><Menu size={20} strokeWidth={2} /><span>Categories</span></Link><button onClick={() => document.querySelector<HTMLInputElement>('.search-box input')?.focus()} aria-label="Search"><Search size={20} strokeWidth={2} /><span>Search</span></button><Link href="/account" aria-label="Account"><UserRound size={20} strokeWidth={2} /><span>Account</span></Link><button onClick={() => setDrawer(true)} aria-label="Open cart"><ShoppingCart size={20} strokeWidth={2} /><span>Cart {items.length ? `(${items.length})` : ''}</span></button></nav>; }
-export function LocationPicker() { const { stores, selectedStore, setSelectedStore } = useShop(); return <label className="location-picker"><MapPin size={18} strokeWidth={2} /><span><small>Showing availability near</small><select value={selectedStore?.id || ''} onChange={(e) => { const store = stores.find((s) => s.id === e.target.value); if (store) setSelectedStore(store); }} aria-label="Choose store"><option value="">Select a store</option>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></span><ChevronDown size={16} strokeWidth={2} /></label>; }
+export function DeliveryLocation() { return <div className="location-picker" aria-label="Delivery location"><MapPin size={18} strokeWidth={2} /><span><small>Delivery location</small><strong>Choose an address at checkout</strong></span></div>; }

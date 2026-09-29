@@ -86,7 +86,6 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         await checkout.createCodOrder({
           ...body,
           customerId: customerId(request),
-          storeId: body.store_id,
           cartId: body.cart_id,
           idempotencyKey: body.idempotency_key,
           deliveryType: body.delivery_type,

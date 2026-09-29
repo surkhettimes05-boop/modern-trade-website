@@ -3,22 +3,20 @@ import Link from "next/link";
 import Image from "next/image";
 import { Heart, MapPin, Menu, UserRound, X } from "lucide-react";
 import { useState } from "react";
-import { CartButton, MegaMenu, SearchBox, useShop } from "./CommerceClient";
+import { CartButton, MegaMenu, SearchBox } from "./CommerceClient";
 
 export default function Header() {
   const [mega, setMega] = useState(false);
   const [mobile, setMobile] = useState(false);
-  const { selectedStore } = useShop();
 
   return (
     <>
       <div className="utility">
         <div className="shell">
           <span>
-            <MapPin size={14} strokeWidth={2} /> Delivering to <b>{selectedStore?.name || "Choose a store"}</b>
+            <MapPin size={14} strokeWidth={2} /> Delivery to your address at checkout
           </span>
           <nav>
-            <Link href="/stores">Find a store</Link>
             <Link href="/faq">Help</Link>
             <Link href="/about">Careers</Link>
             <Link href="/about">Business / Wholesale</Link>
@@ -72,7 +70,6 @@ export default function Header() {
             <Link href="/shop" onClick={() => setMobile(false)}>Shop</Link>
             <button onClick={() => { setMega(true); setMobile(false); }}>Categories</button>
             <Link href="/offers" onClick={() => setMobile(false)}>Offers</Link>
-            <Link href="/stores" onClick={() => setMobile(false)}>Stores</Link>
             <Link href="/about" onClick={() => setMobile(false)}>About</Link>
             <Link href="/account" onClick={() => setMobile(false)}>Account</Link>
             <Link className="mobile-app-cta" href="/#pasalho-app" onClick={() => setMobile(false)}>Download app</Link>

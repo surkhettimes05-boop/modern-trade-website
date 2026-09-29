@@ -48,8 +48,8 @@ export function BuyBox({ product }: { product: Product }) {
     {hasReviews ? <div className="pdp-rating">★ {product.rating} <span>{product.reviews} reviews</span></div> : null}
     <div className="pdp-price"><strong>{formatPrice(product.price)}</strong>{genuineOriginalPrice && <><del>{formatPrice(genuineOriginalPrice)}</del><span>Save {save}%</span></>}</div>
     <small>Inclusive of all taxes{product.unit ? ` · ${product.unit}` : ''}</small>
-    <div className="availability"><b>● {product.availability}</b><span>Based on your selected store</span></div>
-    <div className="fulfilment"><div><Truck /><span><b>Delivery</b><small>Eligibility shown at checkout</small></span><strong>CHECK</strong></div><div><ShoppingBag /><span><b>Store pickup</b><small>Ready time depends on store stock</small></span><strong>CHECK</strong></div></div>
+    <div className="availability"><b>● Stock confirmed at checkout</b><span>Central warehouse fulfillment</span></div>
+    <div className="fulfilment"><div><Truck /><span><b>Home delivery</b><small>Availability confirmed after order placement</small></span><strong>CHECK</strong></div></div>
     <div className="buy-actions"><div className="quantity standalone"><button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus /></button><span>{quantity}</span><button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)}><Plus /></button></div><button className="primary-btn" disabled={unavailable} onClick={() => { Array.from({ length: quantity }).forEach(() => add(product)); trackStorefrontEvent('ADD_TO_CART', { product_id: product.id, quantity }); }}>Add to cart</button></div>
     <button className="wishlist-btn" aria-label="Save to wishlist"><Heart /> Save to wishlist</button><p className="safe-copy">COD checkout · Store-based fulfilment · PASALHO quality promise</p>
   </div>;

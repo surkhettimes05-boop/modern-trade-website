@@ -1,11 +1,10 @@
-import { randomUUID } from "node:crypto";
 import { getPool } from "../database/connection.js";
 import { MARKET } from "../config/market.js";
 import { PasalhoClient, PasalhoError } from "./pasalhoClient.js";
 
 type CheckoutInput = {
   customerId: string;
-  storeId: string;
+  storeId?: string | null;
   cartId: string;
   idempotencyKey: string;
   deliveryType: "DELIVERY" | "PICKUP";
@@ -44,7 +43,6 @@ export class CheckoutService {
       if (existing.rows[0]) {
         const prior = existing.rows[0];
         const conflicting = [
-          [prior.store_id, input.storeId],
           [prior.cart_id, input.cartId],
           [prior.delivery_type, input.deliveryType],
           [prior.shipping_name, input.shippingName],
@@ -61,12 +59,13 @@ export class CheckoutService {
         order = prior;
         await client.query("COMMIT");
       } else {
+        if (input.deliveryType !== "DELIVERY") throw new Error("Only home delivery is available");
         const cart = await client.query(
-          "SELECT * FROM shopping_carts WHERE id = $1 AND customer_id = $2 AND store_id = $3 AND status = 'ACTIVE' FOR UPDATE",
-          [input.cartId, input.customerId, input.storeId],
+          "SELECT * FROM shopping_carts WHERE id = $1 AND customer_id = $2 AND store_id IS NULL AND status = 'ACTIVE' FOR UPDATE",
+          [input.cartId, input.customerId],
         );
         if (!cart.rows[0]) {
-          throw new Error("Cart is not available for this customer and store");
+          throw new Error("Cart is not available for this customer");
         }
 
         let shippingAddress: string | null;
@@ -74,18 +73,7 @@ export class CheckoutService {
         let shippingState: string | null;
         let shippingPostalCode: string | null;
         let shippingCountry: string;
-        if (input.deliveryType === "PICKUP") {
-          const store = await client.query(
-            "SELECT address_en FROM stores WHERE id = $1 AND status = 'PUBLISHED'",
-            [input.storeId],
-          );
-          if (!store.rows[0]) throw new Error("Pickup store is not available");
-          shippingAddress = store.rows[0].address_en;
-          shippingCity = null;
-          shippingState = null;
-          shippingPostalCode = null;
-          shippingCountry = MARKET.countryCode;
-        } else {
+        {
           if (
             !input.shippingAddress ||
             !input.shippingCity ||
@@ -108,52 +96,18 @@ export class CheckoutService {
              JOIN products p ON p.id = ci.product_id AND p.status = 'PUBLISHED'
              LEFT JOIN LATERAL (
                SELECT price FROM product_prices
-                WHERE product_id = p.id AND store_id = $2 AND active = TRUE
+             WHERE product_id = p.id AND store_id IS NULL AND active = TRUE
                 ORDER BY valid_from DESC LIMIT 1
              ) pp ON TRUE
             WHERE ci.cart_id = $1 FOR UPDATE OF ci`,
-          [input.cartId, input.storeId],
+          [input.cartId],
         );
         if (!items.rows.length) throw new Error("Cart is empty");
 
-        const productIds = items.rows.map((item) => String(item.product_id));
-        await client.query(
-          `SELECT pg_advisory_xact_lock(hashtext(requested.product_id::text || ':' || $2))
-             FROM unnest($1::uuid[]) AS requested(product_id)
-            ORDER BY requested.product_id`,
-          [productIds, input.storeId],
-        );
-        const stockResult = await client.query(
-          `SELECT requested.product_id,
-                  COALESCE(inventory.stock, 0)::int AS stock,
-                  COALESCE(reservations.reserved, 0)::int AS reserved
-             FROM unnest($1::uuid[]) AS requested(product_id)
-             LEFT JOIN LATERAL (
-               SELECT SUM(quantity)::int AS stock FROM batch_inventory
-                WHERE product_id = requested.product_id AND store_id = $2
-             ) inventory ON TRUE
-             LEFT JOIN LATERAL (
-               SELECT SUM(quantity)::int AS reserved FROM stock_reservations
-                WHERE product_id = requested.product_id AND store_id = $2
-                  AND status = 'ACTIVE' AND expires_at > NOW()
-             ) reservations ON TRUE`,
-          [productIds, input.storeId],
-        );
-        const stockByProduct = new Map(
-          stockResult.rows.map((row) => [String(row.product_id), row]),
-        );
-
         let subtotalPaisa = 0;
         const pricedItems = items.rows.map((item) => {
-          const stock = stockByProduct.get(String(item.product_id));
           if (Number(item.authoritative_price) <= 0) {
             throw new Error(`Price unavailable for ${item.name_en}`);
-          }
-          if (
-            Number(stock?.stock || 0) - Number(stock?.reserved || 0) <
-            Number(item.quantity)
-          ) {
-            throw new Error(`Insufficient stock for ${item.name_en}`);
           }
           const linePaisa =
             Math.round(Number(item.authoritative_price) * 100) *
@@ -179,12 +133,11 @@ export class CheckoutService {
              shipping_address, shipping_city, shipping_state, shipping_postal_code,
              shipping_country, delivery_type, notes)
            VALUES ('WO-' || TO_CHAR(NOW(), 'YYYYMMDDHH24MISS') || '-' || SUBSTRING($1, 1, 8),
-             $2, $3, $4, $1, 'PENDING_PAYMENT', $5, $6, $7, 0, $8, '${MARKET.currencyCode}',
-             'COD', 'PENDING', $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
+             $2, NULL, $3, $1, 'PENDING_PAYMENT', $4, $5, $6, 0, $7, '${MARKET.currencyCode}',
+             'COD', 'PENDING', $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
           [
             input.idempotencyKey,
             input.customerId,
-            input.storeId,
             input.cartId,
             subtotalPaisa / 100,
             taxPaisa / 100,
@@ -226,23 +179,6 @@ export class CheckoutService {
             pricedItems.map((item) => item.lineTotal),
             pricedItems.map((item) => item.taxAmount),
             pricedItems.map((item) => item.lineTotalWithTax),
-          ],
-        );
-        await client.query(
-          `INSERT INTO stock_reservations
-            (reservation_id, order_id, product_id, store_id, quantity,
-             reserved_at, expires_at, status)
-           SELECT reservation.reservation_id, $1, reservation.product_id, $2,
-                  reservation.quantity, NOW(), NOW() + INTERVAL '30 minutes',
-                  'ACTIVE'
-             FROM unnest($3::text[], $4::uuid[], $5::integer[])
-                  AS reservation(reservation_id, product_id, quantity)`,
-          [
-            order.id,
-            input.storeId,
-            pricedItems.map(() => `RES-${randomUUID()}`),
-            pricedItems.map((item) => item.product_id),
-            pricedItems.map((item) => item.quantity),
           ],
         );
         await client.query(
@@ -319,18 +255,12 @@ export class CheckoutService {
     order: any,
     input: Pick<CheckoutInput, "shippingName" | "shippingPhone" | "shippingAddress" | "shippingCity" | "shippingState" | "shippingPostalCode" | "shippingCountry" | "deliveryType">,
   ) {
-    // Commerce stock_reservations protects the customer-facing read model only.
-    // CEO's online-fulfillment reservation and ONLINE sale own physical store stock.
+    // PASALO owns physical warehouse reservation, dispatch, and deduction.
     if (!this.pasalho.isConfigured()) return order;
     if (["ACCEPTED", "FAILED_PERMANENT"].includes(order.fulfillment_status)) return order;
     if (order.status === "CANCELLED") return order;
 
     const pool = getPool();
-    const storeResult = await pool.query(
-      "SELECT pasalo_branch_id FROM stores WHERE id = $1 AND status = 'PUBLISHED'",
-      [order.store_id],
-    );
-    const branchId = storeResult.rows[0]?.pasalo_branch_id;
     const itemResult = await pool.query(
       `SELECT woi.product_id, woi.quantity, p.pasalo_product_id
          FROM web_order_items woi
@@ -342,13 +272,12 @@ export class CheckoutService {
     const missingProductMapping = itemResult.rows.some(
       (item: { pasalo_product_id?: string }) => !item.pasalo_product_id,
     );
-    if (!branchId || missingProductMapping || !itemResult.rows.length) {
-      return this.markFulfillment(order, "FAILED_PERMANENT", "Store or product mapping is missing.");
+    if (missingProductMapping || !itemResult.rows.length) {
+      return this.markFulfillment(order, "FAILED_PERMANENT", "Canonical PASALO product mapping is missing.");
     }
 
     try {
       const result = await this.pasalho.createOnlineSalesOrder({
-        branchId: String(branchId),
         externalOrderId: String(order.id),
         idempotencyKey: `commerce-order:${order.id}`,
         customerName: input.shippingName,
@@ -439,11 +368,11 @@ export class CheckoutService {
       const updated = await client.query(
         `UPDATE web_orders
             SET status = $1, updated_at = NOW(),
-                cancellation_reason = CASE WHEN $1 = 'CANCELLED' THEN COALESCE(cancellation_reason, 'Cancelled in PASALO') ELSE cancellation_reason END,
-                cancelled_at = CASE WHEN $1 = 'CANCELLED' THEN COALESCE(cancelled_at, NOW()) ELSE cancelled_at END
+                cancellation_reason = CASE WHEN $4 THEN COALESCE(cancellation_reason, 'Cancelled in PASALO') ELSE cancellation_reason END,
+                cancelled_at = CASE WHEN $4 THEN COALESCE(cancelled_at, NOW()) ELSE cancelled_at END
           WHERE id = $2 AND customer_id = $3
         RETURNING *`,
-        [nextStatus, orderId, customerId],
+        [nextStatus, orderId, customerId, nextStatus === "CANCELLED"],
       );
       if (nextStatus === "CANCELLED") {
         await client.query(

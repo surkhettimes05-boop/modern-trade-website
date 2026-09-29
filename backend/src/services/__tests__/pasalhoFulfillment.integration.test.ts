@@ -22,7 +22,6 @@ describe("commerce to PASALO fulfillment handoff", () => {
   const originalKey = process.env.PASALHO_API_KEY;
   const input = {
     customerId: "00000000-0000-0000-0000-000000000001",
-    storeId: "00000000-0000-0000-0000-000000000010",
     cartId: "00000000-0000-0000-0000-000000000020",
     idempotencyKey: "checkout-12345678",
     deliveryType: "DELIVERY" as const,
@@ -58,7 +57,7 @@ describe("commerce to PASALO fulfillment handoff", () => {
   function setupCheckout(order: any = {
     id: "00000000-0000-0000-0000-000000000099",
     status: "PENDING_PAYMENT",
-    store_id: input.storeId,
+    store_id: null,
     cart_id: input.cartId,
     shipping_name: input.shippingName,
     shipping_phone: input.shippingPhone,
@@ -92,7 +91,7 @@ describe("commerce to PASALO fulfillment handoff", () => {
 
   it("creates one commerce order and one PASALO fulfillment order", async () => {
     setupCheckout();
-    (axiosMock.post as jest.Mock).mockResolvedValue({ data: { id: "00000000-0000-0000-0000-000000000088", orderNo: "ORD-1", status: "CONFIRMED", grandTotal: 200 } });
+    (axiosMock.post as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: "00000000-0000-0000-0000-000000000088", orderNo: "ORD-1", status: "CONFIRMED", grandTotal: 200 } } });
 
     const result = await new CheckoutService().createCodOrder(input);
 
@@ -100,14 +99,15 @@ describe("commerce to PASALO fulfillment handoff", () => {
     expect(axiosMock.post).toHaveBeenCalledTimes(1);
     expect((axiosMock.post as jest.Mock).mock.calls[0][0]).toContain("/sales-orders/public/checkout");
     expect((axiosMock.post as jest.Mock).mock.calls[0][1]).toMatchObject({
-      branchId: "00000000-0000-0000-0000-000000000011",
       externalOrderId: "00000000-0000-0000-0000-000000000099",
       idempotencyKey: "commerce-order:00000000-0000-0000-0000-000000000099",
     });
+    expect((axiosMock.post as jest.Mock).mock.calls[0][1]).not.toHaveProperty("branchId");
+    expect(clientQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO web_orders"))?.[1]?.[2]).toBe(input.cartId);
   });
 
   it("replays the same checkout without creating a second fulfillment order", async () => {
-    const order = { id: "00000000-0000-0000-0000-000000000099", status: "CONFIRMED", store_id: input.storeId, cart_id: input.cartId, shipping_name: input.shippingName, shipping_phone: input.shippingPhone, shipping_address: input.shippingAddress, shipping_city: input.shippingCity, shipping_state: input.shippingState, shipping_postal_code: input.shippingPostalCode, shipping_country: input.shippingCountry, delivery_type: input.deliveryType, fulfillment_status: "ACCEPTED" };
+    const order = { id: "00000000-0000-0000-0000-000000000099", status: "CONFIRMED", store_id: null, cart_id: input.cartId, shipping_name: input.shippingName, shipping_phone: input.shippingPhone, shipping_address: input.shippingAddress, shipping_city: input.shippingCity, shipping_state: input.shippingState, shipping_postal_code: input.shippingPostalCode, shipping_country: input.shippingCountry, delivery_type: input.deliveryType, fulfillment_status: "ACCEPTED" };
     setupCheckout(order);
     clientQuery.mockImplementation(async (sql: string) => sql === "BEGIN" || sql === "COMMIT" ? { rows: [] } : sql.includes("FROM web_orders WHERE idempotency_key") ? { rows: [order] } : { rows: [] });
 
@@ -126,23 +126,27 @@ describe("commerce to PASALO fulfillment handoff", () => {
     expect(first.fulfillment_status).toBe("FAILED_RETRYABLE");
     expect(axiosMock.post).toHaveBeenCalledTimes(1);
 
-    const persisted = { id: "00000000-0000-0000-0000-000000000099", status: "PENDING_PAYMENT", fulfillment_status: "FAILED_RETRYABLE", store_id: input.storeId, shipping_name: input.shippingName, shipping_phone: input.shippingPhone, shipping_address: input.shippingAddress, shipping_city: input.shippingCity, shipping_state: input.shippingState, shipping_postal_code: input.shippingPostalCode, shipping_country: input.shippingCountry, delivery_type: input.deliveryType };
+    const persisted = { id: "00000000-0000-0000-0000-000000000099", status: "PENDING_PAYMENT", fulfillment_status: "FAILED_RETRYABLE", store_id: null, shipping_name: input.shippingName, shipping_phone: input.shippingPhone, shipping_address: input.shippingAddress, shipping_city: input.shippingCity, shipping_state: input.shippingState, shipping_postal_code: input.shippingPostalCode, shipping_country: input.shippingCountry, delivery_type: input.deliveryType };
     poolQuery.mockImplementation(async (sql: string) => sql.startsWith("SELECT * FROM web_orders") ? { rows: [persisted] } : sql.includes("pasalo_branch_id") ? { rows: [{ pasalo_branch_id: "00000000-0000-0000-0000-000000000011" }] } : sql.includes("pasalo_product_id") ? { rows: [{ quantity: 2, pasalo_product_id: "00000000-0000-0000-0000-000000000012" }] } : { rows: [{ ...persisted, fulfillment_status: "ACCEPTED", status: "CONFIRMED" }] });
-    (axiosMock.post as jest.Mock).mockResolvedValue({ data: { id: "00000000-0000-0000-0000-000000000088", orderNo: "ORD-1", status: "CONFIRMED" } });
+    (axiosMock.post as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: "00000000-0000-0000-0000-000000000088", orderNo: "ORD-1", status: "CONFIRMED" } } });
 
     const retried = await service.retryFulfillment(persisted.id, input.customerId);
     expect(retried.fulfillment_status).toBe("ACCEPTED");
     expect(axiosMock.post).toHaveBeenCalledTimes(2);
   });
 
-  it("fails permanently without a store mapping and never sends a wrong-store order", async () => {
+  it("does not require or transmit a store mapping for central warehouse fulfillment", async () => {
     setupCheckout();
-    poolQuery.mockImplementation(async (sql: string) => sql.includes("pasalo_branch_id") ? { rows: [] } : { rows: [] });
+    poolQuery.mockImplementation(async (sql: string) => sql.includes("pasalo_product_id")
+      ? { rows: [{ product_id: "00000000-0000-0000-0000-000000000002", quantity: 2, pasalo_product_id: "00000000-0000-0000-0000-000000000012" }] }
+      : { rows: [] });
+    (axiosMock.post as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: "00000000-0000-0000-0000-000000000088", orderNo: "ORD-1", status: "CONFIRMED" } } });
 
     const result = await new CheckoutService().createCodOrder(input);
 
-    expect(result.fulfillment_status).toBe("FAILED_PERMANENT");
-    expect(axiosMock.post).not.toHaveBeenCalled();
+    expect(result.fulfillment_status).toBe("ACCEPTED");
+    expect(axiosMock.post).toHaveBeenCalledTimes(1);
+    expect((axiosMock.post as jest.Mock).mock.calls[0][1]).not.toHaveProperty("branchId");
   });
 
   it("fails permanently without a product mapping and never sends a wrong-product order", async () => {
@@ -173,11 +177,15 @@ describe("commerce to PASALO fulfillment handoff", () => {
       if (sql.includes("UPDATE web_orders")) return { rows: [{ ...order, status: "DELIVERED" }] };
       return { rows: [] };
     });
-    (axiosMock.get as jest.Mock).mockResolvedValue({ data: { id: order.fulfillment_order_id, status: "DELIVERED" } });
+    (axiosMock.get as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: order.fulfillment_order_id, status: "DELIVERED" } } });
 
     const result = await new CheckoutService().syncFulfillmentStatus(order.id, input.customerId);
 
     expect(result?.status).toBe("DELIVERED");
     expect(axiosMock.get).toHaveBeenCalledTimes(1);
+    const statusUpdate = clientQuery.mock.calls.find(([sql]) =>
+      sql.includes("cancellation_reason = CASE WHEN $4"),
+    );
+    expect(statusUpdate?.[1]?.[3]).toBe(false);
   });
 });

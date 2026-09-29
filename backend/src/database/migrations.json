@@ -64,5 +64,6 @@
   [
     "031_pasalho_fulfillment_integration",
     "src/database/031_pasalho_fulfillment_integration.sql"
-  ]
+  ],
+  ["032_central_warehouse_fulfillment", "src/database/032_central_warehouse_fulfillment.sql"]
 ]

@@ -1,7 +1,6 @@
 import axios from "axios";
 
 export type PasalhoOrderRequest = {
-  branchId: string;
   externalOrderId: string;
   idempotencyKey: string;
   customerName: string;
@@ -100,7 +99,8 @@ export class PasalhoClient {
   }
 
   private parseOrderResult(value: unknown): PasalhoOrderResult {
-    const body = value as Record<string, unknown>;
+    const response = value as Record<string, unknown> | null;
+    const body = (response && "data" in response ? response.data : value) as Record<string, unknown>;
     const orderId = String(body.orderId ?? body.id ?? "");
     const status = String(body.status ?? "");
     if (!orderId || !status) {
@@ -130,7 +130,6 @@ export class PasalhoClient {
         lastName: lastNameParts.join(" ") || firstName,
         phone: request.phone,
         address: request.address,
-        branchId: request.branchId,
         externalOrderId: request.externalOrderId,
         idempotencyKey: request.idempotencyKey,
         items: request.items,
