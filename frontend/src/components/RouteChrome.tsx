@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SkipLink from "@/components/SkipLink";
-import { MobileNav } from "@/components/CommerceClient";
+import { MobileCartBar, MobileNav } from "@/components/CommerceClient";
 
 export default function RouteChrome({
   children,
@@ -25,6 +25,9 @@ export default function RouteChrome({
         {children}
       </main>
       <Footer />
+      {!pathname.startsWith("/cart") && !pathname.startsWith("/checkout") ? (
+        <MobileCartBar />
+      ) : null}
       <MobileNav />
     </>
   );

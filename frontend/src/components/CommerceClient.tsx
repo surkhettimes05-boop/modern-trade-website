@@ -847,6 +847,32 @@ function LocationDialog({
   );
 }
 
+export function MobileCartBar() {
+  const { items, setDrawer } = useShop();
+  const count = items.reduce((total, item) => total + item.qty, 0);
+  const subtotal = items.reduce(
+    (total, item) => total + item.product.price * item.qty,
+    0,
+  );
+
+  if (!count) return null;
+
+  return (
+    <button
+      className="mobile-cart-bar"
+      onClick={() => setDrawer(true)}
+      aria-label={`Open cart with ${count} items, subtotal ${formatPrice(subtotal)}`}
+    >
+      <span className="mobile-cart-count">{count}</span>
+      <span className="mobile-cart-copy">
+        <b>View cart</b>
+        <small>{formatPrice(subtotal)} item subtotal</small>
+      </span>
+      <span className="mobile-cart-arrow">›</span>
+    </button>
+  );
+}
+
 export function MobileNav() {
   const { items, setDrawer } = useShop();
   const count = items.reduce((total, item) => total + item.qty, 0);

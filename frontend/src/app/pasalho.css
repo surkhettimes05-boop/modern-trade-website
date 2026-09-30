@@ -1464,3 +1464,61 @@ body {
     font-size: 32px;
   }
 }
+
+
+/* Mobile quick-cart conversion control */
+.mobile-cart-bar {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .mobile-cart-bar {
+    position: fixed;
+    z-index: 69;
+    left: 12px;
+    right: 12px;
+    bottom: 72px;
+    min-height: 54px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--pasalho-green);
+    color: #fff;
+    box-shadow: 0 14px 34px rgba(7, 82, 45, .24);
+    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+  }
+
+  .mobile-cart-count {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.16);
+    display: grid;
+    place-items: center;
+    font-weight: 900;
+  }
+
+  .mobile-cart-copy {
+    display: grid;
+    line-height: 1.2;
+  }
+
+  .mobile-cart-copy b {
+    font-size: 13px;
+  }
+
+  .mobile-cart-copy small {
+    margin-top: 3px;
+    color: rgba(255,255,255,.82);
+    font-size: 10px;
+  }
+
+  .mobile-cart-arrow {
+    font-size: 25px;
+    line-height: 1;
+  }
+}
