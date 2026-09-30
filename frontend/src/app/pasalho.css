@@ -1522,3 +1522,46 @@ body {
     line-height: 1;
   }
 }
+
+
+/* Checkout address pin truthfulness */
+.address-pin-note {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: start;
+  border: 1px solid #d9e6db;
+  background: #f5faf5;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.address-pin-note > svg {
+  width: 19px;
+  color: var(--pasalho-green);
+  margin-top: 2px;
+}
+.address-pin-note > span {
+  display: grid;
+  gap: 3px;
+}
+.address-pin-note b {
+  font-size: 12px;
+}
+.address-pin-note small {
+  color: var(--pasalho-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.address-pin-note .text-btn {
+  padding: 0;
+  white-space: nowrap;
+}
+@media (max-width: 620px) {
+  .address-pin-note {
+    grid-template-columns: auto 1fr;
+  }
+  .address-pin-note .text-btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
