@@ -437,14 +437,38 @@ export async function getCustomerOrder(id: string) {
 }
 
 export async function cancelCustomerOrder(id: string, reason: string) {
-  return commerceRequest<{ id: string; orderNo: string; status: string }>(
-    `orders/${encodeURIComponent(id)}/cancel`,
-    {
+  const storageKey = `pasalho-cancel-idempotency:${id}`;
+  let idempotencyKey =
+    typeof window !== 'undefined'
+      ? window.sessionStorage.getItem(storageKey)
+      : null;
+
+  if (!idempotencyKey) {
+    idempotencyKey = crypto.randomUUID();
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(storageKey, idempotencyKey);
+    }
+  }
+
+  try {
+    const result = await commerceRequest<{
+      id: string;
+      orderNo: string;
+      status: string;
+    }>(`orders/${encodeURIComponent(id)}/cancel`, {
       method: 'POST',
-      headers: { 'idempotency-key': crypto.randomUUID() },
+      headers: { 'idempotency-key': idempotencyKey },
       body: JSON.stringify({ reason }),
-    },
-  );
+    });
+
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(storageKey);
+    }
+    return result;
+  } catch (error) {
+    // Keep the key so a retry is the same cancellation request.
+    throw error;
+  }
 }
 
 export function categoryRowsToMap(categories: StorefrontCategory[]) {
