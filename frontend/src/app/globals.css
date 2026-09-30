@@ -84,3 +84,61 @@
  .address-row{grid-template-columns:1fr}.order-card{display:grid}.order-card>div:last-child{text-align:left}
  .order-detail-head{display:grid}.account-actions{display:grid}.account-actions>*{width:100%}
 }
+
+
+/* Pasalho customer services */
+.service-cards-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:16px;
+  margin-top:28px;
+}
+.service-card{
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+  padding:24px;
+}
+.service-card-icon{
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  display:grid;
+  place-items:center;
+  background:#eef7ef;
+  color:#13864f;
+  margin-bottom:16px;
+}
+.service-card-icon svg{width:22px;height:22px}
+.service-card h2{
+  margin:0 0 8px;
+  font-size:18px;
+  letter-spacing:-.02em;
+}
+.service-card p{
+  margin:0;
+  color:var(--muted);
+  line-height:1.6;
+  font-size:13px;
+}
+.service-cta{
+  margin-top:34px;
+  padding:26px;
+  border-radius:16px;
+  background:#f3f8f2;
+  border:1px solid #dce6dc;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+.service-cta h2{margin:0 0 6px;font-size:22px}
+.service-cta p{margin:0;color:var(--muted);max-width:720px;line-height:1.5}
+@media(max-width:900px){
+  .service-cards-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:640px){
+  .service-cards-grid{grid-template-columns:1fr}
+  .service-cta{align-items:stretch;flex-direction:column}
+  .service-cta .primary-btn{width:100%}
+}
