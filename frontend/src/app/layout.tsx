@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "NOVA MART — Everyday value for every home",
+    title: "Pasalho — Groceries and everyday essentials",
     description: SITE.description,
   },
   robots: { index: true, follow: true },
