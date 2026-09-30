@@ -1,182 +1,199 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { resilientFetch } from '@/lib/resilientFetch';
+import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { LogOut, PackageSearch, ShieldCheck, Smartphone } from 'lucide-react';
+import { commerceRequest } from '@/lib/pasalhoCommerce';
 
-async function readApiResponse(response: Response): Promise<Record<string, unknown>> {
-  const body = await response.text();
-  if (!body) return {};
+type Customer = {
+  id: string;
+  phone: string;
+  fullName?: string | null;
+  email?: string | null;
+  status: string;
+};
 
-  try {
-    return JSON.parse(body) as Record<string, unknown>;
-  } catch {
-    return {
-      error: response.ok
-        ? 'The backend returned an invalid response'
-        : `Backend request failed (HTTP ${response.status})`,
-    };
+type SessionResponse = {
+  success?: boolean;
+  data?: {
+    customer?: Customer;
+    challengeId?: string;
+    expiresInSeconds?: number;
+  };
+  error?: string | { message?: string };
+};
+
+function responseMessage(value: SessionResponse, fallback: string) {
+  if (typeof value.error === 'string') return value.error;
+  if (value.error && typeof value.error === 'object' && value.error.message) {
+    return value.error.message;
   }
+  return fallback;
 }
 
 export default function AccountPage() {
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [checking, setChecking] = useState(true);
   const [phone, setPhone] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [challengeId, setChallengeId] = useState('');
   const [otp, setOtp] = useState('');
-  const [developmentOtp, setDevelopmentOtp] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
+  const loadCustomer = async () => {
     try {
-      const response = await resilientFetch('/api/auth/otp/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, purpose: 'LOGIN' }),
-      });
-
-      const data = await readApiResponse(response);
-
-      if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send OTP');
-      }
-
-      const returnedOtp = typeof data.otp === 'string' ? data.otp : '';
-      setDevelopmentOtp(returnedOtp);
-      if (returnedOtp) setOtp(returnedOtp);
-      setOtpSent(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+      setCustomer(await commerceRequest<Customer>('me'));
+    } catch {
+      setCustomer(null);
     } finally {
-      setLoading(false);
+      setChecking(false);
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  useEffect(() => {
+    void loadCustomer();
+  }, []);
+
+  async function requestOtp(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
     setError('');
-
     try {
-      const response = await resilientFetch('/api/auth/otp/verify', {
+      const response = await fetch('/api/customer-session/request-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp_code: otp, purpose: 'LOGIN' }),
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ phone }),
       });
-
-      const data = await readApiResponse(response);
-
+      const value = (await response.json()) as SessionResponse;
       if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to verify OTP');
+        throw new Error(responseMessage(value, 'Could not send OTP'));
       }
-
-      router.push('/account/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to verify OTP');
+      const id = value.data?.challengeId;
+      if (!id) throw new Error('OTP challenge was not returned');
+      setChallengeId(id);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Could not send OTP');
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
-  };
+  }
+
+  async function verifyOtp(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch('/api/customer-session/verify-otp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ challengeId, phone, otp }),
+      });
+      const value = (await response.json()) as SessionResponse;
+      if (!response.ok) {
+        throw new Error(responseMessage(value, 'OTP verification failed'));
+      }
+      await loadCustomer();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'OTP verification failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logout() {
+    setBusy(true);
+    await fetch('/api/customer-session/logout', { method: 'POST' }).catch(
+      () => undefined,
+    );
+    setCustomer(null);
+    setChallengeId('');
+    setOtp('');
+    setBusy(false);
+  }
+
+  if (checking) {
+    return <div className="shell page account-shell">Checking your Pasalho account…</div>;
+  }
+
+  if (customer) {
+    return (
+      <div className="shell page account-shell">
+        <section className="account-card">
+          <div className="account-icon"><ShieldCheck /></div>
+          <p className="eyebrow">PASALHO ACCOUNT</p>
+          <h1>{customer.fullName || 'Your account'}</h1>
+          <p className="account-phone">{customer.phone}</p>
+          <div className="account-actions">
+            <Link href="/account/orders"><PackageSearch /> My orders</Link>
+            <Link href="/checkout">Continue checkout</Link>
+            <button onClick={logout} disabled={busy}><LogOut /> Sign out</button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-center mb-6">StoreSync Account</h1>
-        
-        {!otpSent ? (
-          <form onSubmit={handleRequestOtp} className="space-y-4">
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number
-              </label>
+    <div className="shell page account-shell">
+      <section className="account-card">
+        <div className="account-icon"><Smartphone /></div>
+        <p className="eyebrow">SIGN IN TO PASALHO</p>
+        <h1>Continue with your phone</h1>
+        <p>
+          Phone OTP connects your addresses, orders and delivery history to one
+          customer account.
+        </p>
+
+        {!challengeId ? (
+          <form onSubmit={requestOtp} className="account-form">
+            <label>
+              Nepal mobile number
               <input
-                type="tel"
-                id="phone"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(event) => setPhone(event.target.value)}
                 placeholder="98XXXXXXXX"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                inputMode="tel"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">Enter your Nepali mobile number</p>
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-            >
-              {loading ? 'Sending...' : 'Send OTP'}
+            </label>
+            {error ? <p className="form-error" role="alert">{error}</p> : null}
+            <button className="primary-btn" disabled={busy}>
+              {busy ? 'Sending OTP…' : 'Send OTP'}
             </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
-            <div>
-              <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
-                Enter OTP
-              </label>
+          <form onSubmit={verifyOtp} className="account-form">
+            <label>
+              6-digit OTP
               <input
-                type="text"
-                id="otp"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="123456"
-                maxLength={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-2xl tracking-widest"
+                onChange={(event) =>
+                  setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))
+                }
+                placeholder="000000"
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">
-                {developmentOtp
-                  ? 'Local development code returned by the backend'
-                  : 'Enter the 6-digit code sent to your phone'}
-              </p>
-            </div>
-
-            {developmentOtp && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded">
-                Development OTP: <strong>{developmentOtp}</strong>
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-            >
-              {loading ? 'Verifying...' : 'Verify & Login'}
+            </label>
+            {error ? <p className="form-error" role="alert">{error}</p> : null}
+            <button className="primary-btn" disabled={busy || otp.length !== 6}>
+              {busy ? 'Verifying…' : 'Verify & continue'}
             </button>
-
             <button
               type="button"
+              className="text-btn"
               onClick={() => {
-                setOtpSent(false);
+                setChallengeId('');
                 setOtp('');
-                setDevelopmentOtp('');
+                setError('');
               }}
-              className="w-full text-blue-600 hover:text-blue-700 py-2"
             >
               Change phone number
             </button>
           </form>
         )}
-      </div>
+      </section>
     </div>
   );
 }

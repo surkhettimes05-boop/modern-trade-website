@@ -64,6 +64,8 @@ type ShopContext = {
   loading: boolean;
   cartBusy: boolean;
   message: string;
+  cartToken: string;
+  clearCart: () => void;
 };
 
 const Ctx = createContext<ShopContext | null>(null);
@@ -283,6 +285,13 @@ export function CommerceProvider({
     }
   };
 
+  const clearCart = () => {
+    setItems([]);
+    setServerCartToken('');
+    localStorage.removeItem(CART_KEY);
+    setDrawer(false);
+  };
+
   const change = async (productId: string, delta: number) => {
     const current = items.find((item) => item.product.id === productId);
     if (!current || !serverCartToken || !current.cartItemId || cartBusy) return;
@@ -327,6 +336,8 @@ export function CommerceProvider({
         loading,
         cartBusy,
         message,
+        cartToken: serverCartToken,
+        clearCart,
       }}
     >
       {children}
