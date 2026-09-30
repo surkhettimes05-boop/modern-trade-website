@@ -15,11 +15,14 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
     try {
       setError('');
-      setOrder(await getCustomerOrder(id));
+      const nextOrder = await getCustomerOrder(id);
+      setOrder(nextOrder);
+      setLastUpdatedAt(new Date());
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : 'Could not load order.',
@@ -33,6 +36,21 @@ export default function OrderDetailPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (
+      !order ||
+      ['DELIVERED', 'CANCELLED', 'FAILED', 'REFUNDED'].includes(order.status)
+    ) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void load();
+    }, 20_000);
+
+    return () => window.clearInterval(interval);
+  }, [load, order]);
 
   async function cancel() {
     if (!order || !window.confirm('Cancel this Pasalho order?')) return;
@@ -72,7 +90,17 @@ export default function OrderDetailPage() {
         <div>
           <p className="eyebrow">PASALHO ORDER</p>
           <h1>{order.orderNo}</h1>
-          <p>{order.status.replaceAll('_', ' ')}</p>
+          <p aria-live="polite">
+            {order.status.replaceAll('_', ' ')}
+            {lastUpdatedAt ? (
+              <small>
+                {' · '}updated {lastUpdatedAt.toLocaleTimeString('en-NP', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </small>
+            ) : null}
+          </p>
         </div>
         <strong>{formatPrice(Number(order.grandTotal))}</strong>
       </div>
