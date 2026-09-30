@@ -7,6 +7,7 @@ test.describe('security boundaries', () => {
     expect(page.headers()['x-frame-options']).toBe('DENY');
     expect(page.headers()['content-security-policy']).toContain("default-src 'self'");
     expect(page.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(page.headers()['permissions-policy']).toContain('geolocation=(self)');
 
     const api = await request.get('/api/health/live');
     expect(api.headers()['cache-control']).toContain('no-store');
