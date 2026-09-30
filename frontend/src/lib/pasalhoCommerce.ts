@@ -179,6 +179,57 @@ export async function fetchPasalhoCatalog(locationId: string) {
   };
 }
 
+export type PasalhoProductPage = {
+  items: Product[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export async function fetchPasalhoProductPage(
+  locationId: string,
+  options: {
+    page?: number;
+    limit?: number;
+    categoryId?: string;
+    brandId?: string;
+    sort?: 'RELEVANCE' | 'PRICE_ASC' | 'PRICE_DESC' | 'POPULAR';
+  } = {},
+): Promise<PasalhoProductPage> {
+  const params = new URLSearchParams({
+    locationId,
+    page: String(options.page ?? 1),
+    limit: String(options.limit ?? 60),
+  });
+  if (options.categoryId) params.set('categoryId', options.categoryId);
+  if (options.brandId) params.set('brandId', options.brandId);
+  if (options.sort) params.set('sort', options.sort);
+
+  const page = await commerceRequest<{
+    items: Record<string, unknown>[];
+    total: number;
+    page: number;
+    limit: number;
+  }>(`products?${params.toString()}`);
+
+  return {
+    items: page.items.map(mapPasalhoProduct),
+    total: page.total,
+    page: page.page,
+    limit: page.limit,
+  };
+}
+
+export async function fetchPasalhoProduct(
+  locationId: string,
+  identifier: string,
+): Promise<Product> {
+  const row = await commerceRequest<Record<string, unknown>>(
+    `products/${encodeURIComponent(identifier)}?locationId=${encodeURIComponent(locationId)}`,
+  );
+  return mapPasalhoProduct(row);
+}
+
 export async function searchPasalhoCatalog(
   locationId: string,
   query: string,

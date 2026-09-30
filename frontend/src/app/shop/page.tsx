@@ -1,13 +1,83 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { CatalogGrid } from '@/components/CatalogClient';
 import { LocationPicker, useShop } from '@/components/CommerceClient';
 import JsonLd from '@/components/JsonLd';
+import { type Product } from '@/lib/catalog';
+import { fetchPasalhoProductPage } from '@/lib/pasalhoCommerce';
 import { absoluteUrl, breadcrumbSchema } from '@/lib/seo';
 
 export default function Shop() {
   const { categories, products, loading, delivery } = useShop();
+  const [liveProducts, setLiveProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageError, setPageError] = useState('');
+
+  useEffect(() => {
+    if (!delivery) {
+      setLiveProducts([]);
+      setTotal(0);
+      setPage(1);
+      setPageError('');
+      return;
+    }
+
+    let active = true;
+    setPageLoading(true);
+    setPageError('');
+    fetchPasalhoProductPage(delivery.locationId, { page: 1, limit: 60 })
+      .then((result) => {
+        if (!active) return;
+        setLiveProducts(result.items);
+        setTotal(result.total);
+        setPage(1);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setLiveProducts(products);
+        setTotal(products.length);
+        setPageError(
+          error instanceof Error ? error.message : 'Could not load the live catalogue.',
+        );
+      })
+      .finally(() => {
+        if (active) setPageLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [delivery]);
+
+  async function loadMore() {
+    if (!delivery || pageLoading || liveProducts.length >= total) return;
+    setPageLoading(true);
+    setPageError('');
+    try {
+      const next = await fetchPasalhoProductPage(delivery.locationId, {
+        page: page + 1,
+        limit: 60,
+      });
+      setLiveProducts((current) => {
+        const ids = new Set(current.map((product) => product.id));
+        return [...current, ...next.items.filter((product) => !ids.has(product.id))];
+      });
+      setTotal(next.total);
+      setPage(next.page);
+    } catch (error) {
+      setPageError(
+        error instanceof Error ? error.message : 'Could not load more products.',
+      );
+    } finally {
+      setPageLoading(false);
+    }
+  }
+
+  const shownProducts = delivery ? liveProducts : products;
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
@@ -15,8 +85,8 @@ export default function Shop() {
     url: absoluteUrl('/shop'),
     mainEntity: {
       '@type': 'ItemList',
-      numberOfItems: products.length,
-      itemListElement: products.map((product, index) => ({
+      numberOfItems: shownProducts.length,
+      itemListElement: shownProducts.map((product, index) => ({
         '@type': 'ListItem',
         position: index + 1,
         name: product.name,
@@ -42,7 +112,7 @@ export default function Shop() {
           <h1>What do you need today?</h1>
           <p>
             {delivery
-              ? `Showing live products from ${delivery.storeName}.`
+              ? `Showing ${shownProducts.length} of ${total || shownProducts.length} live products from ${delivery.storeName}.`
               : 'Set your location to load live store stock and pricing.'}
           </p>
         </div>
@@ -57,10 +127,21 @@ export default function Shop() {
         ))}
       </div>
 
-      {loading ? (
+      {pageError ? <p className="commerce-message error">{pageError}</p> : null}
+
+      {(loading || pageLoading) && !shownProducts.length ? (
         <p className="catalog-loading">Loading store catalogue…</p>
       ) : (
-        <CatalogGrid />
+        <>
+          <CatalogGrid initial={shownProducts} />
+          {delivery && shownProducts.length < total ? (
+            <div className="catalog-load-more">
+              <button className="secondary-btn" onClick={loadMore} disabled={pageLoading}>
+                {pageLoading ? 'Loading…' : 'Load more products'}
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

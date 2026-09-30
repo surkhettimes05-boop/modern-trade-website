@@ -1565,3 +1565,14 @@ body {
     justify-self: start;
   }
 }
+
+
+.catalog-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 28px 0 8px;
+}
+
+.catalog-load-more .secondary-btn {
+  min-width: 210px;
+}

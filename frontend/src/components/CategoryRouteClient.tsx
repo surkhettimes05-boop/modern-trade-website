@@ -1,78 +1,95 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CatalogGrid } from '@/components/CatalogClient';
 import { LocationPicker, useShop } from '@/components/CommerceClient';
-import { mapPasalhoProduct, type Product } from '@/lib/catalog';
-import { commerceRequest } from '@/lib/pasalhoCommerce';
-
-type ProductPage = {
-  items: Record<string, unknown>[];
-  total: number;
-  page: number;
-  limit: number;
-};
+import { fetchPasalhoProductPage, type PasalhoProductPage } from '@/lib/pasalhoCommerce';
 
 export default function CategoryRouteClient({ slug }: { slug: string }) {
-  const { categories, delivery } = useShop();
+  const { categories, products, loading, delivery } = useShop();
   const category = categories.find((item) => item.slug === slug);
+  const fallbackList = useMemo(
+    () =>
+      category
+        ? products.filter(
+            (product) =>
+              product.categoryId === category.id ||
+              product.category.toLowerCase() === category.name.toLowerCase(),
+          )
+        : [],
+    [category, products],
+  );
 
-  const [liveProducts, setLiveProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [pageData, setPageData] = useState<PasalhoProductPage | null>(null);
+  const [extraItems, setExtraItems] = useState<PasalhoProductPage['items']>([]);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageError, setPageError] = useState('');
 
   useEffect(() => {
-    if (!delivery || !category || category.id.startsWith('opening-')) {
-      setLiveProducts([]);
+    if (!delivery || !category) {
+      setPageData(null);
+      setExtraItems([]);
+      setPageError('');
       return;
     }
 
     let active = true;
-    setLoading(true);
-    setError('');
-
-    const load = async () => {
-      const rows: Record<string, unknown>[] = [];
-      let page = 1;
-      let total = 0;
-
-      do {
-        const result = await commerceRequest<ProductPage>(
-          `products?locationId=${encodeURIComponent(delivery.locationId)}&categoryId=${encodeURIComponent(category.id)}&page=${page}&limit=60`,
-        );
-        rows.push(...result.items);
-        total = result.total;
-        page += 1;
-      } while (rows.length < total && page <= 10);
-
-      if (active) {
-        setLiveProducts(
-          rows
-            .map(mapPasalhoProduct)
-            .filter((product) => product.price > 0),
-        );
-      }
-    };
-
-    load()
-      .catch((reason) => {
+    setPageLoading(true);
+    setPageError('');
+    fetchPasalhoProductPage(delivery.locationId, {
+      categoryId: category.id,
+      page: 1,
+      limit: 60,
+    })
+      .then((page) => {
         if (!active) return;
-        setLiveProducts([]);
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : 'Could not load this Pasalho category.',
+        setPageData(page);
+        setExtraItems([]);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setPageError(
+          error instanceof Error ? error.message : 'Could not load this category.',
         );
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setPageLoading(false);
       });
 
     return () => {
       active = false;
     };
   }, [category, delivery]);
+
+  const list = pageData ? [...pageData.items, ...extraItems] : fallbackList;
+  const total = pageData?.total ?? fallbackList.length;
+  const loadedPages = pageData
+    ? 1 + Math.ceil(extraItems.length / pageData.limit)
+    : 1;
+
+  async function loadMore() {
+    if (!delivery || !category || !pageData || pageLoading) return;
+    setPageLoading(true);
+    setPageError('');
+    try {
+      const next = await fetchPasalhoProductPage(delivery.locationId, {
+        categoryId: category.id,
+        page: loadedPages + 1,
+        limit: pageData.limit,
+      });
+      setExtraItems((current) => {
+        const ids = new Set(current.map((item) => item.id));
+        return [...current, ...next.items.filter((item) => !ids.has(item.id))];
+      });
+    } catch (error) {
+      setPageError(
+        error instanceof Error ? error.message : 'Could not load more products.',
+      );
+    } finally {
+      setPageLoading(false);
+    }
+  }
 
   if (!delivery) {
     return (
@@ -91,7 +108,7 @@ export default function CategoryRouteClient({ slug }: { slug: string }) {
     );
   }
 
-  if (loading || (category?.id.startsWith('opening-') ?? false)) {
+  if ((loading || pageLoading) && !pageData && !fallbackList.length) {
     return <div className="shell page"><p>Loading live category stock…</p></div>;
   }
 
@@ -111,26 +128,34 @@ export default function CategoryRouteClient({ slug }: { slug: string }) {
         <Link href="/">Home</Link><span>›</span><Link href="/shop">Shop</Link><span>›</span>
         <span aria-current="page">{category.name}</span>
       </nav>
-
       <div className="quick-shop-head">
         <div>
           <p className="eyebrow">LIVE AT {delivery.storeName.toUpperCase()}</p>
           <h1>{category.name}</h1>
           <p>
-            {error
-              ? error
-              : `${liveProducts.length} currently orderable product${liveProducts.length === 1 ? '' : 's'}.`}
+            Showing {list.length} of {total} currently orderable product{total === 1 ? '' : 's'}.
           </p>
         </div>
         <LocationPicker />
       </div>
 
-      {liveProducts.length ? (
-        <CatalogGrid initial={liveProducts} />
+      {pageError ? <p className="commerce-message error">{pageError}</p> : null}
+
+      {list.length ? (
+        <>
+          <CatalogGrid initial={list} />
+          {list.length < total ? (
+            <div className="catalog-load-more">
+              <button className="secondary-btn" onClick={loadMore} disabled={pageLoading}>
+                {pageLoading ? 'Loading…' : 'Load more products'}
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : (
         <div className="empty-page">
           <h2>No sellable products right now</h2>
-          <p>{error || 'Pasalho will show items here when this store has orderable stock.'}</p>
+          <p>Pasalho will show items here when this store has orderable stock.</p>
           <Link className="primary-btn" href="/shop">Browse other categories</Link>
         </div>
       )}

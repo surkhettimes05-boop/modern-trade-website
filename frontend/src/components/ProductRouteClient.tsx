@@ -4,49 +4,43 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { LocationPicker, ProductCard, useShop } from '@/components/CommerceClient';
 import { BuyBox, ProductGallery } from '@/components/ProductDetailClient';
-import { formatPrice, mapPasalhoProduct, type Product } from '@/lib/catalog';
-import { commerceRequest } from '@/lib/pasalhoCommerce';
+import { formatPrice, type Product } from '@/lib/catalog';
+import { fetchPasalhoProduct } from '@/lib/pasalhoCommerce';
 
 export default function ProductRouteClient({ slug }: { slug: string }) {
-  const { products, categories, delivery } = useShop();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const { products, categories, delivery, loading } = useShop();
+  const knownProduct = products.find(
+    (item) => item.slug === slug || item.sku === slug || item.id === slug,
+  );
+  const [remoteProduct, setRemoteProduct] = useState<Product | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
-    if (!delivery) {
-      setProduct(null);
-      setError('');
+    if (!delivery || knownProduct) {
+      setRemoteProduct(null);
+      setDetailLoading(false);
       return;
     }
 
     let active = true;
-    setLoading(true);
-    setError('');
-
-    commerceRequest<Record<string, unknown>>(
-      `products/${encodeURIComponent(slug)}?locationId=${encodeURIComponent(delivery.locationId)}`,
-    )
-      .then((row) => {
-        if (active) setProduct(mapPasalhoProduct(row));
+    setDetailLoading(true);
+    fetchPasalhoProduct(delivery.locationId, slug)
+      .then((product) => {
+        if (active) setRemoteProduct(product);
       })
-      .catch((reason) => {
-        if (!active) return;
-        setProduct(null);
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : 'Could not load this product from Pasalho.',
-        );
+      .catch(() => {
+        if (active) setRemoteProduct(null);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setDetailLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [delivery, slug]);
+  }, [delivery, knownProduct, slug]);
+
+  const product = knownProduct || remoteProduct;
 
   if (!delivery) {
     return (
@@ -65,7 +59,7 @@ export default function ProductRouteClient({ slug }: { slug: string }) {
     );
   }
 
-  if (loading) {
+  if (loading || detailLoading) {
     return <div className="shell page"><p>Checking {delivery.storeName}…</p></div>;
   }
 
@@ -73,7 +67,7 @@ export default function ProductRouteClient({ slug }: { slug: string }) {
     return (
       <div className="shell page empty-page">
         <h1>Not available at this store</h1>
-        <p>{error || `This product is not currently orderable from ${delivery.storeName}.`}</p>
+        <p>The product may be out of assortment or unavailable at {delivery.storeName}.</p>
         <Link className="primary-btn" href="/shop">Browse live catalogue</Link>
       </div>
     );
@@ -84,7 +78,6 @@ export default function ProductRouteClient({ slug }: { slug: string }) {
       item.id === product.categoryId ||
       item.name.toLowerCase() === product.category.toLowerCase(),
   );
-
   const related = products
     .filter(
       (item) =>
