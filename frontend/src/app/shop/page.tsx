@@ -18,40 +18,47 @@ export default function Shop() {
   const [pageError, setPageError] = useState('');
 
   useEffect(() => {
-    if (!delivery) {
-      setLiveProducts([]);
-      setTotal(0);
-      setPage(1);
-      setPageError('');
-      return;
-    }
-
     let active = true;
-    setPageLoading(true);
-    setPageError('');
-    fetchPasalhoProductPage(delivery.locationId, { page: 1, limit: 60 })
-      .then((result) => {
-        if (!active) return;
-        setLiveProducts(result.items);
-        setTotal(result.total);
-        setPage(1);
-      })
-      .catch((error) => {
-        if (!active) return;
-        setLiveProducts(products);
-        setTotal(products.length);
-        setPageError(
-          error instanceof Error ? error.message : 'Could not load the live catalogue.',
-        );
-      })
-      .finally(() => {
-        if (active) setPageLoading(false);
-      });
+    const timer = window.setTimeout(() => {
+      if (!delivery) {
+        if (active) {
+          setLiveProducts([]);
+          setTotal(0);
+          setPage(1);
+          setPageError('');
+        }
+        return;
+      }
+
+      if (active) {
+        setPageLoading(true);
+        setPageError('');
+      }
+      fetchPasalhoProductPage(delivery.locationId, { page: 1, limit: 60 })
+        .then((result) => {
+          if (!active) return;
+          setLiveProducts(result.items);
+          setTotal(result.total);
+          setPage(1);
+        })
+        .catch((error) => {
+          if (!active) return;
+          setLiveProducts(products);
+          setTotal(products.length);
+          setPageError(
+            error instanceof Error ? error.message : 'Could not load the live catalogue.',
+          );
+        })
+        .finally(() => {
+          if (active) setPageLoading(false);
+        });
+    }, 0);
 
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
-  }, [delivery]);
+  }, [delivery, products]);
 
   async function loadMore() {
     if (!delivery || pageLoading || liveProducts.length >= total) return;

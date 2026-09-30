@@ -27,38 +27,45 @@ export default function CategoryRouteClient({ slug }: { slug: string }) {
   const [pageError, setPageError] = useState('');
 
   useEffect(() => {
-    if (!delivery || !category) {
-      setPageData(null);
-      setExtraItems([]);
-      setPageError('');
-      return;
-    }
-
     let active = true;
-    setPageLoading(true);
-    setPageError('');
-    fetchPasalhoProductPage(delivery.locationId, {
-      categoryId: category.id,
-      page: 1,
-      limit: 60,
-    })
-      .then((page) => {
-        if (!active) return;
-        setPageData(page);
-        setExtraItems([]);
+    const timer = window.setTimeout(() => {
+      if (!delivery || !category) {
+        if (active) {
+          setPageData(null);
+          setExtraItems([]);
+          setPageError('');
+        }
+        return;
+      }
+
+      if (active) {
+        setPageLoading(true);
+        setPageError('');
+      }
+      fetchPasalhoProductPage(delivery.locationId, {
+        categoryId: category.id,
+        page: 1,
+        limit: 60,
       })
-      .catch((error) => {
-        if (!active) return;
-        setPageError(
-          error instanceof Error ? error.message : 'Could not load this category.',
-        );
-      })
-      .finally(() => {
-        if (active) setPageLoading(false);
-      });
+        .then((page) => {
+          if (!active) return;
+          setPageData(page);
+          setExtraItems([]);
+        })
+        .catch((error) => {
+          if (!active) return;
+          setPageError(
+            error instanceof Error ? error.message : 'Could not load this category.',
+          );
+        })
+        .finally(() => {
+          if (active) setPageLoading(false);
+        });
+    }, 0);
 
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
   }, [category, delivery]);
 

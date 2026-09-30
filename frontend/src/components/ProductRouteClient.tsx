@@ -16,27 +16,32 @@ export default function ProductRouteClient({ slug }: { slug: string }) {
   const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
-    if (!delivery || knownProduct) {
-      setRemoteProduct(null);
-      setDetailLoading(false);
-      return;
-    }
-
     let active = true;
-    setDetailLoading(true);
-    fetchPasalhoProduct(delivery.locationId, slug)
-      .then((product) => {
-        if (active) setRemoteProduct(product);
-      })
-      .catch(() => {
-        if (active) setRemoteProduct(null);
-      })
-      .finally(() => {
-        if (active) setDetailLoading(false);
-      });
+    const timer = window.setTimeout(() => {
+      if (!delivery || knownProduct) {
+        if (active) {
+          setRemoteProduct(null);
+          setDetailLoading(false);
+        }
+        return;
+      }
+
+      if (active) setDetailLoading(true);
+      fetchPasalhoProduct(delivery.locationId, slug)
+        .then((product) => {
+          if (active) setRemoteProduct(product);
+        })
+        .catch(() => {
+          if (active) setRemoteProduct(null);
+        })
+        .finally(() => {
+          if (active) setDetailLoading(false);
+        });
+    }, 0);
 
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
   }, [delivery, knownProduct, slug]);
 
