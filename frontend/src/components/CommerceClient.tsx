@@ -261,7 +261,7 @@ export function CommerceProvider({
       setMessage('Set your delivery location to check stock and add items.');
       return;
     }
-    if (product.source && product.source !== 'pasalho') {
+    if (product.source !== 'pasalho') {
       setMessage(
         'Choose your delivery location to load live Pasalho store inventory.',
       );
@@ -286,13 +286,6 @@ export function CommerceProvider({
   };
 
   const clearCart = () => {
-    setItems([]);
-    setServerCartToken('');
-    localStorage.removeItem(CART_KEY);
-    setDrawer(false);
-  };
-
-  const resetCart = () => {
     setItems([]);
     setServerCartToken('');
     localStorage.removeItem(CART_KEY);
