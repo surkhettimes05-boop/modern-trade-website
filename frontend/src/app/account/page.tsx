@@ -1,182 +1,95 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { resilientFetch } from '@/lib/resilientFetch';
+import { FormEvent, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { commerceFetch, setCommerceSession } from '@/lib/commerceApi';
 
-async function readApiResponse(response: Response): Promise<Record<string, unknown>> {
-  const body = await response.text();
-  if (!body) return {};
-
-  try {
-    return JSON.parse(body) as Record<string, unknown>;
-  } catch {
-    return {
-      error: response.ok
-        ? 'The backend returned an invalid response'
-        : `Backend request failed (HTTP ${response.status})`,
-    };
-  }
-}
+type OtpChallenge = { challengeId: string; expiresInSeconds: number };
+type AuthResult = {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  customer: { id: string; phone: string; fullName?: string | null };
+};
 
 export default function AccountPage() {
   const [phone, setPhone] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [challengeId, setChallengeId] = useState('');
   const [otp, setOtp] = useState('');
-  const [developmentOtp, setDevelopmentOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  async function requestOtp(event: FormEvent) {
+    event.preventDefault();
     setLoading(true);
     setError('');
-
     try {
-      const response = await resilientFetch('/api/auth/otp/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, purpose: 'LOGIN' }),
-      });
-
-      const data = await readApiResponse(response);
-
-      if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send OTP');
-      }
-
-      const returnedOtp = typeof data.otp === 'string' ? data.otp : '';
-      setDevelopmentOtp(returnedOtp);
-      if (returnedOtp) setOtp(returnedOtp);
-      setOtpSent(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+      const challenge = await commerceFetch<OtpChallenge>(
+        '/api/commerce/auth/request-otp',
+        {
+          method: 'POST',
+          body: JSON.stringify({ phone }),
+        },
+        { auth: false },
+      );
+      setChallengeId(challenge.challengeId);
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Could not send OTP.');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  async function verifyOtp(event: FormEvent) {
+    event.preventDefault();
     setLoading(true);
     setError('');
-
     try {
-      const response = await resilientFetch('/api/auth/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp_code: otp, purpose: 'LOGIN' }),
-      });
-
-      const data = await readApiResponse(response);
-
-      if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to verify OTP');
-      }
-
-      router.push('/account/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to verify OTP');
+      const result = await commerceFetch<AuthResult>(
+        '/api/commerce/auth/verify-otp',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            phone,
+            challengeId,
+            otp,
+            deviceId: 'pasalho-web',
+          }),
+        },
+        { auth: false },
+      );
+      setCommerceSession(result);
+      const next = searchParams.get('next');
+      router.replace(next?.startsWith('/') ? next : '/account/orders');
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Could not verify OTP.');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-center mb-6">StoreSync Account</h1>
-        
-        {!otpSent ? (
-          <form onSubmit={handleRequestOtp} className="space-y-4">
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number
-              </label>
-              <input
-                type="tel"
-                id="phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="98XXXXXXXX"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">Enter your Nepali mobile number</p>
-            </div>
+  return <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="max-w-md w-full bg-white rounded-2xl shadow-md p-8">
+      <p className="eyebrow">PASALHO ACCOUNT</p>
+      <h1 className="text-2xl font-bold mb-2">Sign in with your phone</h1>
+      <p className="text-sm text-slate-600 mb-6">Your phone number is your Pasalho customer ID.</p>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-            >
-              {loading ? 'Sending...' : 'Send OTP'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
-            <div>
-              <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
-                Enter OTP
-              </label>
-              <input
-                type="text"
-                id="otp"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="123456"
-                maxLength={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-2xl tracking-widest"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {developmentOtp
-                  ? 'Local development code returned by the backend'
-                  : 'Enter the 6-digit code sent to your phone'}
-              </p>
-            </div>
-
-            {developmentOtp && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded">
-                Development OTP: <strong>{developmentOtp}</strong>
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-            >
-              {loading ? 'Verifying...' : 'Verify & Login'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setOtpSent(false);
-                setOtp('');
-                setDevelopmentOtp('');
-              }}
-              className="w-full text-blue-600 hover:text-blue-700 py-2"
-            >
-              Change phone number
-            </button>
-          </form>
-        )}
-      </div>
+      {!challengeId ? <form onSubmit={requestOtp} className="space-y-4">
+        <label className="block text-sm font-medium">Nepal mobile number
+          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+97798XXXXXXXX" className="mt-2 w-full rounded-lg border px-4 py-3" required />
+        </label>
+        {error && <p className="rounded bg-red-50 p-3 text-red-700">{error}</p>}
+        <button type="submit" disabled={loading} className="primary-btn w-full">{loading ? 'Sending…' : 'Send OTP'}</button>
+      </form> : <form onSubmit={verifyOtp} className="space-y-4">
+        <label className="block text-sm font-medium">6-digit OTP
+          <input inputMode="numeric" pattern="\d{6}" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} className="mt-2 w-full rounded-lg border px-4 py-3 text-center text-2xl tracking-widest" required />
+        </label>
+        {error && <p className="rounded bg-red-50 p-3 text-red-700">{error}</p>}
+        <button type="submit" disabled={loading} className="primary-btn w-full">{loading ? 'Verifying…' : 'Verify and continue'}</button>
+        <button type="button" className="w-full py-2 text-emerald-800" onClick={() => { setChallengeId(''); setOtp(''); setError(''); }}>Change phone number</button>
+      </form>}
     </div>
-  );
+  </div>;
 }

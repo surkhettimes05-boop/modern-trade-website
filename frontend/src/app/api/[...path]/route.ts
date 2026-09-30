@@ -14,11 +14,17 @@ function unavailableResponse(path: string, method: string) {
     return NextResponse.json([]);
   }
 
-  if (/^(auth|customer|ledger|consent)(\/|$)/.test(path)) {
-    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  if (/^(commerce\/auth|commerce\/me|commerce\/orders)(\/|$)/.test(path)) {
+    return NextResponse.json(
+      { success: false, error: { code: "BACKEND_UNAVAILABLE", message: "Pasalho commerce is temporarily unavailable.", details: {} } },
+      { status: 503 },
+    );
   }
 
-  return NextResponse.json({ error: "Backend service is temporarily unavailable" }, { status: 503 });
+  return NextResponse.json(
+    { success: false, error: { code: "BACKEND_UNAVAILABLE", message: "Backend service is temporarily unavailable.", details: {} } },
+    { status: 503 },
+  );
 }
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
@@ -26,10 +32,13 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const path = pathParts.map(encodeURIComponent).join("/");
   let target: URL;
   try {
-    target = new URL(`/api/${path}`, requireServerApiUrl());
+    target = new URL(`/api/v1/${path}`, requireServerApiUrl());
     target.search = request.nextUrl.search;
   } catch {
-    return NextResponse.json({ error: "Backend service is not configured" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: { code: "BACKEND_NOT_CONFIGURED", message: "Backend service is not configured.", details: {} } },
+      { status: 500 },
+    );
   }
 
   const requestHeaders = proxyRequestHeaders(request.headers);
@@ -39,9 +48,15 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     requestBody = await readBoundedProxyBody(request);
   } catch (error) {
     if (error instanceof ProxyPayloadTooLargeError) {
-      return NextResponse.json({ error: error.message }, { status: 413 });
+      return NextResponse.json(
+        { success: false, error: { code: "PAYLOAD_TOO_LARGE", message: error.message, details: {} } },
+        { status: 413 },
+      );
     }
-    return NextResponse.json({ error: "Request body could not be read" }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: { code: "INVALID_REQUEST_BODY", message: "Request body could not be read.", details: {} } },
+      { status: 400 },
+    );
   }
 
   try {
@@ -60,7 +75,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const contentType = upstream.headers.get("content-type") || "";
     if (!contentType.toLowerCase().includes("application/json")) {
       return NextResponse.json(
-        { error: "Backend returned a non-JSON response; check the Vercel API_URL configuration" },
+        { success: false, error: { code: "INVALID_UPSTREAM_RESPONSE", message: "Backend returned a non-JSON response.", details: {} } },
         { status: 502 },
       );
     }
@@ -80,7 +95,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") {
       return NextResponse.json(
-        { error: "Backend service timed out" },
+        { success: false, error: { code: "BACKEND_TIMEOUT", message: "Backend service timed out.", details: {} } },
         { status: 504 },
       );
     }
