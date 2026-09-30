@@ -1329,3 +1329,138 @@ body {
     align-items: start;
   }
 }
+
+
+/* Live-location route states and fulfillment-store assignment */
+.location-required {
+  max-width: 720px;
+  margin: 26px auto 0;
+  border: 1px solid var(--pasalho-line);
+  border-radius: 20px;
+  padding: 34px;
+  background: linear-gradient(135deg, #f8fbf5, #eef7ef);
+}
+
+.location-required h1,
+.location-required h2 {
+  margin: 6px 0 10px;
+  letter-spacing: -.04em;
+}
+
+.location-required p {
+  color: var(--pasalho-muted);
+  line-height: 1.6;
+}
+
+.quick-product-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.serviceability-page > h1 {
+  margin: 6px 0 10px;
+  max-width: 760px;
+  font-size: 42px;
+  letter-spacing: -.05em;
+}
+
+.serviceability-intro {
+  max-width: 720px;
+  color: var(--pasalho-muted);
+  line-height: 1.6;
+}
+
+.serving-store-card {
+  margin-top: 28px;
+  border: 1px solid var(--pasalho-line);
+  border-radius: 18px;
+  padding: 22px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  align-items: center;
+  background: #fff;
+}
+
+.serving-store-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--pasalho-soft);
+  color: var(--pasalho-green);
+}
+
+.serving-store-card h2,
+.serving-store-card p {
+  margin: 2px 0;
+}
+
+.serving-store-card > div > span {
+  color: var(--pasalho-muted);
+  font-size: 10px;
+}
+
+.serving-store-meta {
+  display: grid;
+  gap: 8px;
+}
+
+.serving-store-meta span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--pasalho-green) !important;
+  font-weight: 750;
+}
+
+.serving-store-meta svg {
+  width: 16px;
+}
+
+.serving-store-card.pending {
+  grid-template-columns: auto 1fr;
+  color: var(--pasalho-muted);
+}
+
+.quick-title {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 1180px) {
+  .quick-product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .quick-product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  .location-required {
+    margin-top: 14px;
+    padding: 24px 18px;
+  }
+
+  .quick-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .serving-store-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .serving-store-meta {
+    grid-column: 1 / -1;
+  }
+
+  .serviceability-page > h1 {
+    font-size: 32px;
+  }
+}
