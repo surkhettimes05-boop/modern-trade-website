@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PRODUCT_ID = "11111111-1111-4111-8111-111111111111";
+const SECOND_PRODUCT_ID = "12121212-1212-4121-8121-121212121212";
 const UNIT_ID = "22222222-2222-4222-8222-222222222222";
 const LOCATION_ID = "33333333-3333-4333-8333-333333333333";
 const BRANCH_ID = "44444444-4444-4444-8444-444444444444";
@@ -41,6 +42,16 @@ async function mockPasalhoCommerce(
       sellableBaseQuantity: 100,
       maxOrderQuantity: 10,
     },
+  };
+
+  const rawSecondProduct = {
+    ...rawProduct,
+    id: SECOND_PRODUCT_ID,
+    skuCode: "SOAP-100G",
+    slug: "everyday-bathing-soap-100g",
+    name: "Everyday Bathing Soap 100g",
+    shortDescription: "Everyday personal care soap.",
+    price: { sellingPrice: 55, mrp: 60 },
   };
 
   const cart = () => ({
@@ -192,8 +203,27 @@ async function mockPasalhoCommerce(
       ]);
     }
 
-    if ((path === "products" || path === "search") && method === "GET") {
-      return ok({ items: [rawProduct], total: 1, page: 1, limit: 60 });
+    if (path === "products" && method === "GET") {
+      const pageNumber = Number(url.searchParams.get("page") || "1");
+      return ok({
+        items: pageNumber === 1 ? [rawProduct] : [rawSecondProduct],
+        total: 61,
+        page: pageNumber,
+        limit: 60,
+      });
+    }
+
+    if (path === "search" && method === "GET") {
+      const query = (url.searchParams.get("q") || "").toLowerCase();
+      const item = query.includes("soap") ? rawSecondProduct : rawProduct;
+      return ok({ items: [item], total: 1, page: 1, limit: 12 });
+    }
+
+    if (
+      path === `products/${rawSecondProduct.slug}` &&
+      method === "GET"
+    ) {
+      return ok(rawSecondProduct);
     }
 
     if (path === "carts" && method === "POST") return ok(cart(), 201);
@@ -409,6 +439,28 @@ test.describe("release browser gate", () => {
     await page.getByRole("button", { name: /decrease quantity/i }).click();
     await page.getByRole("button", { name: /decrease quantity/i }).click();
     await expect(page.getByRole("heading", { name: /basket is empty/i })).toBeVisible();
+  });
+
+  test("catalog can browse and open products beyond the first page", async ({ page }) => {
+    await mockPasalhoCommerce(page);
+    await page.goto("/shop", { waitUntil: "domcontentloaded" });
+    await selectDeliveryLocation(page);
+
+    const loadMore = page.getByRole("button", { name: "Load more products" });
+    await expect(loadMore).toBeVisible();
+    await loadMore.click();
+    await expect(page.getByText("Everyday Bathing Soap 100g").first()).toBeVisible();
+
+    const search = page.getByRole("combobox", { name: "Search Pasalho products" });
+    await search.fill("soap");
+    const result = page.getByRole("option", { name: /Everyday Bathing Soap 100g/i });
+    await expect(result).toBeVisible();
+    await result.click();
+
+    await expect(page).toHaveURL(/\/product\/everyday-bathing-soap-100g$/);
+    await expect(
+      page.getByRole("heading", { name: "Everyday Bathing Soap 100g" }),
+    ).toBeVisible();
   });
 
   test("customer can sign in and place an idempotent COD order", async ({ page }) => {
