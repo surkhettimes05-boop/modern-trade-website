@@ -1,11 +1,47 @@
 'use client';
-import { Clock, MapPin, Phone } from 'lucide-react';
+
+import { CheckCircle2, MapPin, Navigation } from 'lucide-react';
 import { LocationPicker, useShop } from '@/components/CommerceClient';
-import JsonLd from '@/components/JsonLd';
-import { absoluteUrl } from '@/lib/seo';
 
 export default function StoresPage() {
-  const { stores, loading, setSelectedStore } = useShop();
-  const schema = { '@context': 'https://schema.org', '@type': 'ItemList', name: 'NOVA MART stores', url: absoluteUrl('/stores'), numberOfItems: stores.length, itemListElement: stores.map((store, index) => ({ '@type': 'ListItem', position: index + 1, item: { '@type': 'GroceryStore', name: store.name, address: store.address, telephone: store.phone, openingHours: store.hours, geo: store.latitude != null && store.longitude != null ? { '@type': 'GeoCoordinates', latitude: store.latitude, longitude: store.longitude } : undefined } })) };
-  return <div className="shell page"><JsonLd data={schema} /><div className="page-head"><div><p className="eyebrow">FIND YOUR STORE</p><h1>Stores near you</h1><p>Choose a store to see local availability, services, hours, and fulfilment options.</p></div><LocationPicker /></div>{loading ? <p className="py-12 text-center">Loading stores…</p> : stores.length ? <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{stores.map((store) => <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" key={store.id}><MapPin className="text-emerald-700" /><h2 className="mt-3 text-xl font-bold">{store.name}</h2><p className="mt-2 text-slate-600">{store.address || 'Address unavailable'}</p><p className="mt-3 flex gap-2 text-sm text-slate-600"><Clock size={16} />{store.hours || 'Hours vary by day'}</p>{store.phone && <p className="mt-2 flex gap-2 text-sm text-slate-600"><Phone size={16} />{store.phone}</p>}<button className="primary-btn mt-5" onClick={() => setSelectedStore(store)}>Use this store</button>{store.map_url && <a className="ml-3 text-sm font-semibold text-emerald-700" href={store.map_url} target="_blank" rel="noreferrer">Directions</a>}</article>)}</div> : <section className="rounded-xl border border-slate-200 bg-white p-8"><h2 className="text-xl font-semibold">Store directory unavailable</h2><p className="mt-2 text-slate-600">Published store details will appear here when the location directory is available.</p></section>}</div>;
+  const { delivery } = useShop();
+
+  return (
+    <div className="shell page serviceability-page">
+      <p className="eyebrow">PASALHO FULFILLMENT</p>
+      <h1>Your location chooses the right store.</h1>
+      <p className="serviceability-intro">
+        You do not need to pick a branch manually. Pasalho resolves your
+        delivery point to an eligible store, then shows that store&apos;s live
+        inventory, pricing, delivery fee and ETA.
+      </p>
+
+      <LocationPicker prominent />
+
+      {delivery ? (
+        <section className="serving-store-card">
+          <div className="serving-store-icon"><CheckCircle2 /></div>
+          <div>
+            <span>Serving store</span>
+            <h2>{delivery.storeName}</h2>
+            <p>{delivery.serviceZoneName}</p>
+          </div>
+          <div className="serving-store-meta">
+            <span>
+              <Navigation /> {delivery.etaMinMinutes}–{delivery.etaMaxMinutes} min estimate
+            </span>
+            <span><MapPin /> Delivery zone confirmed</span>
+          </div>
+        </section>
+      ) : (
+        <section className="serving-store-card pending">
+          <MapPin />
+          <div>
+            <h2>Set your delivery location</h2>
+            <p>Pasalho will assign the appropriate fulfillment store automatically.</p>
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }

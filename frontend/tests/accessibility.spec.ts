@@ -4,15 +4,15 @@ import { expect, test } from "@playwright/test";
 const pages = [
   "/",
   "/shop",
+  "/offers",
+  "/stores",
+  "/category/rice",
   "/product/premium-basmati-rice-5kg",
   "/account",
-  "/loyalty",
   "/staff-login",
   "/cart",
   "/checkout",
-  "/whatsapp-order",
   "/account/orders",
-  "/account/addresses",
   "/account/orders/00000000-0000-4000-8000-000000000001",
 ];
 

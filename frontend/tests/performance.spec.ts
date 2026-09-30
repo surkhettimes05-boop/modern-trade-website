@@ -24,11 +24,7 @@ test.describe("Core Web Vitals release budget", () => {
     });
 
     await page.goto("/", { waitUntil: "load" });
-    await page.locator(".hero-main img").waitFor({ state: "visible" });
-    await page.waitForFunction(() => {
-      const image = document.querySelector<HTMLImageElement>(".hero-main img");
-      return Boolean(image?.complete && image.naturalWidth > 0);
-    });
+    await page.locator(".quick-hero h1").waitFor({ state: "visible" });
     await page.waitForTimeout(250);
     const metrics = await page.evaluate(() =>
       (window as unknown as { __storesyncVitals: { cls: number; lcp: number; lcpElement: string; lcpUrl: string } }).__storesyncVitals,
@@ -39,7 +35,7 @@ test.describe("Core Web Vitals release budget", () => {
 
     const interactionMs = await page.evaluate(async () => {
       const controls = Array.from(
-        document.querySelectorAll<HTMLButtonElement>(".category-trigger, .mobile-menu"),
+        document.querySelectorAll<HTMLButtonElement>(".pasalho-location-picker, .mobile-menu"),
       );
       const control = controls.find((candidate) => candidate.offsetParent !== null);
       if (!control) throw new Error("No visible navigation control found");

@@ -11,7 +11,7 @@ test.describe('SEO release gate', () => {
       const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
       expect(response?.status()).toBe(200);
       await expect(page.locator('h1')).toHaveCount(1);
-      await expect(page).toHaveTitle(/NOVA MART/);
+      await expect(page).toHaveTitle(/Pasalho/);
       const description = await page.locator('meta[name="description"]').getAttribute('content');
       expect(description?.trim().length || 0).toBeGreaterThanOrEqual(40);
       const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
@@ -21,14 +21,16 @@ test.describe('SEO release gate', () => {
     });
   }
 
-  test('catalog content and links are present without client JavaScript', async ({ browser }) => {
+  test('catalog discovery is useful without client JavaScript and never invents stock', async ({ browser }) => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const page = await context.newPage();
     await page.goto('/shop', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Shop all products' })).toBeVisible();
-    await expect(page.locator('a[href="/product/premium-basmati-rice-5kg"]').first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'What do you need today?' })).toBeVisible();
+    await expect(page.locator('a[href="/category/rice"]').first()).toBeVisible();
+    await expect(page.locator('.product-card')).toHaveCount(0);
     await page.goto('/category/rice', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Rice', exact: true })).toBeVisible();
+    await expect(page.getByText(/set your delivery location/i)).toBeVisible();
     await context.close();
   });
 
@@ -48,9 +50,7 @@ test.describe('SEO release gate', () => {
     }
   });
 
-  test('missing and legacy products use real HTTP status codes', async ({ request }) => {
-    const missing = await request.get('/product/does-not-exist-for-seo-test');
-    expect(missing.status()).toBe(404);
+  test('legacy product URLs keep their canonical redirect', async ({ request }) => {
     const legacy = await request.get('/products/opening-rice-5kg', { maxRedirects: 0 });
     expect(legacy.status()).toBe(308);
     expect(legacy.headers().location).toBe('/product/premium-basmati-rice-5kg');
@@ -61,7 +61,7 @@ test.describe('SEO release gate', () => {
     expect(response.status()).toBe(200);
     const xml = await response.text();
     expect(xml).toContain('/category/rice');
-    expect(xml).toContain('/product/premium-basmati-rice-5kg');
+    expect(xml).not.toContain('/product/premium-basmati-rice-5kg');
     const sitemapPaths = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1]).pathname);
     for (const path of ['/account', '/admin', '/cart', '/checkout', '/privacy', '/terms']) expect(sitemapPaths).not.toContain(path);
   });

@@ -1,5 +1,68 @@
 'use client';
-import Link from 'next/link'; import { useEffect, useState } from 'react';
-import { resilientFetch } from '@/lib/resilientFetch';
-type Order = { id: string; order_number: string; status: string; total_amount: number };
-export default function OrdersPage() { const [orders, setOrders] = useState<Order[]>([]); const [error, setError] = useState(''); useEffect(() => { const timer = window.setTimeout(() => { resilientFetch('/api/customer/orders').then(async (r) => { const body = await r.json(); if (!r.ok) throw new Error(body.error); setOrders(body as Order[]); }).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not load orders')); }, 0); return () => window.clearTimeout(timer); }, []); return <div className="shell page"><h1>Your orders</h1>{error && <p className="mt-4 rounded bg-amber-50 p-4 text-amber-800">{error}</p>}{!error && !orders.length && <p className="mt-4 text-slate-600">No orders yet.</p>}<div className="mt-6 grid gap-4">{orders.map((order) => <Link className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" href={`/account/orders/${order.id}`} key={order.id}><h2 className="font-bold">{order.order_number}</h2><p className="mt-2 text-sm text-slate-600">{order.status} · ₹{order.total_amount}</p></Link>)}</div></div>; }
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { formatPrice } from '@/lib/catalog';
+import {
+  listCustomerOrders,
+  type CustomerOrder,
+} from '@/lib/pasalhoCommerce';
+
+export default function OrdersPage() {
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    listCustomerOrders()
+      .then((result) => setOrders(result.items))
+      .catch((reason) =>
+        setError(
+          reason instanceof Error ? reason.message : 'Could not load orders.',
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="shell page">
+      <p className="eyebrow">PASALHO ACCOUNT</p>
+      <h1>Your orders</h1>
+      {loading ? <p className="mt-4 text-slate-600">Loading orders…</p> : null}
+      {error ? (
+        <div className="commerce-message error">
+          {error}{' '}
+          <Link href="/account?next=/account/orders">Sign in</Link>
+        </div>
+      ) : null}
+      {!loading && !error && !orders.length ? (
+        <div className="empty-page">
+          <h2>No orders yet</h2>
+          <p>Your Pasalho web and app orders will appear here.</p>
+          <Link className="primary-btn" href="/shop">Start shopping</Link>
+        </div>
+      ) : null}
+      <div className="orders-grid">
+        {orders.map((order) => (
+          <Link
+            className="order-card"
+            href={`/account/orders/${order.id}`}
+            key={order.id}
+          >
+            <div>
+              <span>{order.status.replaceAll('_', ' ')}</span>
+              <h2>{order.orderNo}</h2>
+              <small>{new Date(order.createdAt).toLocaleString('en-NP')}</small>
+            </div>
+            <div>
+              <b>{formatPrice(Number(order.grandTotal))}</b>
+              <small>
+                {order.fulfillmentLocation?.name || 'Pasalho fulfillment'}
+              </small>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}

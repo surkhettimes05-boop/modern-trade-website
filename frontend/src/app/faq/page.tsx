@@ -3,56 +3,56 @@ import JsonLd from '@/components/JsonLd';
 export default function FAQPage() {
   const faqs = [
     {
-      question: "What are your store hours?",
-      answer: "Our stores are typically open Sunday through Friday from 9:00 AM to 9:00 PM, and Saturday from 10:00 AM to 8:00 PM. Hours may vary by location."
+      question: 'How does Pasalho choose my store?',
+      answer:
+        'Pasalho uses your delivery location to check the active service zone and assign an eligible fulfillment store. The catalogue then reflects that store.',
     },
     {
-      question: "Do you offer home delivery?",
-      answer: "Pickup and eligible Kathmandu delivery are available based on the selected store and delivery address."
+      question: 'Do you offer home delivery?',
+      answer:
+        'Delivery is available only where Pasalho has an active service zone and a store able to fulfill the order. The website shows the current fee and estimated delivery window before the order is placed.',
     },
     {
-      question: "What payment methods do you accept?",
-      answer: "The Nepal pilot accepts cash on delivery and cash at the POS. Electronic providers are not enabled."
+      question: 'What payment methods do you accept?',
+      answer:
+        'The current customer-commerce launch uses cash on delivery. Digital payments will appear only after the relevant payment integrations are certified.',
     },
     {
-      question: "How can I contact customer support?",
-      answer: "You can reach us through our contact form on this website, call our customer service line, or visit any of our store locations during business hours."
-    }
+      question: 'Can prices or stock change?',
+      answer:
+        'Yes. Pasalho revalidates store, stock and pricing during checkout. Inventory is reserved only when the order is successfully accepted.',
+    },
+    {
+      question: 'How can I get help?',
+      answer:
+        'Use the contact form on this website for customer questions or order support.',
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <JsonLd data={{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map((faq) => ({ '@type': 'Question', name: faq.question, acceptedAnswer: { '@type': 'Answer', text: faq.answer } })) }} />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h1>
-        <p className="text-xl text-gray-600 mb-8">
-          Find answers to common questions about StoreSync
-        </p>
+    <div className="shell page max-w-4xl">
+      <JsonLd
+        data={{
+          '@context': 'https://schema.org',
+          '@type': 'FAQPage',
+          mainEntity: faqs.map((faq) => ({
+            '@type': 'Question',
+            name: faq.question,
+            acceptedAnswer: { '@type': 'Answer', text: faq.answer },
+          })),
+        }}
+      />
+      <p className="eyebrow">PASALHO HELP</p>
+      <h1 className="text-4xl font-bold text-gray-900">Frequently asked questions</h1>
+      <p className="mt-3 text-lg text-slate-600">Clear answers about store assignment, delivery, stock and checkout.</p>
 
-        <div className="space-y-4">
-          {faqs.map((faq, index) => (
-            <div key={index} className="bg-white rounded-lg shadow-sm">
-              <details className="group">
-                <summary className="flex items-center justify-between p-6 cursor-pointer">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {faq.question}
-                  </h3>
-                  <svg className="w-5 h-5 text-gray-500 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </summary>
-                <div className="px-6 pb-6">
-                  <p className="text-gray-600">{faq.answer}</p>
-                </div>
-              </details>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-12 p-6 bg-emerald-50 border border-emerald-200 rounded-lg">
-          <h2 className="text-lg font-semibold text-emerald-900 mb-2">Still need help?</h2>
-          <p className="text-emerald-800">Contact NOVA MART support or ask the team at your selected store for information specific to your location.</p>
-        </div>
+      <div className="mt-8 space-y-3">
+        {faqs.map((faq) => (
+          <details key={faq.question} className="rounded-xl border border-slate-200 bg-white p-5">
+            <summary className="cursor-pointer font-semibold text-slate-950">{faq.question}</summary>
+            <p className="mt-3 leading-7 text-slate-600">{faq.answer}</p>
+          </details>
+        ))}
       </div>
     </div>
   );

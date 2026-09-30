@@ -1,5 +1,155 @@
 'use client';
-import Link from 'next/link'; import { useParams } from 'next/navigation'; import { useEffect, useState } from 'react';
-import { resilientFetch } from '@/lib/resilientFetch';
-type Event = { id: string; to_status?: string; created_at: string }; type Order = { order_number: string; status: string; total_amount: number; events?: Event[] };
-export default function OrderDetailPage() { const { id } = useParams<{ id: string }>(); const [order, setOrder] = useState<Order | null>(null); const [error, setError] = useState(''); useEffect(() => { resilientFetch(`/api/customer/orders/${id}`).then(async (r) => { const body = await r.json(); if (!r.ok) throw new Error(body.error); setOrder(body as Order); }).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not load order')); }, [id]); if (error) return <div className="shell page"><p className="text-red-700">{error}</p></div>; if (!order) return <div className="shell page">Loading order…</div>; return <div className="shell page"><Link href="/account/orders" className="text-emerald-700">← All orders</Link><h1 className="mt-4">{order.order_number}</h1><p className="mt-2 font-semibold">Status: {order.status}</p><p className="text-slate-600">Total: ₹{order.total_amount}</p><section className="mt-6 rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold">Timeline</h2>{order.events?.map((event) => <p className="mt-3 text-sm" key={event.id}>{event.to_status} · {new Date(event.created_at).toLocaleString()}</p>)}</section></div>; }
+
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { formatPrice } from '@/lib/catalog';
+import {
+  cancelCustomerOrder,
+  getCustomerOrder,
+  type CustomerOrder,
+} from '@/lib/pasalhoCommerce';
+
+export default function OrderDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [order, setOrder] = useState<CustomerOrder | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setError('');
+      const nextOrder = await getCustomerOrder(id);
+      setOrder(nextOrder);
+      setLastUpdatedAt(new Date());
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Could not load order.',
+      );
+    }
+  }, [id]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  useEffect(() => {
+    if (
+      !order ||
+      ['DELIVERED', 'CANCELLED', 'FAILED', 'REFUNDED'].includes(order.status)
+    ) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void load();
+    }, 20_000);
+
+    return () => window.clearInterval(interval);
+  }, [load, order]);
+
+  async function cancel() {
+    if (!order || !window.confirm('Cancel this Pasalho order?')) return;
+    setBusy(true);
+    setError('');
+    try {
+      await cancelCustomerOrder(order.id, 'Customer requested cancellation');
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Could not cancel order.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error && !order) {
+    return (
+      <div className="shell page">
+        <p className="commerce-message error">{error}</p>
+        <Link href="/account?next=/account/orders">Sign in</Link>
+      </div>
+    );
+  }
+
+  if (!order) {
+    return <div className="shell page">Loading order…</div>;
+  }
+
+  const cancellable = ['PLACED', 'CONFIRMED'].includes(order.status);
+
+  return (
+    <div className="shell page order-detail">
+      <Link href="/account/orders" className="text-btn">← All orders</Link>
+      <div className="order-detail-head">
+        <div>
+          <p className="eyebrow">PASALHO ORDER</p>
+          <h1>{order.orderNo}</h1>
+          <p aria-live="polite">
+            {order.status.replaceAll('_', ' ')}
+            {lastUpdatedAt ? (
+              <small>
+                {' · '}updated {lastUpdatedAt.toLocaleTimeString('en-NP', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </small>
+            ) : null}
+          </p>
+        </div>
+        <strong>{formatPrice(Number(order.grandTotal))}</strong>
+      </div>
+
+      {error ? <p className="commerce-message error">{error}</p> : null}
+
+      <div className="order-detail-grid">
+        <section className="checkout-card">
+          <h2>Items</h2>
+          <div className="order-items">
+            {order.items?.map((item) => (
+              <div key={item.id}>
+                <span>
+                  <b>{item.product.name}</b>
+                  <small>
+                    {Number(item.quantity)} {item.unit?.symbol || item.unit?.name || ''}
+                  </small>
+                </span>
+                <strong>{formatPrice(Number(item.lineTotal))}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="checkout-card">
+          <h2>Tracking</h2>
+          <div className="order-timeline">
+            {order.statusEvents?.map((event) => (
+              <div key={event.id}>
+                <i />
+                <span>
+                  <b>{event.toStatus.replaceAll('_', ' ')}</b>
+                  <small>{new Date(event.createdAt).toLocaleString('en-NP')}</small>
+                  {event.note ? <em>{event.note}</em> : null}
+                </span>
+              </div>
+            ))}
+          </div>
+          {cancellable ? (
+            <button
+              className="secondary-btn danger-button"
+              onClick={cancel}
+              disabled={busy}
+            >
+              {busy ? 'Cancelling…' : 'Cancel order'}
+            </button>
+          ) : null}
+        </section>
+      </div>
+    </div>
+  );
+}

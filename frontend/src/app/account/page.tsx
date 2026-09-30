@@ -1,181 +1,163 @@
 'use client';
 
-import { useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { resilientFetch } from '@/lib/resilientFetch';
-
-async function readApiResponse(response: Response): Promise<Record<string, unknown>> {
-  const body = await response.text();
-  if (!body) return {};
-
-  try {
-    return JSON.parse(body) as Record<string, unknown>;
-  } catch {
-    return {
-      error: response.ok
-        ? 'The backend returned an invalid response'
-        : `Backend request failed (HTTP ${response.status})`,
-    };
-  }
-}
+import {
+  getCustomer,
+  logoutCustomer,
+  requestCustomerOtp,
+  verifyCustomerOtp,
+  type Customer,
+} from '@/lib/pasalhoCommerce';
 
 export default function AccountPage() {
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [phone, setPhone] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [challengeId, setChallengeId] = useState('');
   const [otp, setOtp] = useState('');
-  const [developmentOtp, setDevelopmentOtp] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [nextPath, setNextPath] = useState('/account/orders');
+  const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [error, setError] = useState('');
   const router = useRouter();
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = new URLSearchParams(window.location.search).get('next');
+      if (next?.startsWith('/')) setNextPath(next);
+      getCustomer()
+        .then(setCustomer)
+        .catch(() => undefined)
+        .finally(() => setChecking(false));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  async function requestOtp(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
     setError('');
-
     try {
-      const response = await resilientFetch('/api/auth/otp/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, purpose: 'LOGIN' }),
-      });
-
-      const data = await readApiResponse(response);
-
-      if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send OTP');
-      }
-
-      const returnedOtp = typeof data.otp === 'string' ? data.otp : '';
-      setDevelopmentOtp(returnedOtp);
-      if (returnedOtp) setOtp(returnedOtp);
-      setOtpSent(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+      const result = await requestCustomerOtp(phone);
+      setChallengeId(result.challengeId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not send OTP.');
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
-  };
+  }
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  async function verifyOtp(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
     setError('');
-
     try {
-      const response = await resilientFetch('/api/auth/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp_code: otp, purpose: 'LOGIN' }),
-      });
-
-      const data = await readApiResponse(response);
-
-      if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to verify OTP');
-      }
-
-      router.push('/account/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to verify OTP');
+      const result = await verifyCustomerOtp(challengeId, phone, otp);
+      setCustomer(result.customer);
+      router.replace(nextPath);
+      router.refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not verify OTP.');
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
-  };
+  }
+
+  async function signOut() {
+    setBusy(true);
+    try {
+      await logoutCustomer();
+    } catch {
+      // The proxy clears local customer cookies on logout responses.
+    } finally {
+      setCustomer(null);
+      setBusy(false);
+      router.refresh();
+    }
+  }
+
+  if (checking) {
+    return <div className="shell page"><p>Checking your Pasalho account…</p></div>;
+  }
+
+  if (customer) {
+    return (
+      <div className="shell page">
+        <div className="account-card">
+          <p className="eyebrow">PASALHO ACCOUNT</p>
+          <h1>{customer.fullName || 'Welcome back'}</h1>
+          <p>{customer.phone}</p>
+          <div className="account-actions">
+            <Link className="primary-btn" href="/account/orders">View orders</Link>
+            <Link className="secondary-btn" href="/checkout">Continue checkout</Link>
+            <button className="secondary-btn" onClick={signOut} disabled={busy}>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-center mb-6">StoreSync Account</h1>
-        
-        {!otpSent ? (
-          <form onSubmit={handleRequestOtp} className="space-y-4">
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number
-              </label>
+    <div className="shell page account-auth-page">
+      <div className="account-card">
+        <p className="eyebrow">PASALHO ACCOUNT</p>
+        <h1>Sign in with your phone</h1>
+        <p>Use the Nepal mobile number you want attached to your Pasalho orders.</p>
+
+        {!challengeId ? (
+          <form onSubmit={requestOtp}>
+            <label>
+              Mobile number
               <input
                 type="tel"
-                id="phone"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(event) => setPhone(event.target.value)}
                 placeholder="98XXXXXXXX"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                autoComplete="tel"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">Enter your Nepali mobile number</p>
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-            >
-              {loading ? 'Sending...' : 'Send OTP'}
+            </label>
+            <button className="primary-btn" disabled={busy}>
+              {busy ? 'Sending…' : 'Send OTP'}
             </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
-            <div>
-              <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
-                Enter OTP
-              </label>
+          <form onSubmit={verifyOtp}>
+            <label>
+              6-digit OTP
               <input
-                type="text"
-                id="otp"
+                inputMode="numeric"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                onChange={(event) =>
+                  setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))
+                }
                 placeholder="123456"
-                maxLength={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-2xl tracking-widest"
+                autoComplete="one-time-code"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">
-                {developmentOtp
-                  ? 'Local development code returned by the backend'
-                  : 'Enter the 6-digit code sent to your phone'}
-              </p>
-            </div>
-
-            {developmentOtp && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded">
-                Development OTP: <strong>{developmentOtp}</strong>
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-            >
-              {loading ? 'Verifying...' : 'Verify & Login'}
+            </label>
+            <button className="primary-btn" disabled={busy || otp.length !== 6}>
+              {busy ? 'Verifying…' : 'Verify & continue'}
             </button>
-
             <button
               type="button"
+              className="text-btn"
               onClick={() => {
-                setOtpSent(false);
+                setChallengeId('');
                 setOtp('');
-                setDevelopmentOtp('');
               }}
-              className="w-full text-blue-600 hover:text-blue-700 py-2"
             >
               Change phone number
             </button>
           </form>
         )}
+
+        {error ? (
+          <p className="commerce-message error" role="alert">{error}</p>
+        ) : null}
       </div>
     </div>
   );
