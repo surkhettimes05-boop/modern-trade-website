@@ -1,13 +1,52 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { LocationPicker, ProductCard, useShop } from '@/components/CommerceClient';
 import { BuyBox, ProductGallery } from '@/components/ProductDetailClient';
-import { formatPrice } from '@/lib/catalog';
+import { formatPrice, mapPasalhoProduct, type Product } from '@/lib/catalog';
+import { commerceRequest } from '@/lib/pasalhoCommerce';
 
 export default function ProductRouteClient({ slug }: { slug: string }) {
-  const { products, categories, delivery, loading } = useShop();
-  const product = products.find((item) => item.slug === slug || item.sku === slug);
+  const { products, categories, delivery } = useShop();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!delivery) {
+      setProduct(null);
+      setError('');
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setError('');
+
+    commerceRequest<Record<string, unknown>>(
+      `products/${encodeURIComponent(slug)}?locationId=${encodeURIComponent(delivery.locationId)}`,
+    )
+      .then((row) => {
+        if (active) setProduct(mapPasalhoProduct(row));
+      })
+      .catch((reason) => {
+        if (!active) return;
+        setProduct(null);
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : 'Could not load this product from Pasalho.',
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [delivery, slug]);
 
   if (!delivery) {
     return (
@@ -34,7 +73,7 @@ export default function ProductRouteClient({ slug }: { slug: string }) {
     return (
       <div className="shell page empty-page">
         <h1>Not available at this store</h1>
-        <p>The product may be out of assortment or unavailable at {delivery.storeName}.</p>
+        <p>{error || `This product is not currently orderable from ${delivery.storeName}.`}</p>
         <Link className="primary-btn" href="/shop">Browse live catalogue</Link>
       </div>
     );
@@ -45,6 +84,7 @@ export default function ProductRouteClient({ slug }: { slug: string }) {
       item.id === product.categoryId ||
       item.name.toLowerCase() === product.category.toLowerCase(),
   );
+
   const related = products
     .filter(
       (item) =>
