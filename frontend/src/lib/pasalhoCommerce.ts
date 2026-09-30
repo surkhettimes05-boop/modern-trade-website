@@ -1,4 +1,9 @@
-import { mapPasalhoCategory, mapPasalhoProduct, type Product, type StorefrontCategory } from './catalog';
+import {
+  mapPasalhoCategory,
+  mapPasalhoProduct,
+  type Product,
+  type StorefrontCategory,
+} from './catalog';
 
 type ApiEnvelope<T> = {
   success?: boolean;
@@ -15,10 +20,10 @@ function errorMessage(value: ApiEnvelope<unknown>, fallback: string) {
   return value.message || fallback;
 }
 
-export async function commerceRequest<T>(
+async function requestOnce<T>(
   path: string,
   init: RequestInit = {},
-): Promise<T> {
+): Promise<{ response: Response; value: ApiEnvelope<T> | T }> {
   const response = await fetch(`/api/commerce/${path.replace(/^\/+/, '')}`, {
     ...init,
     headers: {
@@ -30,12 +35,10 @@ export async function commerceRequest<T>(
   });
 
   const value = (await response.json().catch(() => ({}))) as ApiEnvelope<T> | T;
-  if (!response.ok) {
-    throw new Error(
-      errorMessage(value as ApiEnvelope<unknown>, 'Pasalho commerce request failed'),
-    );
-  }
+  return { response, value };
+}
 
+function unwrap<T>(value: ApiEnvelope<T> | T): T {
   if (
     value &&
     typeof value === 'object' &&
@@ -45,8 +48,38 @@ export async function commerceRequest<T>(
   ) {
     return (value as ApiEnvelope<T>).data as T;
   }
-
   return value as T;
+}
+
+export async function commerceRequest<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  let result = await requestOnce<T>(path, init);
+
+  const authPath = path.startsWith('auth/');
+  if (result.response.status === 401 && !authPath) {
+    const refreshed = await requestOnce<unknown>('auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    if (refreshed.response.ok) {
+      result = await requestOnce<T>(path, init);
+    }
+  }
+
+  if (!result.response.ok) {
+    throw new Error(
+      errorMessage(
+        result.value as ApiEnvelope<unknown>,
+        result.response.status === 401
+          ? 'Sign in to continue.'
+          : 'Pasalho commerce request failed',
+      ),
+    );
+  }
+
+  return unwrap(result.value);
 }
 
 export type DeliveryContext = {
@@ -248,6 +281,169 @@ export async function removeServerCartItem(
   return commerceRequest<ServerCart>(
     `carts/${encodeURIComponent(cartToken)}/items/${encodeURIComponent(cartItemId)}`,
     { method: 'DELETE' },
+  );
+}
+
+export type Customer = {
+  id: string;
+  phone: string;
+  fullName?: string | null;
+  email?: string | null;
+};
+
+export type CustomerAddress = {
+  id: string;
+  label: 'HOME' | 'WORK' | 'OTHER';
+  customLabel?: string | null;
+  recipientName?: string | null;
+  phone?: string | null;
+  province?: string | null;
+  district?: string | null;
+  municipality?: string | null;
+  ward?: string | null;
+  area: string;
+  street?: string | null;
+  landmark?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  instructions?: string | null;
+  isDefault: boolean;
+};
+
+export async function requestCustomerOtp(phone: string) {
+  return commerceRequest<{ challengeId: string; expiresInSeconds: number }>(
+    'auth/request-otp',
+    { method: 'POST', body: JSON.stringify({ phone }) },
+  );
+}
+
+export async function verifyCustomerOtp(
+  challengeId: string,
+  phone: string,
+  otp: string,
+) {
+  return commerceRequest<{ customer: Customer }>('auth/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ challengeId, phone, otp }),
+  });
+}
+
+export async function getCustomer() {
+  return commerceRequest<Customer>('me');
+}
+
+export async function logoutCustomer() {
+  return commerceRequest<{ message: string }>('auth/logout', { method: 'POST' });
+}
+
+export async function listCustomerAddresses() {
+  return commerceRequest<CustomerAddress[]>('me/addresses');
+}
+
+export async function createCustomerAddress(
+  address: Omit<CustomerAddress, 'id' | 'isDefault'> & { isDefault?: boolean },
+) {
+  return commerceRequest<CustomerAddress>('me/addresses', {
+    method: 'POST',
+    body: JSON.stringify(address),
+  });
+}
+
+export type CheckoutPreview = {
+  fulfillmentLocationId: string;
+  serviceZoneId: string;
+  items: Array<Record<string, unknown>>;
+  subtotal: number;
+  discountTotal: number;
+  deliveryFee: number;
+  handlingFee: number;
+  grandTotal: number;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+  paymentMethod: 'COD';
+  checkoutToken: string;
+};
+
+export async function previewCheckout(cartToken: string, addressId: string) {
+  return commerceRequest<CheckoutPreview>('checkout/preview', {
+    method: 'POST',
+    body: JSON.stringify({
+      cartToken,
+      addressId,
+      paymentMethod: 'COD',
+    }),
+  });
+}
+
+export async function placeOrder(
+  cartToken: string,
+  addressId: string,
+  checkoutToken: string,
+  idempotencyKey: string,
+) {
+  return commerceRequest<{
+    id: string;
+    orderNo: string;
+    status: string;
+    grandTotal: number | string;
+  }>('orders', {
+    method: 'POST',
+    headers: { 'idempotency-key': idempotencyKey },
+    body: JSON.stringify({
+      cartToken,
+      addressId,
+      paymentMethod: 'COD',
+      checkoutToken,
+    }),
+  });
+}
+
+export type CustomerOrder = {
+  id: string;
+  orderNo: string;
+  status: string;
+  grandTotal: number | string;
+  createdAt: string;
+  placedAt?: string | null;
+  cancelledAt?: string | null;
+  fulfillmentLocation?: { id: string; name: string } | null;
+  items?: Array<{
+    id: string;
+    quantity: number | string;
+    lineTotal: number | string;
+    product: { id: string; name: string; imageUrl?: string | null };
+    unit?: { symbol?: string; name?: string };
+  }>;
+  statusEvents?: Array<{
+    id: string;
+    fromStatus?: string | null;
+    toStatus: string;
+    createdAt: string;
+    note?: string | null;
+  }>;
+};
+
+export async function listCustomerOrders() {
+  return commerceRequest<{
+    items: CustomerOrder[];
+    total: number;
+    page: number;
+    limit: number;
+  }>('orders?page=1&limit=30');
+}
+
+export async function getCustomerOrder(id: string) {
+  return commerceRequest<CustomerOrder>(`orders/${encodeURIComponent(id)}`);
+}
+
+export async function cancelCustomerOrder(id: string, reason: string) {
+  return commerceRequest<{ id: string; orderNo: string; status: string }>(
+    `orders/${encodeURIComponent(id)}/cancel`,
+    {
+      method: 'POST',
+      headers: { 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({ reason }),
+    },
   );
 }
 

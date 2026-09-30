@@ -2,56 +2,33 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { LogOut, PackageSearch, ShieldCheck, Smartphone } from 'lucide-react';
-import { commerceRequest } from '@/lib/pasalhoCommerce';
-
-type Customer = {
-  id: string;
-  phone: string;
-  fullName?: string | null;
-  email?: string | null;
-  status: string;
-};
-
-type SessionResponse = {
-  success?: boolean;
-  data?: {
-    customer?: Customer;
-    challengeId?: string;
-    expiresInSeconds?: number;
-  };
-  error?: string | { message?: string };
-};
-
-function responseMessage(value: SessionResponse, fallback: string) {
-  if (typeof value.error === 'string') return value.error;
-  if (value.error && typeof value.error === 'object' && value.error.message) {
-    return value.error.message;
-  }
-  return fallback;
-}
+import { useRouter } from 'next/navigation';
+import {
+  getCustomer,
+  logoutCustomer,
+  requestCustomerOtp,
+  verifyCustomerOtp,
+  type Customer,
+} from '@/lib/pasalhoCommerce';
 
 export default function AccountPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [checking, setChecking] = useState(true);
   const [phone, setPhone] = useState('');
   const [challengeId, setChallengeId] = useState('');
   const [otp, setOtp] = useState('');
+  const [nextPath, setNextPath] = useState('/account/orders');
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [error, setError] = useState('');
-
-  const loadCustomer = async () => {
-    try {
-      setCustomer(await commerceRequest<Customer>('me'));
-    } catch {
-      setCustomer(null);
-    } finally {
-      setChecking(false);
-    }
-  };
+  const router = useRouter();
 
   useEffect(() => {
-    void loadCustomer();
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (next?.startsWith('/')) setNextPath(next);
+    getCustomer()
+      .then(setCustomer)
+      .catch(() => undefined)
+      .finally(() => setChecking(false));
   }, []);
 
   async function requestOtp(event: FormEvent) {
@@ -59,20 +36,10 @@ export default function AccountPage() {
     setBusy(true);
     setError('');
     try {
-      const response = await fetch('/api/customer-session/request-otp', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      });
-      const value = (await response.json()) as SessionResponse;
-      if (!response.ok) {
-        throw new Error(responseMessage(value, 'Could not send OTP'));
-      }
-      const id = value.data?.challengeId;
-      if (!id) throw new Error('OTP challenge was not returned');
-      setChallengeId(id);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'Could not send OTP');
+      const result = await requestCustomerOtp(phone);
+      setChallengeId(result.challengeId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not send OTP.');
     } finally {
       setBusy(false);
     }
@@ -83,100 +50,92 @@ export default function AccountPage() {
     setBusy(true);
     setError('');
     try {
-      const response = await fetch('/api/customer-session/verify-otp', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ challengeId, phone, otp }),
-      });
-      const value = (await response.json()) as SessionResponse;
-      if (!response.ok) {
-        throw new Error(responseMessage(value, 'OTP verification failed'));
-      }
-      await loadCustomer();
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'OTP verification failed');
+      const result = await verifyCustomerOtp(challengeId, phone, otp);
+      setCustomer(result.customer);
+      router.replace(nextPath);
+      router.refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not verify OTP.');
     } finally {
       setBusy(false);
     }
   }
 
-  async function logout() {
+  async function signOut() {
     setBusy(true);
-    await fetch('/api/customer-session/logout', { method: 'POST' }).catch(
-      () => undefined,
-    );
-    setCustomer(null);
-    setChallengeId('');
-    setOtp('');
-    setBusy(false);
+    try {
+      await logoutCustomer();
+    } catch {
+      // The proxy clears local customer cookies on logout responses.
+    } finally {
+      setCustomer(null);
+      setBusy(false);
+      router.refresh();
+    }
   }
 
   if (checking) {
-    return <div className="shell page account-shell">Checking your Pasalho account…</div>;
+    return <div className="shell page"><p>Checking your Pasalho account…</p></div>;
   }
 
   if (customer) {
     return (
-      <div className="shell page account-shell">
-        <section className="account-card">
-          <div className="account-icon"><ShieldCheck /></div>
+      <div className="shell page">
+        <div className="account-card">
           <p className="eyebrow">PASALHO ACCOUNT</p>
-          <h1>{customer.fullName || 'Your account'}</h1>
-          <p className="account-phone">{customer.phone}</p>
+          <h1>{customer.fullName || 'Welcome back'}</h1>
+          <p>{customer.phone}</p>
           <div className="account-actions">
-            <Link href="/account/orders"><PackageSearch /> My orders</Link>
-            <Link href="/checkout">Continue checkout</Link>
-            <button onClick={logout} disabled={busy}><LogOut /> Sign out</button>
+            <Link className="primary-btn" href="/account/orders">View orders</Link>
+            <Link className="secondary-btn" href="/checkout">Continue checkout</Link>
+            <button className="secondary-btn" onClick={signOut} disabled={busy}>
+              Sign out
+            </button>
           </div>
-        </section>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="shell page account-shell">
-      <section className="account-card">
-        <div className="account-icon"><Smartphone /></div>
-        <p className="eyebrow">SIGN IN TO PASALHO</p>
-        <h1>Continue with your phone</h1>
-        <p>
-          Phone OTP connects your addresses, orders and delivery history to one
-          customer account.
-        </p>
+    <div className="shell page account-auth-page">
+      <div className="account-card">
+        <p className="eyebrow">PASALHO ACCOUNT</p>
+        <h1>Sign in with your phone</h1>
+        <p>Use the Nepal mobile number you want attached to your Pasalho orders.</p>
 
         {!challengeId ? (
-          <form onSubmit={requestOtp} className="account-form">
+          <form onSubmit={requestOtp}>
             <label>
-              Nepal mobile number
+              Mobile number
               <input
+                type="tel"
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
                 placeholder="98XXXXXXXX"
-                inputMode="tel"
+                autoComplete="tel"
                 required
               />
             </label>
-            {error ? <p className="form-error" role="alert">{error}</p> : null}
             <button className="primary-btn" disabled={busy}>
-              {busy ? 'Sending OTP…' : 'Send OTP'}
+              {busy ? 'Sending…' : 'Send OTP'}
             </button>
           </form>
         ) : (
-          <form onSubmit={verifyOtp} className="account-form">
+          <form onSubmit={verifyOtp}>
             <label>
               6-digit OTP
               <input
+                inputMode="numeric"
                 value={otp}
                 onChange={(event) =>
                   setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))
                 }
-                placeholder="000000"
-                inputMode="numeric"
+                placeholder="123456"
                 autoComplete="one-time-code"
                 required
               />
             </label>
-            {error ? <p className="form-error" role="alert">{error}</p> : null}
             <button className="primary-btn" disabled={busy || otp.length !== 6}>
               {busy ? 'Verifying…' : 'Verify & continue'}
             </button>
@@ -186,14 +145,17 @@ export default function AccountPage() {
               onClick={() => {
                 setChallengeId('');
                 setOtp('');
-                setError('');
               }}
             >
               Change phone number
             </button>
           </form>
         )}
-      </section>
+
+        {error ? (
+          <p className="commerce-message error" role="alert">{error}</p>
+        ) : null}
+      </div>
     </div>
   );
 }

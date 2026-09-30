@@ -292,6 +292,13 @@ export function CommerceProvider({
     setDrawer(false);
   };
 
+  const resetCart = () => {
+    setItems([]);
+    setServerCartToken('');
+    localStorage.removeItem(CART_KEY);
+    setDrawer(false);
+  };
+
   const change = async (productId: string, delta: number) => {
     const current = items.find((item) => item.product.id === productId);
     if (!current || !serverCartToken || !current.cartItemId || cartBusy) return;

@@ -1,228 +1,139 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, MapPin, ShieldCheck } from 'lucide-react';
-import { LocationPicker, useShop } from '@/components/CommerceClient';
+import { MapPin, ShieldCheck, Truck } from 'lucide-react';
+import { useShop } from '@/components/CommerceClient';
 import { formatPrice } from '@/lib/catalog';
-import { commerceRequest } from '@/lib/pasalhoCommerce';
-
-type Customer = {
-  id: string;
-  phone: string;
-  fullName?: string | null;
-};
-
-type Address = {
-  id: string;
-  label: 'HOME' | 'WORK' | 'OTHER';
-  recipientName?: string | null;
-  phone?: string | null;
-  area: string;
-  street?: string | null;
-  landmark?: string | null;
-  ward?: string | null;
-  latitude?: number | string | null;
-  longitude?: number | string | null;
-  isDefault: boolean;
-};
-
-type Preview = {
-  subtotal: number;
-  discountTotal: number;
-  deliveryFee: number;
-  handlingFee: number;
-  grandTotal: number;
-  etaMinMinutes: number;
-  etaMaxMinutes: number;
-  paymentMethod: 'COD';
-  checkoutToken: string;
-};
-
-type OrderResult = {
-  id: string;
-  orderNo: string;
-  status: string;
-};
+import {
+  createCustomerAddress,
+  getCustomer,
+  listCustomerAddresses,
+  placeOrder,
+  previewCheckout,
+  type CheckoutPreview,
+  type Customer,
+  type CustomerAddress,
+} from '@/lib/pasalhoCommerce';
 
 export default function CheckoutPage() {
-  const { items, cartToken, delivery, clearCart } = useShop();
+  const { items, delivery, cartToken, resetCart, requestLocation } = useShop();
   const router = useRouter();
+
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [selectedAddressId, setSelectedAddressId] = useState('');
-  const [checkingAccount, setCheckingAccount] = useState(true);
-  const [phone, setPhone] = useState('');
-  const [challengeId, setChallengeId] = useState('');
-  const [otp, setOtp] = useState('');
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [addressId, setAddressId] = useState('');
+  const [preview, setPreview] = useState<CheckoutPreview | null>(null);
+  const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const idempotencyKey = useRef('');
 
-  const loadAccount = async () => {
-    try {
-      const me = await commerceRequest<Customer>('me');
-      setCustomer(me);
-      const saved = await commerceRequest<Address[]>('me/addresses');
-      setAddresses(saved);
-      const preferred = saved.find((address) => address.isDefault) || saved[0];
-      setSelectedAddressId(preferred?.id || '');
-    } catch {
-      setCustomer(null);
-      setAddresses([]);
-      setSelectedAddressId('');
-    } finally {
-      setCheckingAccount(false);
-    }
-  };
+  const subtotal = useMemo(
+    () => items.reduce((total, item) => total + item.product.price * item.qty, 0),
+    [items],
+  );
 
   useEffect(() => {
-    void loadAccount();
+    let active = true;
+    Promise.all([getCustomer(), listCustomerAddresses()])
+      .then(([me, saved]) => {
+        if (!active) return;
+        setCustomer(me);
+        setAddresses(saved);
+        const preferred = saved.find((address) => address.isDefault) || saved[0];
+        if (preferred) setAddressId(preferred.id);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setChecking(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  async function requestOtp(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      const response = await fetch('/api/customer-session/request-otp', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      });
-      const value = (await response.json()) as {
-        data?: { challengeId?: string };
-        error?: string | { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(
-          typeof value.error === 'string'
-            ? value.error
-            : value.error?.message || 'Could not send OTP',
-        );
-      }
-      if (!value.data?.challengeId) throw new Error('OTP challenge was not returned');
-      setChallengeId(value.data.challengeId);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'Could not send OTP');
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    if (!cartToken || !addressId || !customer) {
+      setPreview(null);
+      return;
     }
-  }
-
-  async function verifyOtp(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
+    let active = true;
     setError('');
-    try {
-      const response = await fetch('/api/customer-session/verify-otp', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ challengeId, phone, otp }),
+    previewCheckout(cartToken, addressId)
+      .then((value) => {
+        if (active) setPreview(value);
+      })
+      .catch((reason) => {
+        if (active) {
+          setPreview(null);
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : 'Could not validate checkout.',
+          );
+        }
       });
-      const value = (await response.json()) as {
-        error?: string | { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(
-          typeof value.error === 'string'
-            ? value.error
-            : value.error?.message || 'OTP verification failed',
-        );
-      }
-      await loadAccount();
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'OTP verification failed');
-    } finally {
-      setBusy(false);
-    }
-  }
+    return () => {
+      active = false;
+    };
+  }, [addressId, cartToken, customer]);
 
   async function saveAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!delivery) {
-      setError('Set your delivery location before saving an address.');
+      requestLocation();
       return;
     }
 
+    setBusy(true);
+    setError('');
     const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError('');
     try {
-      const address = await commerceRequest<Address>('me/addresses', {
-        method: 'POST',
-        body: JSON.stringify({
-          label: 'HOME',
-          recipientName: form.get('recipientName'),
-          phone: customer?.phone,
-          province: 'Karnali Province',
-          district: 'Surkhet',
-          municipality: 'Birendranagar',
-          ward: form.get('ward') || undefined,
-          area: form.get('area'),
-          street: form.get('street') || undefined,
-          landmark: form.get('landmark') || undefined,
-          instructions: form.get('instructions') || undefined,
-          latitude: delivery.latitude,
-          longitude: delivery.longitude,
-          isDefault: addresses.length === 0,
-        }),
+      const created = await createCustomerAddress({
+        label: 'HOME',
+        recipientName: String(form.get('recipientName') || ''),
+        phone: customer?.phone || undefined,
+        province: String(form.get('province') || '') || undefined,
+        district: String(form.get('district') || '') || undefined,
+        municipality: String(form.get('municipality') || '') || undefined,
+        ward: String(form.get('ward') || '') || undefined,
+        area: String(form.get('area') || ''),
+        street: String(form.get('street') || '') || undefined,
+        landmark: String(form.get('landmark') || '') || undefined,
+        latitude: delivery.latitude,
+        longitude: delivery.longitude,
+        instructions: String(form.get('instructions') || '') || undefined,
+        isDefault: addresses.length === 0,
       });
-      setAddresses((current) => [...current, address]);
-      setSelectedAddressId(address.id);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'Could not save address');
+      setAddresses((current) => [...current, created]);
+      setAddressId(created.id);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Could not save address.',
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  async function reviewOrder() {
-    if (!cartToken || !selectedAddressId) return;
-    setBusy(true);
-    setError('');
-    setPreview(null);
-    try {
-      const value = await commerceRequest<Preview>('checkout/preview', {
-        method: 'POST',
-        body: JSON.stringify({
-          cartToken,
-          addressId: selectedAddressId,
-          paymentMethod: 'COD',
-        }),
-      });
-      setPreview(value);
-      idempotencyKey.current = '';
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'Could not review checkout');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function placeOrder() {
-    if (!preview || !cartToken || !selectedAddressId) return;
-    if (!idempotencyKey.current) idempotencyKey.current = crypto.randomUUID();
-
+  async function submitOrder() {
+    if (!preview || !cartToken || !addressId) return;
     setBusy(true);
     setError('');
     try {
-      const order = await commerceRequest<OrderResult>('orders', {
-        method: 'POST',
-        headers: { 'idempotency-key': idempotencyKey.current },
-        body: JSON.stringify({
-          cartToken,
-          addressId: selectedAddressId,
-          paymentMethod: 'COD',
-          checkoutToken: preview.checkoutToken,
-        }),
-      });
-      clearCart();
-      router.push(`/account/orders/${order.id}`);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'Could not place order');
+      const result = await placeOrder(
+        cartToken,
+        addressId,
+        preview.checkoutToken,
+        crypto.randomUUID(),
+      );
+      resetCart();
+      router.push(`/account/orders/${result.id}`);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Could not place order.',
+      );
     } finally {
       setBusy(false);
     }
@@ -230,192 +141,196 @@ export default function CheckoutPage() {
 
   if (!items.length) {
     return (
-      <div className="shell page checkout-shell">
-        <h1>Your basket is empty</h1>
-        <Link className="primary-btn" href="/shop">Browse products</Link>
+      <div className="shell page">
+        <h1>Your cart is empty</h1>
+        <Link className="primary-btn" href="/shop">Start shopping</Link>
+      </div>
+    );
+  }
+
+  if (checking) {
+    return <div className="shell page"><p>Preparing secure checkout…</p></div>;
+  }
+
+  if (!customer) {
+    return (
+      <div className="shell page checkout-login">
+        <ShieldCheck />
+        <h1>Sign in to checkout</h1>
+        <p>
+          Your phone number keeps the order, delivery address and tracking
+          attached to the right customer.
+        </p>
+        <Link className="primary-btn" href="/account?next=/checkout">
+          Sign in with OTP
+        </Link>
       </div>
     );
   }
 
   if (!delivery) {
     return (
-      <div className="shell page checkout-shell">
-        <p className="eyebrow">CHECKOUT</p>
-        <h1>Set your delivery location first</h1>
-        <p>Pasalho needs it to confirm the service zone and fulfillment store.</p>
-        <LocationPicker prominent />
+      <div className="shell page checkout-login">
+        <MapPin />
+        <h1>Set your delivery location</h1>
+        <p>
+          Pasalho needs your location to choose a fulfillment store and
+          validate live inventory.
+        </p>
+        <button className="primary-btn" onClick={requestLocation}>
+          Set location
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="shell page checkout-shell">
-      <div className="checkout-heading">
+    <div className="shell page pasalho-checkout">
+      <div className="page-head">
         <div>
-          <p className="eyebrow">PASALHO CHECKOUT</p>
-          <h1>Delivery details</h1>
-          <p><MapPin /> {delivery.storeName} · {delivery.etaMinMinutes}–{delivery.etaMaxMinutes} min estimate</p>
+          <p className="eyebrow">SECURE PASALHO CHECKOUT</p>
+          <h1>Delivery & payment</h1>
+          <p>Cash on delivery · {delivery.storeName}</p>
         </div>
-        <span><ShieldCheck /> COD only</span>
       </div>
 
-      {error ? <p className="form-error checkout-error" role="alert">{error}</p> : null}
-
-      {checkingAccount ? (
-        <div className="checkout-panel">Checking your account…</div>
-      ) : !customer ? (
-        <section className="checkout-panel checkout-login">
-          <h2>Sign in to continue</h2>
-          <p>Your phone connects this order to addresses and tracking.</p>
-          {!challengeId ? (
-            <form onSubmit={requestOtp}>
-              <label>
-                Nepal mobile number
-                <input
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="98XXXXXXXX"
-                  required
-                />
-              </label>
-              <button className="primary-btn" disabled={busy}>
-                {busy ? 'Sending…' : 'Send OTP'}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={verifyOtp}>
-              <label>
-                6-digit OTP
-                <input
-                  value={otp}
-                  onChange={(event) =>
-                    setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))
-                  }
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  required
-                />
-              </label>
-              <button className="primary-btn" disabled={busy || otp.length !== 6}>
-                {busy ? 'Verifying…' : 'Verify'}
-              </button>
-            </form>
-          )}
-        </section>
-      ) : (
-        <div className="checkout-grid">
-          <div className="checkout-main">
-            <section className="checkout-panel">
-              <div className="checkout-panel-title">
-                <span>1</span>
-                <div><h2>Delivery address</h2><p>{customer.phone}</p></div>
-              </div>
-
-              {addresses.length ? (
-                <div className="address-list">
-                  {addresses.map((address) => (
-                    <label
-                      className={`address-choice ${selectedAddressId === address.id ? 'selected' : ''}`}
-                      key={address.id}
-                    >
-                      <input
-                        type="radio"
-                        name="address"
-                        checked={selectedAddressId === address.id}
-                        onChange={() => {
-                          setSelectedAddressId(address.id);
-                          setPreview(null);
-                        }}
-                      />
-                      <span>
-                        <b>{address.label}</b>
-                        <strong>{address.area}</strong>
-                        <small>
-                          {[address.street, address.landmark, address.ward && `Ward ${address.ward}`]
-                            .filter(Boolean)
-                            .join(', ')}
-                        </small>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <form onSubmit={saveAddress} className="address-form">
-                  <label>
-                    Recipient name
-                    <input name="recipientName" defaultValue={customer.fullName || ''} required />
+      <div className="checkout-grid">
+        <div className="checkout-main">
+          <section className="checkout-card">
+            <h2>Delivery address</h2>
+            {addresses.length ? (
+              <div className="address-options">
+                {addresses.map((address) => (
+                  <label
+                    key={address.id}
+                    className={addressId === address.id ? 'selected' : ''}
+                  >
+                    <input
+                      type="radio"
+                      name="address"
+                      checked={addressId === address.id}
+                      onChange={() => setAddressId(address.id)}
+                    />
+                    <span>
+                      <b>{address.customLabel || address.label}</b>
+                      <small>
+                        {[
+                          address.area,
+                          address.street,
+                          address.landmark,
+                          address.municipality,
+                        ]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </small>
+                    </span>
                   </label>
-                  <label>
-                    Area / tole
-                    <input name="area" placeholder="e.g. Itram, Latikoili" required />
-                  </label>
-                  <div className="address-form-row">
-                    <label>Ward<input name="ward" inputMode="numeric" /></label>
-                    <label>Street<input name="street" /></label>
-                  </div>
-                  <label>Landmark<input name="landmark" placeholder="Near..." /></label>
-                  <label>
-                    Delivery instructions
-                    <textarea name="instructions" rows={2} />
-                  </label>
-                  <button className="primary-btn" disabled={busy}>
-                    {busy ? 'Saving…' : 'Save delivery address'}
-                  </button>
-                </form>
-              )}
-            </section>
-
-            <section className="checkout-panel">
-              <div className="checkout-panel-title">
-                <span>2</span>
-                <div><h2>Payment</h2><p>Cash on delivery</p></div>
+                ))}
               </div>
-              <div className="cod-choice">
-                <CheckCircle2 />
-                <span><b>COD</b><small>Pay when the order reaches you.</small></span>
-              </div>
-            </section>
-          </div>
-
-          <aside className="checkout-summary">
-            <h2>{items.length} basket item{items.length === 1 ? '' : 's'}</h2>
-            <div className="checkout-mini-items">
-              {items.slice(0, 5).map((item) => (
-                <p key={item.product.id}>
-                  <span>{item.qty} × {item.product.name}</span>
-                  <b>{formatPrice(item.qty * item.product.price)}</b>
-                </p>
-              ))}
-            </div>
-
-            {preview ? (
-              <>
-                <div className="checkout-bill">
-                  <p><span>Items</span><b>{formatPrice(preview.subtotal)}</b></p>
-                  <p><span>Delivery</span><b>{preview.deliveryFee ? formatPrice(preview.deliveryFee) : 'FREE'}</b></p>
-                  <p><span>Handling</span><b>{preview.handlingFee ? formatPrice(preview.handlingFee) : '—'}</b></p>
-                  <p className="checkout-total"><span>Total</span><b>{formatPrice(preview.grandTotal)}</b></p>
-                </div>
-                <button className="primary-btn" onClick={placeOrder} disabled={busy}>
-                  {busy ? 'Placing order…' : 'Place COD order'}
-                </button>
-                <small>
-                  Pasalho rechecks price and stock, then reserves inventory
-                  atomically when the order is accepted.
-                </small>
-              </>
             ) : (
-              <button
-                className="primary-btn"
-                onClick={reviewOrder}
-                disabled={busy || !selectedAddressId || !cartToken}
-              >
-                {busy ? 'Checking…' : 'Review final total'}
-              </button>
+              <form className="address-form" onSubmit={saveAddress}>
+                <label>
+                  Recipient name
+                  <input name="recipientName" required />
+                </label>
+                <label>
+                  Area / tole
+                  <input name="area" required />
+                </label>
+                <label>
+                  Street
+                  <input name="street" />
+                </label>
+                <label>
+                  Landmark
+                  <input name="landmark" />
+                </label>
+                <div className="address-row">
+                  <label>
+                    Municipality
+                    <input name="municipality" defaultValue="Birendranagar" />
+                  </label>
+                  <label>
+                    Ward
+                    <input name="ward" />
+                  </label>
+                </div>
+                <div className="address-row">
+                  <label>
+                    District
+                    <input name="district" defaultValue="Surkhet" />
+                  </label>
+                  <label>
+                    Province
+                    <input name="province" defaultValue="Karnali Province" />
+                  </label>
+                </div>
+                <label>
+                  Delivery instructions
+                  <textarea name="instructions" rows={3} />
+                </label>
+                <button className="secondary-btn" disabled={busy}>
+                  Save address
+                </button>
+              </form>
             )}
-          </aside>
+          </section>
+
+          <section className="checkout-card">
+            <h2>Payment</h2>
+            <div className="cod-option">
+              <ShieldCheck />
+              <span>
+                <b>Cash on delivery</b>
+                <small>Digital payments stay disabled until certified.</small>
+              </span>
+            </div>
+          </section>
         </div>
-      )}
+
+        <aside className="checkout-summary">
+          <h2>Order summary</h2>
+          <p>
+            <span>Items</span>
+            <b>{formatPrice(preview?.subtotal ?? subtotal)}</b>
+          </p>
+          <p>
+            <span>Delivery</span>
+            <b>{preview ? formatPrice(preview.deliveryFee) : 'Checking…'}</b>
+          </p>
+          <p>
+            <span>Handling</span>
+            <b>{preview ? formatPrice(preview.handlingFee) : '—'}</b>
+          </p>
+          <div className="checkout-total">
+            <span>Total</span>
+            <strong>{formatPrice(preview?.grandTotal ?? subtotal)}</strong>
+          </div>
+          {preview ? (
+            <div className="checkout-eta">
+              <Truck />
+              <span>
+                <b>{preview.etaMinMinutes}–{preview.etaMaxMinutes} min estimate</b>
+                <small>Confirmed from current fulfillment availability</small>
+              </span>
+            </div>
+          ) : null}
+          {error ? (
+            <p className="commerce-message error" role="alert">{error}</p>
+          ) : null}
+          <button
+            className="primary-btn"
+            disabled={busy || !preview || !addressId}
+            onClick={submitOrder}
+          >
+            {busy ? 'Placing order…' : 'Place COD order'}
+          </button>
+          <small>
+            Pasalho revalidates price, stock and store assignment when you
+            place the order.
+          </small>
+        </aside>
+      </div>
     </div>
   );
 }

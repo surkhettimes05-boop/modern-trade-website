@@ -154,7 +154,18 @@ async function getLegacyCatalog(): Promise<CatalogData> {
 }
 
 export const getCatalog = cache(async (): Promise<CatalogData> => {
-  return (await getPasalhoDefaultCatalog()) ?? getLegacyCatalog();
+  const pasalho = await getPasalhoDefaultCatalog();
+  if (pasalho) return pasalho;
+
+  // Customer commerce must not advertise fake stock before Pasalho resolves a store.
+  // Legacy catalog remains available to legacy staff routes, but the customer surface
+  // starts empty until a Pasalho fulfillment location is known.
+  return {
+    products: [],
+    categories: openingCategories,
+    stores: [],
+    offers: [],
+  };
 });
 
 export const getProductBySlug = cache(async (slug: string) => {

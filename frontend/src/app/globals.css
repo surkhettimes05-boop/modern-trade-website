@@ -21,3 +21,66 @@
 .product-image img{width:100%!important;height:100%!important;object-fit:cover}
 .gallery{display:block;min-width:0}
 .gallery-main{display:block;width:100%}
+
+
+/* Pasalho account, checkout and order flow */
+.account-auth-page,.checkout-login{display:grid;place-items:center;min-height:60vh}
+.account-card,.checkout-login{width:min(560px,100%);border:1px solid var(--line);border-radius:18px;background:#fff;padding:30px;box-shadow:var(--shadow)}
+.account-card h1,.checkout-login h1{font-size:36px;letter-spacing:-.04em;margin:8px 0}
+.account-card>p,.checkout-login>p{color:var(--muted);line-height:1.6}
+.account-card form{display:grid;gap:14px;margin-top:22px}
+.account-card label,.address-form label{display:grid;gap:7px;font-size:12px;font-weight:800}
+.account-card input,.address-form input,.address-form textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:12px;background:#fff;outline:0}
+.account-card input:focus,.address-form input:focus,.address-form textarea:focus{border-color:var(--brand)}
+.account-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.pasalho-checkout .page-head{margin-bottom:24px}
+.checkout-grid{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:28px}
+.checkout-main{display:grid;gap:16px}
+.checkout-card,.checkout-summary{border:1px solid var(--line);background:#fff;border-radius:16px;padding:22px}
+.checkout-card h2,.checkout-summary h2{margin-top:0}
+.address-options{display:grid;gap:10px}
+.address-options label{display:flex;gap:12px;border:1px solid var(--line);padding:14px;border-radius:12px;cursor:pointer}
+.address-options label.selected{border-color:var(--brand);background:#f0f8f4}
+.address-options label span{display:grid;gap:4px}
+.address-options label small{color:var(--muted);line-height:1.4}
+.address-form{display:grid;gap:13px}
+.address-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cod-option,.checkout-eta{display:flex;gap:11px;align-items:flex-start;background:#f2f8f4;border-radius:11px;padding:14px}
+.cod-option svg,.checkout-eta svg{color:var(--brand)}
+.cod-option span,.checkout-eta span{display:grid;gap:3px}
+.cod-option small,.checkout-eta small{color:var(--muted)}
+.checkout-summary{position:sticky;top:105px;align-self:start}
+.checkout-summary>p{display:flex;justify-content:space-between}
+.checkout-total{display:flex;justify-content:space-between;align-items:end;border-top:1px solid var(--line);padding-top:16px;margin-top:16px}
+.checkout-total strong{font-size:28px}
+.checkout-summary>.primary-btn{width:100%;margin-top:16px}
+.checkout-summary>small{display:block;color:var(--muted);line-height:1.5;margin-top:10px}
+.commerce-message.error{background:#fff0ed;color:#9a2f22;border:1px solid #f2c8c1}
+.orders-grid{display:grid;gap:12px;margin-top:24px}
+.order-card{display:flex;justify-content:space-between;gap:20px;border:1px solid var(--line);background:#fff;border-radius:14px;padding:18px 20px}
+.order-card>div{display:grid;gap:5px}
+.order-card>div:last-child{text-align:right}
+.order-card span{color:var(--brand);font-size:11px;font-weight:900}
+.order-card h2{font-size:16px;margin:0}
+.order-card small{color:var(--muted)}
+.order-detail-head{display:flex;justify-content:space-between;align-items:end;gap:20px;margin:18px 0 26px}
+.order-detail-head h1{margin:4px 0;font-size:36px}
+.order-detail-head>strong{font-size:28px}
+.order-detail-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:20px}
+.order-items{display:grid}
+.order-items>div{display:flex;justify-content:space-between;gap:20px;border-top:1px solid var(--line);padding:13px 0}
+.order-items span{display:grid;gap:3px}
+.order-items small{color:var(--muted)}
+.order-timeline{display:grid;gap:0;margin:12px 0 20px}
+.order-timeline>div{display:grid;grid-template-columns:16px 1fr;gap:10px;min-height:62px}
+.order-timeline i{width:10px;height:10px;border-radius:50%;background:var(--brand);margin-top:4px;position:relative}
+.order-timeline i:after{content:"";position:absolute;width:2px;background:#dbe7df;top:12px;bottom:-48px;left:4px}
+.order-timeline>div:last-child i:after{display:none}
+.order-timeline span{display:grid;align-content:start;gap:2px}
+.order-timeline small,.order-timeline em{color:var(--muted);font-style:normal}
+.danger-button{color:#a02d21;border-color:#e6b6b0}
+@media(max-width:800px){
+ .checkout-grid,.order-detail-grid{display:block}.checkout-summary{position:static;margin-top:16px}
+ .address-row{grid-template-columns:1fr}.order-card{display:grid}.order-card>div:last-child{text-align:left}
+ .order-detail-head{display:grid}.account-actions{display:grid}.account-actions>*{width:100%}
+}
