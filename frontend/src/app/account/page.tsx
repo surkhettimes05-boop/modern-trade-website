@@ -23,12 +23,15 @@ export default function AccountPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const next = new URLSearchParams(window.location.search).get('next');
-    if (next?.startsWith('/')) setNextPath(next);
-    getCustomer()
-      .then(setCustomer)
-      .catch(() => undefined)
-      .finally(() => setChecking(false));
+    const timer = window.setTimeout(() => {
+      const next = new URLSearchParams(window.location.search).get('next');
+      if (next?.startsWith('/')) setNextPath(next);
+      getCustomer()
+        .then(setCustomer)
+        .catch(() => undefined)
+        .finally(() => setChecking(false));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function requestOtp(event: FormEvent) {
