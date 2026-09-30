@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useShop } from '@/components/CommerceClient';
 import { MARKET } from '@/lib/market';
@@ -11,10 +11,11 @@ function csrfToken() {
 }
 
 export default function CheckoutPage() {
-  const { items, cartId } = useShop();
+  const { items, cartId, flushCartWrites } = useShop();
   const router = useRouter();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const checkoutIdempotencyKey = useRef<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,7 +29,7 @@ export default function CheckoutPage() {
         return;
       }
 
-      let activeCartId = cartId;
+      let activeCartId = await flushCartWrites() ?? cartId;
       if (!activeCartId) {
         const cartResponse = await resilientFetch('/api/shopping-cart', {
           method: 'POST', credentials: 'include',
@@ -54,7 +55,7 @@ export default function CheckoutPage() {
         headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() },
         body: JSON.stringify({
           cart_id: activeCartId,
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: checkoutIdempotencyKey.current ?? (checkoutIdempotencyKey.current = crypto.randomUUID()),
           delivery_type: 'DELIVERY',
           shipping_name: form.get('name'),
           shipping_phone: form.get('phone'),
@@ -79,7 +80,7 @@ export default function CheckoutPage() {
 
   return <div className="shell page">
     <h1>Checkout</h1>
-    <p className="mt-2 text-slate-600">Cash on delivery · Delivery from Pasalho Central Warehouse</p>
+      <p className="mt-2 text-slate-600">Cash on delivery · Home delivery</p>
     <form onSubmit={submit} className="mt-8 grid max-w-2xl gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <label>Full name<input required name="name" autoComplete="name" className="mt-1 w-full rounded border p-2" /></label>
       <label>Phone<input required name="phone" autoComplete="tel" placeholder="+977 98XXXXXXXX" className="mt-1 w-full rounded border p-2" /></label>

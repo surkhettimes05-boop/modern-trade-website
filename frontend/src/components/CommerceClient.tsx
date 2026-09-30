@@ -8,7 +8,7 @@ import { resilientFetch } from '@/lib/resilientFetch';
 import { trackStorefrontEvent } from '@/lib/analytics';
 
 type CartItem = { product: Product; qty: number; backendItemId?: string };
-type ShopContext = { items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; add: (product: Product) => void; change: (id: string, delta: number) => void; cartId: string | null; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean };
+type ShopContext = { items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; add: (product: Product) => void; change: (id: string, delta: number) => void; flushCartWrites: () => Promise<string | null>; cartId: string | null; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean };
 const Ctx = createContext<ShopContext | null>(null);
 
 function csrfToken() {
@@ -25,6 +25,9 @@ async function authenticatedCart() {
 
 export function CommerceProvider({ children, initialProducts = [], initialCategories = [], initialCatalogLoaded = false }: { children: React.ReactNode; initialProducts?: Product[]; initialCategories?: StorefrontCategory[]; initialCatalogLoaded?: boolean }) {
   const [products, setProducts] = useState<Product[]>(initialProducts); const [categories, setCategories] = useState<StorefrontCategory[]>(initialCategories); const [loading, setLoading] = useState(!initialCatalogLoaded); const [items, setItems] = useState<CartItem[]>([]); const [cartId, setCartId] = useState<string | null>(null); const [drawer, setDrawer] = useState(false); const [hydrated, setHydrated] = useState(false);
+  const cartIdRef = useRef<string | null>(null);
+  const cartWriteQueue = useRef<Promise<void>>(Promise.resolve());
+  const cartWriteError = useRef<string | null>(null);
   useEffect(() => { const timer = window.setTimeout(() => { try { const saved = localStorage.getItem('pasalho-cart-v2'); if (saved) setItems(JSON.parse(saved)); localStorage.removeItem('pasalho-store'); } catch { /* ignore malformed browser state */ } finally { setHydrated(true); } }, 0); return () => window.clearTimeout(timer); }, []);
   useEffect(() => { if (hydrated) localStorage.setItem('pasalho-cart-v2', JSON.stringify(items)); }, [hydrated, items]);
   useEffect(() => { if (!hydrated || !products.length) return; const timer = window.setTimeout(() => { const productsBySku = new Map(products.map((product) => [product.sku || product.id, product])); setItems((current) => current.flatMap((item) => { const product = productsBySku.get(item.product.sku || item.product.id); return product ? [{ ...item, product }] : []; })); }, 0); return () => window.clearTimeout(timer); }, [hydrated, products]);
@@ -36,16 +39,47 @@ export function CommerceProvider({ children, initialProducts = [], initialCatego
       return found ? current.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item) : [...current, { product, qty: 1 }];
     });
     setDrawer(true);
-    void (async () => {
-      const cart = await authenticatedCart();
+    cartWriteQueue.current = cartWriteQueue.current.then(async () => {
+      const cart = cartIdRef.current ? { id: cartIdRef.current } : await authenticatedCart();
       if (!cart) return;
+      cartIdRef.current = cart.id;
       setCartId(cart.id);
       const response = await resilientFetch(`/api/shopping-cart/${cart.id}/items`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({ product_id: product.id, quantity: 1 }) });
-      if (response.ok) {
-        const item = await response.json() as { id: string };
-        setItems((current) => current.map((entry) => entry.product.id === product.id ? { ...entry, backendItemId: item.id } : entry));
+      if (!response.ok) throw new Error('Could not sync cart item');
+      const item = await response.json() as { id: string };
+      setItems((current) => current.map((entry) => entry.product.id === product.id ? { ...entry, backendItemId: item.id } : entry));
+    }).catch((error: unknown) => {
+      cartWriteError.current = error instanceof Error ? error.message : 'Could not sync cart';
+    });
+  };
+  const flushCartWrites = async () => {
+    await cartWriteQueue.current;
+    if (cartWriteError.current) throw new Error(cartWriteError.current);
+    const activeCartId = cartIdRef.current;
+    if (!activeCartId) return null;
+    const response = await resilientFetch(`/api/shopping-cart/${activeCartId}/items`, { credentials: 'include', cache: 'no-store' });
+    if (!response.ok) throw new Error('Could not verify your cart');
+    const backendItems = await response.json() as { id: string; product_id: string; quantity: number }[];
+    const desired = new Map(items.map((item) => [item.product.id, item.qty]));
+    const existing = new Map(backendItems.map((item) => [item.product_id, item]));
+    for (const [productId, item] of existing) {
+      const quantity = desired.get(productId);
+      if (quantity === undefined) {
+        const remove = await resilientFetch(`/api/shopping-cart/items/${item.id}`, { method: 'DELETE', credentials: 'include', headers: { 'x-csrf-token': csrfToken() } });
+        if (!remove.ok) throw new Error('Could not verify your cart');
+      } else if (quantity !== Number(item.quantity)) {
+        const update = await resilientFetch(`/api/shopping-cart/items/${item.id}`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({ quantity }) });
+        if (!update.ok) throw new Error('Could not verify your cart');
+        desired.delete(productId);
+      } else {
+        desired.delete(productId);
       }
-    })().catch(() => undefined);
+    }
+    for (const [productId, quantity] of desired) {
+      const addResponse = await resilientFetch(`/api/shopping-cart/${activeCartId}/items`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() }, body: JSON.stringify({ product_id: productId, quantity }) });
+      if (!addResponse.ok) throw new Error('Could not verify your cart');
+    }
+    return activeCartId;
   };
   const change = (id: string, delta: number) => {
     const current = items.find((item) => item.product.id === id);
@@ -62,7 +96,7 @@ export function CommerceProvider({ children, initialProducts = [], initialCatego
       }
     })().catch(() => undefined);
   };
-  return <Ctx.Provider value={{ items, products, categories, add, change, cartId, drawer, setDrawer, loading }}>{children}<CartDrawer /></Ctx.Provider>;
+  return <Ctx.Provider value={{ items, products, categories, add, change, flushCartWrites, cartId, drawer, setDrawer, loading }}>{children}<CartDrawer /></Ctx.Provider>;
 }
 export const useShop = () => { const value = useContext(Ctx); if (!value) throw new Error('shop provider missing'); return value; };
 

@@ -188,4 +188,25 @@ describe("commerce to PASALO fulfillment handoff", () => {
     );
     expect(statusUpdate?.[1]?.[3]).toBe(false);
   });
+
+  it("replays customer cancellation idempotently without repeating PASALHO cancellation", async () => {
+    const cancelled = {
+      id: "00000000-0000-0000-0000-000000000099",
+      customer_id: input.customerId,
+      status: "CANCELLED",
+      fulfillment_status: "ACCEPTED",
+      fulfillment_order_id: "00000000-0000-0000-0000-000000000088",
+    };
+    poolQuery.mockResolvedValue({ rows: [cancelled] });
+
+    const result = await new CheckoutService().cancelCustomerOrder(
+      cancelled.id,
+      input.customerId,
+      "Customer request",
+    );
+
+    expect(result).toBe(cancelled);
+    expect(axiosMock.post).not.toHaveBeenCalled();
+    expect(clientQuery).not.toHaveBeenCalled();
+  });
 });

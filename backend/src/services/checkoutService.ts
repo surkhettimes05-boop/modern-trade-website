@@ -399,11 +399,13 @@ export class CheckoutService {
   async cancelCustomerOrder(orderId: string, authenticatedCustomerId: string, reason: string) {
     const pool = getPool();
     const preflight = await pool.query(
-      "SELECT fulfillment_status, fulfillment_order_id FROM web_orders WHERE id = $1 AND customer_id = $2",
+      "SELECT * FROM web_orders WHERE id = $1 AND customer_id = $2",
       [orderId, authenticatedCustomerId],
     );
     const existing = preflight.rows[0];
-    if (existing?.fulfillment_status === "ACCEPTED" && existing.fulfillment_order_id) {
+    if (!existing) throw new Error("Order not found");
+    if (existing.status === "CANCELLED") return existing;
+    if (existing.fulfillment_status === "ACCEPTED" && existing.fulfillment_order_id) {
       if (!this.pasalho.isConfigured()) {
         throw new Error("Fulfillment cancellation is not configured");
       }
