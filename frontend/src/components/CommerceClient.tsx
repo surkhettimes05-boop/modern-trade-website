@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import {
   formatPrice,
-  mapPasalhoProduct,
   Product,
   Store,
   StorefrontCategory,
@@ -372,7 +371,6 @@ export function SearchBox() {
       !selectedStore ||
       selectedStore.source !== 'pasalho'
     ) {
-      setRemote(null);
       return;
     }
 
@@ -401,7 +399,10 @@ export function SearchBox() {
     return () => document.removeEventListener('pointerdown', dismiss);
   }, []);
 
-  const result = remote ?? local;
+  const remoteEligible =
+    query.trim().length >= 2 &&
+    selectedStore?.source === 'pasalho';
+  const result = remoteEligible && remote ? remote : local;
 
   return (
     <div
@@ -422,6 +423,7 @@ export function SearchBox() {
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
+            setRemote(null);
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
