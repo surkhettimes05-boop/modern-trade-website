@@ -259,11 +259,30 @@ export default function CheckoutPage() {
                   className="text-btn"
                   onClick={() => setShowAddressForm(true)}
                 >
-                  + Add another address
+                  + Save this delivery pin as another address
                 </button>
               </>
             ) : (
               <form className="address-form" onSubmit={saveAddress}>
+                <div className="address-pin-note">
+                  <MapPin />
+                  <span>
+                    <b>Delivery pin: {delivery.serviceZoneName}</b>
+                    <small>
+                      The address below will be saved with the location pin you
+                      selected. If this is a different place, update the pin
+                      before saving.
+                    </small>
+                  </span>
+                  <button
+                    type="button"
+                    className="text-btn"
+                    onClick={requestLocation}
+                    disabled={busy}
+                  >
+                    Update pin
+                  </button>
+                </div>
                 <label>
                   Recipient name
                   <input name="recipientName" required />
@@ -316,7 +335,7 @@ export default function CheckoutPage() {
                     </button>
                   ) : null}
                   <button className="primary-btn" disabled={busy}>
-                    {busy ? 'Saving…' : 'Save address'}
+                    {busy ? 'Saving…' : 'Save pinned address'}
                   </button>
                 </div>
               </form>
