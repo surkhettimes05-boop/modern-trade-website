@@ -134,13 +134,22 @@ export default function CheckoutPage() {
     if (!preview || !cartToken || !addressId) return;
     setBusy(true);
     setError('');
+    const idempotencyStorageKey =
+      `pasalho-order-idempotency:${cartToken}:${addressId}`;
+    let idempotencyKey = sessionStorage.getItem(idempotencyStorageKey);
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID();
+      sessionStorage.setItem(idempotencyStorageKey, idempotencyKey);
+    }
+
     try {
       const result = await placeOrder(
         cartToken,
         addressId,
         preview.checkoutToken,
-        crypto.randomUUID(),
+        idempotencyKey,
       );
+      sessionStorage.removeItem(idempotencyStorageKey);
       clearCart();
       router.push(`/account/orders/${result.id}`);
     } catch (reason) {
