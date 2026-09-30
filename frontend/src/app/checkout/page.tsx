@@ -24,6 +24,7 @@ export default function CheckoutPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [addressId, setAddressId] = useState('');
+  const [showAddressForm, setShowAddressForm] = useState(false);
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -43,7 +44,12 @@ export default function CheckoutPage() {
           setCustomer(me);
           setAddresses(saved);
           const preferred = saved.find((address) => address.isDefault) || saved[0];
-          if (preferred) setAddressId(preferred.id);
+          if (preferred) {
+            setAddressId(preferred.id);
+            setShowAddressForm(false);
+          } else {
+            setShowAddressForm(true);
+          }
         })
         .catch(() => undefined)
         .finally(() => {
@@ -114,6 +120,7 @@ export default function CheckoutPage() {
       });
       setAddresses((current) => [...current, created]);
       setAddressId(created.id);
+      setShowAddressForm(false);
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : 'Could not save address.',
@@ -204,35 +211,48 @@ export default function CheckoutPage() {
         <div className="checkout-main">
           <section className="checkout-card">
             <h2>Delivery address</h2>
-            {addresses.length ? (
-              <div className="address-options">
-                {addresses.map((address) => (
-                  <label
-                    key={address.id}
-                    className={addressId === address.id ? 'selected' : ''}
-                  >
-                    <input
-                      type="radio"
-                      name="address"
-                      checked={addressId === address.id}
-                      onChange={() => setAddressId(address.id)}
-                    />
-                    <span>
-                      <b>{address.customLabel || address.label}</b>
-                      <small>
-                        {[
-                          address.area,
-                          address.street,
-                          address.landmark,
-                          address.municipality,
-                        ]
-                          .filter(Boolean)
-                          .join(', ')}
-                      </small>
-                    </span>
-                  </label>
-                ))}
-              </div>
+            {addresses.length && !showAddressForm ? (
+              <>
+                <div className="address-options">
+                  {addresses.map((address) => (
+                    <label
+                      key={address.id}
+                      className={addressId === address.id ? 'selected' : ''}
+                    >
+                      <input
+                        type="radio"
+                        name="address"
+                        checked={addressId === address.id}
+                        onChange={() => setAddressId(address.id)}
+                      />
+                      <span>
+                        <b>
+                          {address.customLabel ||
+                            address.recipientName ||
+                            address.label}
+                        </b>
+                        <small>
+                          {[
+                            address.area,
+                            address.street,
+                            address.landmark,
+                            address.municipality,
+                          ]
+                            .filter(Boolean)
+                            .join(', ')}
+                        </small>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={() => setShowAddressForm(true)}
+                >
+                  + Add another address
+                </button>
+              </>
             ) : (
               <form className="address-form" onSubmit={saveAddress}>
                 <label>
@@ -275,9 +295,21 @@ export default function CheckoutPage() {
                   Delivery instructions
                   <textarea name="instructions" rows={3} />
                 </label>
-                <button className="secondary-btn" disabled={busy}>
-                  Save address
-                </button>
+                <div className="address-form-actions">
+                  {addresses.length ? (
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => setShowAddressForm(false)}
+                      disabled={busy}
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
+                  <button className="primary-btn" disabled={busy}>
+                    {busy ? 'Saving…' : 'Save address'}
+                  </button>
+                </div>
               </form>
             )}
           </section>
