@@ -18,7 +18,7 @@ import {
 } from '@/lib/pasalhoCommerce';
 
 export default function CheckoutPage() {
-  const { items, delivery, cartToken, resetCart, requestLocation } = useShop();
+  const { items, delivery, cartToken, clearCart, requestLocation } = useShop();
   const router = useRouter();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -128,7 +128,7 @@ export default function CheckoutPage() {
         preview.checkoutToken,
         crypto.randomUUID(),
       );
-      resetCart();
+      clearCart();
       router.push(`/account/orders/${result.id}`);
     } catch (reason) {
       setError(
