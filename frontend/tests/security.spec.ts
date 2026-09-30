@@ -45,4 +45,40 @@ test.describe('security boundaries', () => {
     });
     expect(oversized.status()).toBe(413);
   });
+
+  test('Pasalho proxy keeps customer tokens HttpOnly and forwards authenticated commerce', async ({ request }) => {
+    const categories = await request.get(
+      '/api/commerce/categories?locationId=33333333-3333-4333-8333-333333333333',
+    );
+    expect(categories.status()).toBe(200);
+    const categoryPayload = await categories.json();
+    expect(categoryPayload.data?.[0]?.slug).toBe('instant-noodles');
+
+    const verify = await request.post('/api/commerce/auth/verify-otp', {
+      data: {
+        challengeId: '55555555-5555-4555-8555-555555555555',
+        phone: '9812345678',
+        otp: '123456',
+      },
+    });
+    expect(verify.status()).toBe(201);
+    const verifyPayload = await verify.json();
+    expect(verifyPayload.data?.customer?.phone).toBe('+9779812345678');
+    expect(verifyPayload.data?.accessToken).toBeUndefined();
+    expect(verifyPayload.data?.refreshToken).toBeUndefined();
+    expect(verify.headers()['set-cookie']).toContain('pasalho_customer_access=');
+    expect(verify.headers()['set-cookie']).toContain('HttpOnly');
+
+    const me = await request.get('/api/commerce/me');
+    expect(me.status()).toBe(200);
+    const mePayload = await me.json();
+    expect(mePayload.data?.fullName).toBe('QA Pasalho Customer');
+
+    const logout = await request.post('/api/commerce/auth/logout', { data: {} });
+    expect(logout.status()).toBe(201);
+
+    const afterLogout = await request.get('/api/commerce/me');
+    expect(afterLogout.status()).toBe(401);
+  });
+
 });

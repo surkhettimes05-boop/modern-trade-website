@@ -108,7 +108,9 @@ export async function POST(
 
     const expiresIn =
       typeof data.expiresIn === "number" ? data.expiresIn : 900;
-    const secure = process.env.NODE_ENV === "production";
+    const secure =
+      process.env.NODE_ENV === "production" &&
+      process.env.NEXT_LOCAL_QA !== "1";
     const response = NextResponse.json({
       success: true,
       data: {

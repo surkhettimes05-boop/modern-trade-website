@@ -37,7 +37,9 @@ function unavailableResponse(path: string, method: string) {
 function sessionCookieOptions(maxAge: number) {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      process.env.NODE_ENV === "production" &&
+      process.env.NEXT_LOCAL_QA !== "1",
     sameSite: "lax" as const,
     path: "/",
     maxAge,

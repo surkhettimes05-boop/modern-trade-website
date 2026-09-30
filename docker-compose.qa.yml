@@ -82,6 +82,32 @@ services:
       retries: 20
     networks: [storesync-qa]
 
+
+  pasalho-qa:
+    image: node:22-alpine
+    working_dir: /app
+    command: ["node", "/app/pasalho-qa-stub.mjs"]
+    environment:
+      PORT: 3002
+    volumes:
+      - ./scripts/pasalho-qa-stub.mjs:/app/pasalho-qa-stub.mjs:ro
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    networks: [storesync-qa]
+
   qa-migrate:
     <<: *backend
     command: ["node", "dist/database/deployMigrate.js"]
@@ -163,7 +189,9 @@ services:
         NEXT_PUBLIC_ACTIVE_MARKET: NP
     environment:
       NODE_ENV: production
+      NEXT_LOCAL_QA: "1"
       ALLOW_INSECURE_INTERNAL_API: "1"
+      PASALHO_API_URL: http://pasalho-qa:3002
     read_only: true
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
@@ -175,6 +203,8 @@ services:
       - "127.0.0.1:53000:3000"
     depends_on:
       backend:
+        condition: service_healthy
+      pasalho-qa:
         condition: service_healthy
     healthcheck:
       test:
