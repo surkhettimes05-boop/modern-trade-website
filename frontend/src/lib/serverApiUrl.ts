@@ -4,27 +4,46 @@ function insecureInternalApiAllowed(env: NodeJS.ProcessEnv): boolean {
   return env.NEXT_LOCAL_QA === '1' || env.ALLOW_INSECURE_INTERNAL_API === '1';
 }
 
-export function configuredServerApiUrl(
-  env: NodeJS.ProcessEnv = process.env,
+function configuredUrl(
+  value: string | undefined,
+  label: string,
+  env: NodeJS.ProcessEnv,
 ): URL | null {
-  const value = env.API_URL || env.NEXT_PUBLIC_API_URL;
   if (!value) return null;
 
   const url = new URL(value);
   if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new Error('API_URL must use HTTP or HTTPS');
+    throw new Error(`${label} must use HTTP or HTTPS`);
   }
   if (url.username || url.password || url.search || url.hash) {
-    throw new Error('API_URL must not contain credentials, a query, or a fragment');
+    throw new Error(
+      `${label} must not contain credentials, a query, or a fragment`,
+    );
   }
   if (
     env.NODE_ENV === 'production' &&
     url.protocol !== 'https:' &&
     !insecureInternalApiAllowed(env)
   ) {
-    throw new Error('API_URL must use HTTPS in production');
+    throw new Error(`${label} must use HTTPS in production`);
   }
   return url;
+}
+
+export function configuredServerApiUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): URL | null {
+  return configuredUrl(
+    env.API_URL || env.NEXT_PUBLIC_API_URL,
+    'API_URL',
+    env,
+  );
+}
+
+export function configuredPasalhoApiUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): URL | null {
+  return configuredUrl(env.PASALHO_API_URL, 'PASALHO_API_URL', env);
 }
 
 export function requireServerApiUrl(
@@ -32,6 +51,14 @@ export function requireServerApiUrl(
 ): URL {
   const url = configuredServerApiUrl(env);
   if (!url) throw new Error('API_URL is not configured');
+  return url;
+}
+
+export function requirePasalhoApiUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): URL {
+  const url = configuredPasalhoApiUrl(env);
+  if (!url) throw new Error('PASALHO_API_URL is not configured');
   return url;
 }
 

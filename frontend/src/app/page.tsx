@@ -1,26 +1,182 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, PackageCheck, ShieldCheck, Store, Tags, Truck } from 'lucide-react';
-import { LocationPicker, ProductCard, useShop } from '@/components/CommerceClient';
-import { formatPrice } from '@/lib/market';
+import {
+  ArrowRight,
+  BadgeCheck,
+  Clock3,
+  PackageCheck,
+  Search,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react';
+import {
+  LocationPicker,
+  ProductCard,
+  useShop,
+} from '@/components/CommerceClient';
 
-const hero = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1600&q=85';
-
-function SectionTitle({ eyebrow, title, link = 'View all' }: { eyebrow?: string; title: string; link?: string }) {
-  return <div className="section-title"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h2>{title}</h2></div><Link href="/shop">{link}<ArrowRight size={17} /></Link></div>;
+function ProductRail({
+  title,
+  subtitle,
+  products,
+  href = '/shop',
+}: {
+  title: string;
+  subtitle?: string;
+  products: ReturnType<typeof useShop>['products'];
+  href?: string;
+}) {
+  if (!products.length) return null;
+  return (
+    <section className="quick-section shell">
+      <div className="quick-section-head">
+        <div>
+          <h2>{title}</h2>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </div>
+        <Link href={href}>
+          See all <ArrowRight />
+        </Link>
+      </div>
+      <div className="quick-product-row">
+        {products.map((product) => (
+          <ProductCard product={product} key={product.id} />
+        ))}
+      </div>
+    </section>
+  );
 }
 
 export default function Home() {
-  const { products, categories, loading } = useShop();
-  return <>
-    <section className="hero shell"><div className="hero-main"><Image src={hero} alt="Fresh groceries arranged for a weekly shop" fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">THIS WEEK AT NOVA MART</span><h1>Big savings for<br />everyday living.</h1><p>Groceries, home essentials, electronics and more - quality products at prices made for everyday life.</p><div><Link className="primary-btn" href="/shop">Shop today&apos;s deals <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href="/offers" className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>LIVE OFFERS</span><h2>Smart shopping.<br />Better value.</h2><b>See today&apos;s offers -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>Shop what&apos;s<br />near you.</h2><b>Find a store -&gt;</b></Link></div></section>
-    <div className="service-strip shell"><span><Truck />Free delivery over {formatPrice(9_999)}</span><span><PackageCheck />Pickup ready in 2 hours</span><span><ShieldCheck />COD checkout</span><span><Tags />IRD/VAT-compatible receipts</span></div>
-    <section className="section shell" id="categories"><SectionTitle eyebrow="StoreSync opening range" title="642 SKUs, organized to sell" /><p className="catalog-note">The lean launch assortment from your Opening SKU Plan v2: 300 Core, 270 Standard and 72 Test SKUs across 29 departments.</p><div className="category-grid">{categories.map((category) => <Link href={`/category/${category.slug}`} className="category-card" key={category.id}><div>{category.image && <Image src={category.image} fill sizes="220px" alt="" />}</div><h3>{category.name}</h3><span>{category.skuCount ? `${category.skuCount} SKUs` : 'Shop now'} <ArrowRight /></span></Link>)}</div></section>
-    <section className="section warm"><div className="shell"><SectionTitle eyebrow="Worth adding to cart" title="Today&apos;s best deals" />{loading ? <p>Loading catalog...</p> : <div className="product-scroll">{products.filter((p) => p.originalPrice).slice(0, 6).map((product) => <ProductCard product={product} key={product.id} />)}</div>}</div></section>
-    <section className="section shell"><SectionTitle eyebrow="Your regulars, ready" title="Everyday essentials" link="Shop all essentials" /><div className="essentials-grid">{products.slice(0, 8).map((product) => <ProductCard compact product={product} key={product.id} />)}</div></section>
-    <section className="section near"><div className="shell"><div className="near-head"><SectionTitle eyebrow="Picked for your neighbourhood" title="Popular near you" /><LocationPicker /></div><p className="subtle">Selection and offers may vary by store and delivery location.</p><div className="product-scroll">{products.slice(8, 13).map((product) => <ProductCard product={product} key={product.id} />)}</div></div></section>
-    <section className="section shell"><SectionTitle eyebrow="The NOVA promise" title="More value in every visit" link="Our quality promise" /><div className="benefits"><div><Tags /><h3>Everyday low prices</h3><p>Great value across thousands of essentials.</p></div><div><ShieldCheck /><h3>Quality you can trust</h3><p>Carefully selected products and trusted brands.</p></div><div><PackageCheck /><h3>Everything in one place</h3><p>Groceries, home, electronics and more.</p></div><div><Store /><h3>Stores close to home</h3><p>Convenient locations built around communities.</p></div></div></section>
-  </>;
+  const { products, categories, loading, delivery, message } = useShop();
+
+  const essentials = products.slice(0, 10);
+  const deals = products
+    .filter((product) => product.originalPrice)
+    .slice(0, 10);
+  const household = products
+    .filter((product) =>
+      /clean|laundry|dish|house|personal|baby|care/i.test(product.category),
+    )
+    .slice(0, 10);
+
+  return (
+    <>
+      <section className="quick-hero shell">
+        <div className="quick-hero-copy">
+          <span className="quick-kicker">
+            <Sparkles /> BIRENDRANAGAR PILOT
+          </span>
+          <h1>
+            Everyday essentials,
+            <br />
+            without the long shop.
+          </h1>
+          <p>
+            Set your location and Pasalho shows the store that can actually
+            serve you, with live stock, store pricing and a realistic delivery
+            estimate.
+          </p>
+          <LocationPicker prominent />
+          <div className="quick-trust">
+            <span><ShieldCheck /> COD</span>
+            <span><PackageCheck /> Store-scoped stock</span>
+            <span><BadgeCheck /> Server-checked prices</span>
+          </div>
+        </div>
+
+        <div className="quick-hero-panel">
+          <div className="quick-promise-card primary">
+            <Clock3 />
+            <span>Delivery estimate</span>
+            <strong>
+              {delivery
+                ? `${delivery.etaMinMinutes}–${delivery.etaMaxMinutes} min`
+                : 'Set your location'}
+            </strong>
+            <small>No fake 10-minute promise.</small>
+          </div>
+          <div className="quick-promise-card">
+            <Search />
+            <span>Built for repeat shopping</span>
+            <strong>Search → Add → Checkout</strong>
+            <small>Fewer screens between need and basket.</small>
+          </div>
+        </div>
+      </section>
+
+      {message ? <div className="shell commerce-message">{message}</div> : null}
+
+      <section className="quick-section shell">
+        <div className="quick-section-head">
+          <div>
+            <h2>Shop by category</h2>
+            <p>Get to the product you need in one tap.</p>
+          </div>
+          <Link href="/shop">
+            All categories <ArrowRight />
+          </Link>
+        </div>
+        <div className="quick-category-grid">
+          {categories.slice(0, 12).map((category, index) => (
+            <Link
+              href={`/category/${category.slug}`}
+              className="quick-category-card"
+              key={category.id}
+            >
+              <span className={`quick-category-icon tone-${(index % 6) + 1}`}>
+                {category.name.slice(0, 1).toUpperCase()}
+              </span>
+              <b>{category.name}</b>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {loading ? (
+        <div className="shell catalog-loading">Loading the nearest store…</div>
+      ) : (
+        <>
+          <ProductRail
+            title={delivery ? 'Popular near you' : 'Everyday essentials'}
+            subtitle={
+              delivery
+                ? `Live catalogue from ${delivery.storeName}`
+                : 'Set your location for live Pasalho inventory.'
+            }
+            products={essentials}
+          />
+          <ProductRail
+            title="Worth adding today"
+            subtitle="Products currently priced below MRP."
+            products={deals}
+            href="/offers"
+          />
+          <ProductRail
+            title="Home & personal care"
+            subtitle="Useful household products, not endless browsing."
+            products={household}
+          />
+        </>
+      )}
+
+      <section className="quick-value-strip">
+        <div className="shell">
+          <div>
+            <strong>One Pasalho basket</strong>
+            <span>Web, app and store inventory use the same backend truth.</span>
+          </div>
+          <div>
+            <strong>Stock before promises</strong>
+            <span>Availability is checked against the fulfillment store.</span>
+          </div>
+          <div>
+            <strong>Simple payment</strong>
+            <span>COD first; digital payments only after certification.</span>
+          </div>
+        </div>
+      </section>
+    </>
+  );
 }

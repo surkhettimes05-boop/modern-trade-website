@@ -1,34 +1,398 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import Image from 'next/image'; import Link from 'next/link';
-import { ChevronDown, Heart, MapPin, Menu, MessageCircle, Minus, Plus, Search, ShoppingCart, Star, X } from 'lucide-react';
-import { formatPrice, mapProduct, openingCategories, openingProducts, Product, StorefrontCategory, Store, slugify } from '@/lib/catalog';
-import { resilientFetch } from '@/lib/resilientFetch';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import {
+  ChevronDown,
+  LoaderCircle,
+  LocateFixed,
+  MapPin,
+  Menu,
+  Minus,
+  Plus,
+  Search,
+  ShoppingCart,
+  X,
+} from 'lucide-react';
+import {
+  formatPrice,
+  mapPasalhoProduct,
+  Product,
+  Store,
+  StorefrontCategory,
+  slugify,
+} from '@/lib/catalog';
+import {
+  addServerCartItem,
+  createServerCart,
+  fetchPasalhoCatalog,
+  fetchServerCart,
+  removeServerCartItem,
+  resolveDeliveryLocation,
+  searchPasalhoCatalog,
+  updateServerCartItem,
+  type DeliveryContext,
+  type ServerCart,
+} from '@/lib/pasalhoCommerce';
 
-type CartItem = { product: Product; qty: number };
-type ShopContext = { items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; stores: Store[]; selectedStore: Store | null; setSelectedStore: (store: Store) => void; add: (product: Product) => void; change: (id: string, delta: number) => void; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean };
+type CartItem = {
+  product: Product;
+  qty: number;
+  cartItemId?: string;
+};
+
+type ShopContext = {
+  items: CartItem[];
+  products: Product[];
+  categories: StorefrontCategory[];
+  stores: Store[];
+  selectedStore: Store | null;
+  delivery: DeliveryContext | null;
+  setSelectedStore: (store: Store) => void;
+  requestLocation: () => void;
+  add: (product: Product, quantity?: number) => Promise<void>;
+  change: (id: string, delta: number) => Promise<void>;
+  drawer: boolean;
+  setDrawer: (value: boolean) => void;
+  loading: boolean;
+  cartBusy: boolean;
+  message: string;
+};
+
 const Ctx = createContext<ShopContext | null>(null);
+const DELIVERY_KEY = 'pasalho-delivery-context-v1';
+const CART_KEY = 'pasalho-cart-token-v1';
 
-export function CommerceProvider({ children, initialProducts = [], initialCategories = [], initialStores = [] }: { children: React.ReactNode; initialProducts?: Product[]; initialCategories?: StorefrontCategory[]; initialStores?: Store[] }) {
-  const [products, setProducts] = useState<Product[]>(initialProducts); const [categories, setCategories] = useState<StorefrontCategory[]>(initialCategories); const [stores, setStores] = useState<Store[]>(initialStores); const [loading, setLoading] = useState(!(initialProducts.length && initialCategories.length)); const [items, setItems] = useState<CartItem[]>([]); const [drawer, setDrawer] = useState(false); const [selectedStore, setSelectedStoreState] = useState<Store | null>(initialStores[0] || null); const [hydrated, setHydrated] = useState(false);
-  useEffect(() => { const timer = window.setTimeout(() => { try { const saved = localStorage.getItem('novamart-cart-v2'); if (saved) setItems(JSON.parse(saved)); const storeId = localStorage.getItem('novamart-store'); if (storeId) setSelectedStoreState({ id: storeId, name: 'Selected store' }); } catch { /* ignore malformed browser state */ } finally { setHydrated(true); } }, 0); return () => window.clearTimeout(timer); }, []);
-  useEffect(() => { if (hydrated) localStorage.setItem('novamart-cart-v2', JSON.stringify(items)); }, [hydrated, items]);
-  useEffect(() => { if (!hydrated || !products.length) return; const timer = window.setTimeout(() => { const productsBySku = new Map(products.map((product) => [product.sku || product.id, product])); setItems((current) => current.flatMap((item) => { const product = productsBySku.get(item.product.sku || item.product.id); return product ? [{ ...item, product }] : []; })); }, 0); return () => window.clearTimeout(timer); }, [hydrated, products]);
-  useEffect(() => { if (initialProducts.length && initialCategories.length && initialStores.length) return; const controller = new AbortController(); Promise.all([resilientFetch('/api/public/products', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/categories', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : []), resilientFetch('/api/public/stores', { signal: controller.signal, timeoutMs: 5000, retries: 1 }).then((r) => r.ok ? r.json() : [])]).then(([productRows, categoryRows, storeRows]) => { const nextStores = storeRows as Store[]; const apiProducts = (productRows as Record<string, unknown>[]).map(mapProduct).filter((p) => p.price > 0); const apiCategories = categoryRows as StorefrontCategory[]; const bySlug = new Map(apiCategories.map((c) => [c.slug, c])); setProducts(apiProducts.length ? apiProducts : openingProducts); setCategories(openingCategories.map((opening) => ({ ...opening, ...bySlug.get(opening.slug), id: opening.id })).concat(apiCategories.filter((c) => !openingCategories.some((opening) => opening.slug === c.slug)))); setStores(nextStores); setSelectedStoreState((current) => current?.id && nextStores.find((s) => s.id === current.id) || nextStores[0] || null); }).catch(() => { if (!controller.signal.aborted) { setProducts(openingProducts); setCategories(openingCategories); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [initialCategories.length, initialProducts.length, initialStores.length]);
-  const selected = (store: Store) => { setSelectedStoreState(store); localStorage.setItem('novamart-store', store.id); };
-  const add = (product: Product) => { setItems((current) => { const found = current.find((item) => item.product.id === product.id); return found ? current.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item) : [...current, { product, qty: 1 }]; }); setDrawer(true); };
-  const change = (id: string, delta: number) => setItems((current) => current.map((item) => item.product.id === id ? { ...item, qty: item.qty + delta } : item).filter((item) => item.qty > 0));
-  return <Ctx.Provider value={{ items, products, categories, stores, selectedStore, setSelectedStore: selected, add, change, drawer, setDrawer, loading }}>{children}<CartDrawer /></Ctx.Provider>;
+function productFromServerCartItem(
+  item: ServerCart['items'][number],
+  known?: Product,
+): Product {
+  if (known) return known;
+  return {
+    id: item.productId,
+    slug: slugify(item.product.name),
+    sku: item.product.skuCode,
+    name: item.product.name,
+    brand: '',
+    category: 'Everyday essentials',
+    description: '',
+    image: item.product.imageUrl || '/placeholder-product.svg',
+    price: Number(item.price?.sellingPrice ?? 0),
+    originalPrice:
+      item.price && Number(item.price.mrp) > Number(item.price.sellingPrice)
+        ? Number(item.price.mrp)
+        : undefined,
+    rating: 0,
+    reviews: 0,
+    availability: String(item.availability?.state || 'AVAILABLE').replaceAll(
+      '_',
+      ' ',
+    ),
+    tags: [],
+    unit: item.unit?.symbol,
+    specifications: {
+      SKU: item.product.skuCode || '—',
+      Pack: item.unit?.symbol || '—',
+      Department: 'Everyday essentials',
+    },
+    defaultUnitId: item.unitId,
+    maxOrderQuantity: item.availability?.maxOrderQuantity,
+    source: 'pasalho',
+  };
 }
-export const useShop = () => { const value = useContext(Ctx); if (!value) throw new Error('shop provider missing'); return value; };
+
+export function CommerceProvider({
+  children,
+  initialProducts = [],
+  initialCategories = [],
+  initialStores = [],
+}: {
+  children: React.ReactNode;
+  initialProducts?: Product[];
+  initialCategories?: StorefrontCategory[];
+  initialStores?: Store[];
+}) {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [categories, setCategories] =
+    useState<StorefrontCategory[]>(initialCategories);
+  const [stores] = useState<Store[]>(initialStores);
+  const [selectedStore, setSelectedStoreState] = useState<Store | null>(
+    initialStores.find((store) => store.source === 'pasalho') || null,
+  );
+  const [delivery, setDelivery] = useState<DeliveryContext | null>(null);
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [serverCartToken, setServerCartToken] = useState('');
+  const [drawer, setDrawer] = useState(false);
+  const [locationDialog, setLocationDialog] = useState(false);
+  const [loading, setLoading] = useState(initialProducts.length === 0);
+  const [cartBusy, setCartBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const syncCart = (cart: ServerCart, productList = products) => {
+    const productMap = new Map(productList.map((product) => [product.id, product]));
+    setItems(
+      cart.items.map((item) => ({
+        cartItemId: item.id,
+        product: productFromServerCartItem(
+          item,
+          productMap.get(item.productId),
+        ),
+        qty: Number(item.quantity),
+      })),
+    );
+  };
+
+  const loadCatalog = async (locationId: string) => {
+    setLoading(true);
+    try {
+      const catalog = await fetchPasalhoCatalog(locationId);
+      setProducts(catalog.products);
+      setCategories(catalog.categories);
+      return catalog.products;
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'Could not load this store catalogue.',
+      );
+      return products;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        const savedDelivery = localStorage.getItem(DELIVERY_KEY);
+        const savedCart = localStorage.getItem(CART_KEY);
+        let restoredProducts = products;
+
+        if (savedDelivery) {
+          const context = JSON.parse(savedDelivery) as DeliveryContext;
+          if (!cancelled) {
+            setDelivery(context);
+            setSelectedStoreState({
+              id: context.locationId,
+              name: context.storeName,
+              source: 'pasalho',
+              serviceZoneId: context.serviceZoneId,
+            });
+          }
+          restoredProducts = await loadCatalog(context.locationId);
+        }
+
+        if (savedCart) {
+          const cart = await fetchServerCart(savedCart);
+          if (!cancelled) {
+            setServerCartToken(cart.cartToken);
+            syncCart(cart, restoredProducts);
+          }
+        }
+      } catch {
+        localStorage.removeItem(CART_KEY);
+      } finally {
+        if (!cancelled && initialProducts.length === 0) setLoading(false);
+      }
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+    // Initial browser restoration only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setSelectedStore = (store: Store) => {
+    setSelectedStoreState(store);
+    if (store.source !== 'pasalho') {
+      setDelivery(null);
+      localStorage.removeItem(DELIVERY_KEY);
+    }
+  };
+
+  const applyDelivery = async (context: DeliveryContext) => {
+    const changedStore = selectedStore?.id !== context.locationId;
+    setDelivery(context);
+    setSelectedStoreState({
+      id: context.locationId,
+      name: context.storeName,
+      source: 'pasalho',
+      serviceZoneId: context.serviceZoneId,
+    });
+    localStorage.setItem(DELIVERY_KEY, JSON.stringify(context));
+    setLocationDialog(false);
+    setMessage('');
+    await loadCatalog(context.locationId);
+
+    if (changedStore) {
+      setItems([]);
+      setServerCartToken('');
+      localStorage.removeItem(CART_KEY);
+    }
+  };
+
+  const ensureServerCart = async () => {
+    if (serverCartToken) return serverCartToken;
+    if (!delivery) {
+      setLocationDialog(true);
+      throw new Error('Set your delivery location before adding items.');
+    }
+    const cart = await createServerCart(delivery);
+    setServerCartToken(cart.cartToken);
+    localStorage.setItem(CART_KEY, cart.cartToken);
+    syncCart(cart);
+    return cart.cartToken;
+  };
+
+  const add = async (product: Product, quantity = 1) => {
+    if (!delivery) {
+      setLocationDialog(true);
+      setMessage('Set your delivery location to check stock and add items.');
+      return;
+    }
+    if (product.source && product.source !== 'pasalho') {
+      setMessage(
+        'Choose your delivery location to load live Pasalho store inventory.',
+      );
+      setLocationDialog(true);
+      return;
+    }
+
+    setCartBusy(true);
+    setMessage('');
+    try {
+      const token = await ensureServerCart();
+      const cart = await addServerCartItem(token, product, quantity);
+      syncCart(cart);
+      setDrawer(true);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'Could not update your cart.',
+      );
+    } finally {
+      setCartBusy(false);
+    }
+  };
+
+  const change = async (productId: string, delta: number) => {
+    const current = items.find((item) => item.product.id === productId);
+    if (!current || !serverCartToken || !current.cartItemId || cartBusy) return;
+
+    const nextQuantity = current.qty + delta;
+    setCartBusy(true);
+    setMessage('');
+    try {
+      const cart =
+        nextQuantity <= 0
+          ? await removeServerCartItem(serverCartToken, current.cartItemId)
+          : await updateServerCartItem(
+              serverCartToken,
+              current.cartItemId,
+              nextQuantity,
+            );
+      syncCart(cart);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'Could not update your cart.',
+      );
+    } finally {
+      setCartBusy(false);
+    }
+  };
+
+  return (
+    <Ctx.Provider
+      value={{
+        items,
+        products,
+        categories,
+        stores,
+        selectedStore,
+        delivery,
+        setSelectedStore,
+        requestLocation: () => setLocationDialog(true),
+        add,
+        change,
+        drawer,
+        setDrawer,
+        loading,
+        cartBusy,
+        message,
+      }}
+    >
+      {children}
+      <CartDrawer />
+      <LocationDialog
+        open={locationDialog}
+        onClose={() => setLocationDialog(false)}
+        onResolved={applyDelivery}
+      />
+    </Ctx.Provider>
+  );
+}
+
+export const useShop = () => {
+  const value = useContext(Ctx);
+  if (!value) throw new Error('shop provider missing');
+  return value;
+};
 
 export function SearchBox() {
-  const { products } = useShop();
+  const { products, selectedStore } = useShop();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [remote, setRemote] = useState<Product[] | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const result = useMemo(() => products.filter((p) => `${p.name} ${p.brand} ${p.category}`.toLowerCase().includes(query.toLowerCase())).slice(0, 6), [products, query]);
+
+  const local = useMemo(
+    () =>
+      products
+        .filter((product) =>
+          `${product.name} ${product.brand} ${product.category}`
+            .toLowerCase()
+            .includes(query.toLowerCase()),
+        )
+        .slice(0, 8),
+    [products, query],
+  );
+
+  useEffect(() => {
+    if (
+      query.trim().length < 2 ||
+      !selectedStore ||
+      selectedStore.source !== 'pasalho'
+    ) {
+      setRemote(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      searchPasalhoCatalog(selectedStore.id, query.trim())
+        .then((results) => {
+          if (!controller.signal.aborted) setRemote(results);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setRemote(null);
+        });
+    }, 220);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [query, selectedStore]);
+
   useEffect(() => {
     const dismiss = (event: PointerEvent) => {
       if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
@@ -36,24 +400,226 @@ export function SearchBox() {
     document.addEventListener('pointerdown', dismiss);
     return () => document.removeEventListener('pointerdown', dismiss);
   }, []);
-  return <div className="search-wrap" ref={wrapperRef} onKeyDown={(event) => { if (event.key === 'Escape') { setOpen(false); (event.currentTarget.querySelector('input') as HTMLInputElement | null)?.focus(); } }}><label className="search-box"><Search size={21} /><input value={query} onChange={(e) => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} placeholder="Search products, brands and categories" aria-label="Search products" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls="product-search-results" /><kbd>⌘ K</kbd></label>{open && <div className="search-panel" role="listbox" id="product-search-results" aria-label="Product search results">{result.length ? result.map((p) => <Link href={`/product/${p.slug}`} className="search-result" key={p.id} onClick={() => setOpen(false)} role="option" aria-selected="false"><Image src={p.image} alt="" width={56} height={56} /><span><b>{p.name}</b><small>{p.category}</small></span><strong>{formatPrice(p.price)}</strong></Link>) : <p className="p-4 text-sm text-slate-500">No matching products.</p>}</div>}</div>;
+
+  const result = remote ?? local;
+
+  return (
+    <div
+      className="search-wrap pasalho-search-wrap"
+      ref={wrapperRef}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          setOpen(false);
+          (
+            event.currentTarget.querySelector('input') as HTMLInputElement | null
+          )?.focus();
+        }
+      }}
+    >
+      <label className="search-box pasalho-search">
+        <Search size={20} />
+        <input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search for rice, milk, shampoo..."
+          aria-label="Search Pasalho products"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls="product-search-results"
+        />
+      </label>
+      {open && query && (
+        <div
+          className="search-panel"
+          role="listbox"
+          id="product-search-results"
+          aria-label="Product search results"
+        >
+          {result.length ? (
+            result.map((product) => (
+              <Link
+                href={`/product/${product.slug}`}
+                className="search-result"
+                key={product.id}
+                onClick={() => setOpen(false)}
+                role="option"
+                aria-selected="false"
+              >
+                <Image
+                  src={product.image}
+                  alt=""
+                  width={56}
+                  height={56}
+                />
+                <span>
+                  <b>{product.name}</b>
+                  <small>{product.unit || product.category}</small>
+                </span>
+                <strong>{formatPrice(product.price)}</strong>
+              </Link>
+            ))
+          ) : (
+            <p className="p-4 text-sm text-slate-500">
+              No matching products in this store.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
-export function MegaMenu({ open, onClose }: { open: boolean; onClose: () => void }) { const { categories } = useShop(); const [active, setActive] = useState<StorefrontCategory | null>(null); const current = active || categories[0]; if (!open) return null; return <div className="mega" role="dialog" aria-label="Shop categories"><div className="mega-depts">{categories.slice(0, 8).map((category) => <button className={current?.id === category.id ? 'active' : ''} onMouseEnter={() => setActive(category)} onFocus={() => setActive(category)} key={category.id}>{category.name}<span>›</span></button>)}</div><div><p className="eyebrow">Explore {current?.name}</p><div className="mega-links"><Link onClick={onClose} href={current ? `/category/${current.slug || slugify(current.name)}` : '/shop'}>Shop all</Link><Link onClick={onClose} href="/offers">Offers</Link></div></div></div>; }
+export function MegaMenu({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { categories } = useShop();
+  if (!open) return null;
+  return (
+    <div className="mega pasalho-mega" role="dialog" aria-label="Shop categories">
+      {categories.slice(0, 12).map((category) => (
+        <Link
+          onClick={onClose}
+          href={`/category/${category.slug || slugify(category.name)}`}
+          key={category.id}
+        >
+          {category.name}
+        </Link>
+      ))}
+    </div>
+  );
+}
 
-export function ProductCard({ product, compact = false }: { product: Product; compact?: boolean }) { const { add } = useShop(); const save = product.originalPrice ? Math.round((1 - product.price / product.originalPrice) * 100) : 0; return <article className={`product-card ${compact ? 'compact' : ''}`}><div className="product-image"><Link href={`/product/${product.slug}`}><Image src={product.image} fill sizes="(max-width: 600px) 70vw, 260px" alt={product.name} /></Link>{save ? <span className="deal-badge">Save {save}%</span> : null}<button className="wish" aria-label={`Wishlist ${product.name}`}><Heart size={19} /></button></div><div className="product-copy"><span className="brand">{product.brand}</span><Link href={`/product/${product.slug}`}><h3>{product.name}</h3></Link><div className="rating"><Star size={14} fill="currentColor" /> {product.rating || '—'} <span>({product.reviews})</span></div><div className="price-row"><strong>{formatPrice(product.price)}</strong>{product.originalPrice ? <del>{formatPrice(product.originalPrice)}</del> : null}</div><p className="stock">● {product.availability}</p><button className="add-btn" onClick={() => add(product)} disabled={product.availability.toLowerCase().includes('out of')}><Plus size={18} /> Add to cart</button></div></article>; }
-export function Quantity({ id, qty }: { id: string; qty: number }) { const { change } = useShop(); return <div className="quantity"><button onClick={() => change(id, -1)} aria-label="Decrease quantity"><Minus size={16} /></button><span>{qty}</span><button onClick={() => change(id, 1)} aria-label="Increase quantity"><Plus size={16} /></button></div>; }
-export function CartButton() { const { items, setDrawer } = useShop(); const count = items.reduce((n, item) => n + item.qty, 0); return <button className="nav-action" onClick={() => setDrawer(true)} aria-label={`Cart with ${count} items`}><ShoppingCart /><span>Cart</span>{count ? <i>{count}</i> : null}</button>; }
+export function ProductCard({
+  product,
+  compact = false,
+}: {
+  product: Product;
+  compact?: boolean;
+}) {
+  const { add, items, cartBusy, requestLocation, delivery } = useShop();
+  const cartItem = items.find((item) => item.product.id === product.id);
+  const save = product.originalPrice
+    ? Math.round((1 - product.price / product.originalPrice) * 100)
+    : 0;
+  const unavailable = product.availability.toLowerCase().includes('out of');
+
+  return (
+    <article className={`product-card quick-product-card ${compact ? 'compact' : ''}`}>
+      <div className="product-image">
+        <Link href={`/product/${product.slug}`}>
+          <Image
+            src={product.image}
+            fill
+            sizes="(max-width: 600px) 44vw, 190px"
+            alt={product.name}
+          />
+        </Link>
+        {save > 0 ? <span className="deal-badge">{save}% OFF</span> : null}
+      </div>
+      <div className="product-copy">
+        <span className="product-pack">{product.unit || 'Pack'}</span>
+        <Link href={`/product/${product.slug}`}>
+          <h3>{product.name}</h3>
+        </Link>
+        {product.brand ? <span className="brand">{product.brand}</span> : null}
+        <div className="quick-price-row">
+          <div>
+            <strong>{formatPrice(product.price)}</strong>
+            {product.originalPrice ? (
+              <del>{formatPrice(product.originalPrice)}</del>
+            ) : null}
+          </div>
+          {cartItem ? (
+            <Quantity id={product.id} qty={cartItem.qty} />
+          ) : (
+            <button
+              className="quick-add"
+              disabled={unavailable || cartBusy}
+              onClick={() => {
+                if (!delivery) {
+                  requestLocation();
+                  return;
+                }
+                void add(product);
+              }}
+            >
+              {unavailable ? 'OUT' : 'ADD'}
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function Quantity({ id, qty }: { id: string; qty: number }) {
+  const { change, cartBusy } = useShop();
+  return (
+    <div className="quantity quick-quantity">
+      <button
+        onClick={() => void change(id, -1)}
+        aria-label="Decrease quantity"
+        disabled={cartBusy}
+      >
+        <Minus size={15} />
+      </button>
+      <span>{qty}</span>
+      <button
+        onClick={() => void change(id, 1)}
+        aria-label="Increase quantity"
+        disabled={cartBusy}
+      >
+        <Plus size={15} />
+      </button>
+    </div>
+  );
+}
+
+export function CartButton() {
+  const { items, setDrawer } = useShop();
+  const count = items.reduce((total, item) => total + item.qty, 0);
+  return (
+    <button
+      className="pasalho-cart-button"
+      onClick={() => setDrawer(true)}
+      aria-label={`Cart with ${count} items`}
+    >
+      <ShoppingCart />
+      <span>
+        {count ? `${count} item${count === 1 ? '' : 's'}` : 'My cart'}
+      </span>
+    </button>
+  );
+}
+
 function CartDrawer() {
-  const { items, drawer, setDrawer } = useShop();
-  const subtotal = items.reduce((n, item) => n + item.product.price * item.qty, 0);
+  const { items, drawer, setDrawer, delivery, cartBusy, message } = useShop();
+  const subtotal = items.reduce(
+    (total, item) => total + item.product.price * item.qty,
+    0,
+  );
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!drawer) return;
     const previousFocus = document.activeElement as HTMLElement | null;
-    const background = [document.querySelector('header.site-header'), document.querySelector('main'), document.querySelector('footer')].filter((element): element is HTMLElement => element instanceof HTMLElement);
+    const background = [
+      document.querySelector('header.site-header'),
+      document.querySelector('main'),
+      document.querySelector('footer'),
+    ].filter(
+      (element): element is HTMLElement => element instanceof HTMLElement,
+    );
     background.forEach((element) => element.setAttribute('inert', ''));
     const priorOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -63,19 +629,6 @@ function CartDrawer() {
       if (event.key === 'Escape') {
         event.preventDefault();
         setDrawer(false);
-        return;
-      }
-      if (event.key !== 'Tab' || !dialogRef.current) return;
-      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'));
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -88,7 +641,257 @@ function CartDrawer() {
   }, [drawer, setDrawer]);
 
   if (!drawer) return null;
-  return <><button className="drawer-backdrop" onClick={() => setDrawer(false)} aria-label="Close cart" /><aside className="cart-drawer open" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title" ref={dialogRef}><header><div><p className="eyebrow">Your basket</p><h2 id="cart-drawer-title">Cart ({items.length})</h2></div><button onClick={() => setDrawer(false)} aria-label="Close" ref={closeRef}><X /></button></header>{items.length ? <><div className="drawer-items">{items.map((item) => <div className="drawer-item" key={item.product.id}><Image src={item.product.image} width={80} height={80} alt="" /><div><b>{item.product.name}</b><strong>{formatPrice(item.product.price)}</strong><Quantity id={item.product.id} qty={item.qty} /></div></div>)}</div><div className="drawer-summary"><p><span>Subtotal</span><strong>{formatPrice(subtotal)}</strong></p><Link href="/whatsapp-order" onClick={() => setDrawer(false)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white"><MessageCircle size={19} /> Order on WhatsApp</Link><Link href="/cart" onClick={() => setDrawer(false)} className="mt-3 block text-center text-sm font-bold text-emerald-800">View and edit cart</Link></div></> : <div className="empty-cart"><ShoppingCart size={48} /><h3>Your cart is ready for good things</h3><button className="primary-btn" onClick={() => setDrawer(false)}>Start shopping</button></div>}</aside></>;
+
+  return (
+    <>
+      <button
+        className="drawer-backdrop"
+        onClick={() => setDrawer(false)}
+        aria-label="Close cart"
+      />
+      <aside
+        className="cart-drawer open"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cart-drawer-title"
+        ref={dialogRef}
+      >
+        <header>
+          <div>
+            <p className="eyebrow">PASALHO BASKET</p>
+            <h2 id="cart-drawer-title">
+              {items.length ? 'Ready when you are' : 'Your basket is empty'}
+            </h2>
+            {delivery ? (
+              <small>
+                From {delivery.storeName} · {delivery.etaMinMinutes}–
+                {delivery.etaMaxMinutes} min estimate
+              </small>
+            ) : null}
+          </div>
+          <button
+            onClick={() => setDrawer(false)}
+            aria-label="Close"
+            ref={closeRef}
+          >
+            <X />
+          </button>
+        </header>
+
+        {message ? <p className="cart-message">{message}</p> : null}
+
+        {items.length ? (
+          <>
+            <div className="drawer-items">
+              {items.map((item) => (
+                <div className="drawer-item" key={item.product.id}>
+                  <Image
+                    src={item.product.image}
+                    width={72}
+                    height={72}
+                    alt=""
+                  />
+                  <div>
+                    <b>{item.product.name}</b>
+                    <small>{item.product.unit}</small>
+                    <strong>{formatPrice(item.product.price)}</strong>
+                    <Quantity id={item.product.id} qty={item.qty} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="drawer-summary">
+              <p>
+                <span>Item subtotal</span>
+                <strong>{formatPrice(subtotal)}</strong>
+              </p>
+              <Link
+                href="/checkout"
+                onClick={() => setDrawer(false)}
+                className="primary-btn"
+                aria-disabled={cartBusy}
+              >
+                Go to checkout
+              </Link>
+              <Link
+                href="/cart"
+                onClick={() => setDrawer(false)}
+                className="cart-secondary-link"
+              >
+                View basket
+              </Link>
+            </div>
+          </>
+        ) : (
+          <div className="empty-cart">
+            <ShoppingCart size={44} />
+            <h3>Add your everyday essentials</h3>
+            <button
+              className="primary-btn"
+              onClick={() => setDrawer(false)}
+            >
+              Browse products
+            </button>
+          </div>
+        )}
+      </aside>
+    </>
+  );
 }
-export function MobileNav() { const { items, setDrawer } = useShop(); return <nav className="mobile-nav"><Link href="/">⌂<span>Home</span></Link><Link href="/shop"><Menu /><span>Categories</span></Link><button onClick={() => document.querySelector<HTMLInputElement>('.search-box input')?.focus()}><Search /><span>Search</span></button><Link href="/account"><Heart /><span>Wishlist</span></Link><button onClick={() => setDrawer(true)}><ShoppingCart /><span>Cart {items.length ? `(${items.length})` : ''}</span></button></nav>; }
-export function LocationPicker() { const { stores, selectedStore, setSelectedStore } = useShop(); return <label className="location-picker"><MapPin /><span><small>Showing availability near</small><select value={selectedStore?.id || ''} onChange={(e) => { const store = stores.find((s) => s.id === e.target.value); if (store) setSelectedStore(store); }} aria-label="Choose store"><option value="">Select a store</option>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></span><ChevronDown /></label>; }
+
+function LocationDialog({
+  open,
+  onClose,
+  onResolved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onResolved: (context: DeliveryContext) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  if (!open) return null;
+
+  const locate = () => {
+    if (!navigator.geolocation) {
+      setError('Location access is not available in this browser.');
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolveDeliveryLocation(
+          position.coords.latitude,
+          position.coords.longitude,
+        )
+          .then(onResolved)
+          .catch((value) =>
+            setError(
+              value instanceof Error
+                ? value.message
+                : 'Could not check delivery availability.',
+            ),
+          )
+          .finally(() => setBusy(false));
+      },
+      () => {
+        setBusy(false);
+        setError(
+          'Location permission was not granted. You can still browse, but live store stock needs a delivery location.',
+        );
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
+    );
+  };
+
+  return (
+    <>
+      <button
+        className="drawer-backdrop"
+        onClick={onClose}
+        aria-label="Close location selector"
+      />
+      <section
+        className="location-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="location-dialog-title"
+      >
+        <button
+          className="location-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          <X />
+        </button>
+        <div className="location-icon">
+          <MapPin />
+        </div>
+        <p className="eyebrow">DELIVERY LOCATION</p>
+        <h2 id="location-dialog-title">What should Pasalho show you?</h2>
+        <p>
+          Your location chooses the right Pasalho store, live stock, prices,
+          delivery fee and realistic ETA.
+        </p>
+        <button className="location-primary" onClick={locate} disabled={busy}>
+          {busy ? (
+            <LoaderCircle className="spin" />
+          ) : (
+            <LocateFixed />
+          )}
+          {busy ? 'Checking your area…' : 'Use my current location'}
+        </button>
+        {error ? <p className="location-error" role="alert">{error}</p> : null}
+        <small>
+          Pasalho uses the coordinates only to resolve serviceability and your
+          fulfillment store.
+        </small>
+      </section>
+    </>
+  );
+}
+
+export function MobileNav() {
+  const { items, setDrawer } = useShop();
+  const count = items.reduce((total, item) => total + item.qty, 0);
+  return (
+    <nav className="mobile-nav">
+      <Link href="/">
+        <span className="mobile-symbol">⌂</span>
+        <span>Home</span>
+      </Link>
+      <Link href="/shop">
+        <Menu />
+        <span>Categories</span>
+      </Link>
+      <button
+        onClick={() =>
+          document.querySelector<HTMLInputElement>('.search-box input')?.focus()
+        }
+      >
+        <Search />
+        <span>Search</span>
+      </button>
+      <Link href="/account/orders">
+        <span className="mobile-symbol">↻</span>
+        <span>Orders</span>
+      </Link>
+      <button onClick={() => setDrawer(true)}>
+        <ShoppingCart />
+        <span>{count ? `Cart · ${count}` : 'Cart'}</span>
+      </button>
+    </nav>
+  );
+}
+
+export function LocationPicker({
+  prominent = false,
+}: {
+  prominent?: boolean;
+}) {
+  const { selectedStore, delivery, requestLocation } = useShop();
+
+  return (
+    <button
+      className={`location-picker pasalho-location-picker ${prominent ? 'prominent' : ''}`}
+      onClick={requestLocation}
+    >
+      <MapPin />
+      <span>
+        <small>
+          {delivery ? 'Delivery from' : 'Set delivery location'}
+        </small>
+        <b>{selectedStore?.name || 'Choose your area'}</b>
+        {delivery ? (
+          <em>
+            {delivery.etaMinMinutes}–{delivery.etaMaxMinutes} min estimate
+          </em>
+        ) : null}
+      </span>
+      <ChevronDown />
+    </button>
+  );
+}

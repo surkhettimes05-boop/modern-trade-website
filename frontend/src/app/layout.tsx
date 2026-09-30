@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import "./pasalho.css";
 import { CommerceProvider } from "@/components/CommerceClient";
 import JsonLd from "@/components/JsonLd";
 import { getCatalog } from "@/lib/serverCatalog";
@@ -17,14 +18,14 @@ const inter = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "NOVA MART — Everyday value for every home",
-    template: "%s | NOVA MART",
+    default: "Pasalho — Groceries and everyday essentials",
+    template: "%s | Pasalho",
   },
   description: SITE.description,
   metadataBase: new URL(SITE.url),
   alternates: { canonical: absoluteUrl("/") },
   openGraph: {
-    title: "NOVA MART — Everyday value for every home",
+    title: "Pasalho — Groceries and everyday essentials",
     description: SITE.description,
     url: absoluteUrl("/"),
     siteName: SITE.name,

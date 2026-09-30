@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireServerApiUrl, upstreamTimeoutMs } from "@/lib/serverApiUrl";
+import {
+  requirePasalhoApiUrl,
+  requireServerApiUrl,
+  upstreamTimeoutMs,
+} from "@/lib/serverApiUrl";
 import {
   ProxyPayloadTooLargeError,
   readBoundedProxyBody,
@@ -14,25 +18,52 @@ function unavailableResponse(path: string, method: string) {
     return NextResponse.json([]);
   }
 
-  if (/^(auth|customer|ledger|consent)(\/|$)/.test(path)) {
-    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  if (/^(commerce|auth|customer|ledger|consent)(\/|$)/.test(path)) {
+    return NextResponse.json(
+      { error: "Customer commerce is temporarily unavailable" },
+      { status: path.startsWith("commerce") ? 503 : 401 },
+    );
   }
 
-  return NextResponse.json({ error: "Backend service is temporarily unavailable" }, { status: 503 });
+  return NextResponse.json(
+    { error: "Backend service is temporarily unavailable" },
+    { status: 503 },
+  );
 }
 
-async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+async function proxy(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> },
+) {
   const { path: pathParts } = await context.params;
   const path = pathParts.map(encodeURIComponent).join("/");
+  const isCommerce = path === "commerce" || path.startsWith("commerce/");
+
   let target: URL;
   try {
-    target = new URL(`/api/${path}`, requireServerApiUrl());
+    target = isCommerce
+      ? new URL(`/api/v1/${path}`, requirePasalhoApiUrl())
+      : new URL(`/api/${path}`, requireServerApiUrl());
     target.search = request.nextUrl.search;
   } catch {
-    return NextResponse.json({ error: "Backend service is not configured" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: isCommerce
+          ? "Pasalho commerce backend is not configured"
+          : "Backend service is not configured",
+      },
+      { status: 500 },
+    );
   }
 
   const requestHeaders = proxyRequestHeaders(request.headers);
+  if (isCommerce) {
+    requestHeaders.delete("cookie");
+    const accessToken = request.cookies.get("pasalho_customer_access")?.value;
+    if (accessToken) {
+      requestHeaders.set("authorization", `Bearer ${accessToken}`);
+    }
+  }
 
   let requestBody: ArrayBuffer | undefined;
   try {
@@ -41,7 +72,10 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     if (error instanceof ProxyPayloadTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
     }
-    return NextResponse.json({ error: "Request body could not be read" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Request body could not be read" },
+      { status: 400 },
+    );
   }
 
   try {
@@ -60,7 +94,10 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const contentType = upstream.headers.get("content-type") || "";
     if (!contentType.toLowerCase().includes("application/json")) {
       return NextResponse.json(
-        { error: "Backend returned a non-JSON response; check the Vercel API_URL configuration" },
+        {
+          error:
+            "Backend returned a non-JSON response; check the API configuration",
+        },
         { status: 502 },
       );
     }
@@ -72,8 +109,10 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       headers: responseHeaders,
     });
 
-    for (const cookie of upstream.headers.getSetCookie()) {
-      response.headers.append("set-cookie", cookie);
+    if (!isCommerce) {
+      for (const cookie of upstream.headers.getSetCookie()) {
+        response.headers.append("set-cookie", cookie);
+      }
     }
 
     return response;

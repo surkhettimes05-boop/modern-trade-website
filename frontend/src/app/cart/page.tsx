@@ -1,3 +1,105 @@
 'use client';
-import Link from 'next/link'; import { ArrowRight, Lock, MessageCircle, ShoppingCart } from 'lucide-react'; import { Quantity, useShop } from '@/components/CommerceClient'; import { formatPrice } from '@/lib/catalog';
-export default function CartPage() { const { items } = useShop(); const subtotal = items.reduce((total, item) => total + item.product.price * item.qty, 0); return <div className="shell page cart-page"><nav className="breadcrumbs"><Link href="/">Home</Link><span>›</span>Cart</nav><h1>Your cart</h1>{items.length ? <div className="cart-layout"><div><div className="delivery-note">{subtotal >= 999 ? 'You’re eligible for' : `${formatPrice(999 - subtotal)} away from`} <b>free delivery</b></div>{items.map((item) => <article className="cart-line" key={item.product.id}><div><span>{item.product.brand}</span><h2>{item.product.name}</h2><p>● {item.product.availability}</p><Quantity id={item.product.id} qty={item.qty} /></div><strong>{formatPrice(item.product.price * item.qty)}</strong></article>)}</div><aside className="order-summary"><h2>Order summary</h2><p><span>Subtotal</span><b>{formatPrice(subtotal)}</b></p><p><span>Delivery</span><b>Confirmed by admin</b></p><div className="total"><span>Current subtotal</span><strong>{formatPrice(subtotal)}</strong></div><Link className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white" href="/whatsapp-order"><MessageCircle /> Order request on WhatsApp <ArrowRight /></Link><Link className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-800 px-5 py-3 font-bold text-emerald-800" href="/checkout"><Lock size={18} /> Continue with COD checkout</Link><small>WhatsApp requests require admin confirmation. No stock is reserved when WhatsApp opens.</small></aside></div> : <div className="empty-page"><ShoppingCart /><h2>Your cart is empty</h2><p>Fill it with everyday favourites and fresh finds.</p><Link className="primary-btn" href="/shop">Start shopping</Link></div>}</div>; }
+
+import Link from 'next/link';
+import { ArrowRight, MapPin, ShoppingCart } from 'lucide-react';
+import {
+  LocationPicker,
+  Quantity,
+  useShop,
+} from '@/components/CommerceClient';
+import { formatPrice } from '@/lib/catalog';
+
+export default function CartPage() {
+  const { items, delivery, message } = useShop();
+  const subtotal = items.reduce(
+    (total, item) => total + item.product.price * item.qty,
+    0,
+  );
+
+  return (
+    <div className="shell page cart-page pasalho-cart-page">
+      <div className="cart-page-head">
+        <div>
+          <p className="eyebrow">YOUR PASALHO BASKET</p>
+          <h1>Review your items</h1>
+        </div>
+        <LocationPicker />
+      </div>
+
+      {message ? <p className="commerce-message">{message}</p> : null}
+
+      {items.length ? (
+        <div className="cart-layout">
+          <div className="pasalho-cart-lines">
+            {delivery ? (
+              <div className="delivery-note">
+                <MapPin />
+                <span>
+                  <b>{delivery.storeName}</b>
+                  <small>
+                    Estimated {delivery.etaMinMinutes}–
+                    {delivery.etaMaxMinutes} minutes
+                  </small>
+                </span>
+              </div>
+            ) : null}
+
+            {items.map((item) => (
+              <article className="cart-line" key={item.product.id}>
+                <div className="cart-line-copy">
+                  <span>{item.product.unit}</span>
+                  <h2>{item.product.name}</h2>
+                  <p>{item.product.brand}</p>
+                  <Quantity id={item.product.id} qty={item.qty} />
+                </div>
+                <strong>
+                  {formatPrice(item.product.price * item.qty)}
+                </strong>
+              </article>
+            ))}
+          </div>
+
+          <aside className="order-summary">
+            <h2>Bill details</h2>
+            <p>
+              <span>Item subtotal</span>
+              <b>{formatPrice(subtotal)}</b>
+            </p>
+            <p>
+              <span>Delivery fee</span>
+              <b>
+                {delivery
+                  ? delivery.deliveryFee === 0
+                    ? 'FREE'
+                    : formatPrice(delivery.deliveryFee)
+                  : 'At checkout'}
+              </b>
+            </p>
+            <div className="total">
+              <span>Current total</span>
+              <strong>
+                {formatPrice(subtotal + (delivery?.deliveryFee || 0))}
+              </strong>
+            </div>
+            <Link className="primary-btn" href="/checkout">
+              Continue to checkout <ArrowRight />
+            </Link>
+            <small>
+              Final stock, store, pricing and delivery fee are checked again by
+              Pasalho before the order is placed.
+            </small>
+          </aside>
+        </div>
+      ) : (
+        <div className="empty-page">
+          <ShoppingCart />
+          <h2>Your basket is empty</h2>
+          <p>Add everyday essentials from your Pasalho store.</p>
+          <Link className="primary-btn" href="/shop">
+            Start shopping
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
