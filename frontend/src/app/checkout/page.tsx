@@ -36,46 +36,52 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([getCustomer(), listCustomerAddresses()])
-      .then(([me, saved]) => {
-        if (!active) return;
-        setCustomer(me);
-        setAddresses(saved);
-        const preferred = saved.find((address) => address.isDefault) || saved[0];
-        if (preferred) setAddressId(preferred.id);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (active) setChecking(false);
-      });
+    const timer = window.setTimeout(() => {
+      Promise.all([getCustomer(), listCustomerAddresses()])
+        .then(([me, saved]) => {
+          if (!active) return;
+          setCustomer(me);
+          setAddresses(saved);
+          const preferred = saved.find((address) => address.isDefault) || saved[0];
+          if (preferred) setAddressId(preferred.id);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (active) setChecking(false);
+        });
+    }, 0);
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
   }, []);
 
   useEffect(() => {
-    if (!cartToken || !addressId || !customer) {
-      setPreview(null);
-      return;
-    }
     let active = true;
-    setError('');
-    previewCheckout(cartToken, addressId)
-      .then((value) => {
-        if (active) setPreview(value);
-      })
-      .catch((reason) => {
-        if (active) {
-          setPreview(null);
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : 'Could not validate checkout.',
-          );
-        }
-      });
+    const timer = window.setTimeout(() => {
+      if (!cartToken || !addressId || !customer) {
+        if (active) setPreview(null);
+        return;
+      }
+      if (active) setError('');
+      previewCheckout(cartToken, addressId)
+        .then((value) => {
+          if (active) setPreview(value);
+        })
+        .catch((reason) => {
+          if (active) {
+            setPreview(null);
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : 'Could not validate checkout.',
+            );
+          }
+        });
+    }, 0);
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
   }, [addressId, cartToken, customer]);
 
