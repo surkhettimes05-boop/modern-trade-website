@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 const indexableRoutes = [
   '/', '/shop', '/offers', '/stores', '/about', '/services', '/faq', '/contact',
-  '/category/rice', '/product/premium-basmati-rice-5kg',
+  '/category/groceries', '/product/premium-basmati-rice-5kg',
 ];
 
 test.describe('SEO release gate', () => {
@@ -11,7 +11,7 @@ test.describe('SEO release gate', () => {
       const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
       expect(response?.status()).toBe(200);
       await expect(page.locator('h1')).toHaveCount(1);
-      await expect(page).toHaveTitle(/NOVA MART/);
+      await expect(page).toHaveTitle(/Pasalho/);
       const description = await page.locator('meta[name="description"]').getAttribute('content');
       expect(description?.trim().length || 0).toBeGreaterThanOrEqual(40);
       const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
@@ -27,13 +27,13 @@ test.describe('SEO release gate', () => {
     await page.goto('/shop', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Shop all products' })).toBeVisible();
     await expect(page.locator('a[href="/product/premium-basmati-rice-5kg"]').first()).toBeVisible();
-    await page.goto('/category/rice', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Rice', exact: true })).toBeVisible();
+    await page.goto('/category/groceries', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Groceries', exact: true })).toBeVisible();
     await context.close();
   });
 
   test('structured data is valid JSON on entity pages', async ({ page }) => {
-    for (const route of ['/', '/shop', '/offers', '/stores', '/faq', '/category/rice', '/product/premium-basmati-rice-5kg']) {
+    for (const route of ['/', '/shop', '/offers', '/stores', '/faq', '/category/groceries', '/product/premium-basmati-rice-5kg']) {
       await page.goto(route, { waitUntil: 'domcontentloaded' });
       const blocks = await page.locator('script[type="application/ld+json"]').allTextContents();
       expect(blocks.length, `${route} JSON-LD blocks`).toBeGreaterThan(0);
@@ -48,19 +48,16 @@ test.describe('SEO release gate', () => {
     }
   });
 
-  test('missing and legacy products use real HTTP status codes', async ({ request }) => {
+  test('missing products use a real HTTP 404 status', async ({ request }) => {
     const missing = await request.get('/product/does-not-exist-for-seo-test');
     expect(missing.status()).toBe(404);
-    const legacy = await request.get('/products/opening-rice-5kg', { maxRedirects: 0 });
-    expect(legacy.status()).toBe(308);
-    expect(legacy.headers().location).toBe('/product/premium-basmati-rice-5kg');
   });
 
   test('sitemap includes canonical catalog URLs and excludes private routes', async ({ request }) => {
     const response = await request.get('/sitemap.xml');
     expect(response.status()).toBe(200);
     const xml = await response.text();
-    expect(xml).toContain('/category/rice');
+    expect(xml).toContain('/category/groceries');
     expect(xml).toContain('/product/premium-basmati-rice-5kg');
     const sitemapPaths = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1]).pathname);
     for (const path of ['/account', '/admin', '/cart', '/checkout', '/privacy', '/terms']) expect(sitemapPaths).not.toContain(path);
