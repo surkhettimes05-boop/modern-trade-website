@@ -2,7 +2,7 @@ name: Build and publish StoreSync
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/fix-ghcr-publish]
   pull_request:
     branches: [main]
 
