@@ -8,7 +8,7 @@ RUN npm ci
 COPY backend/ ./
 COPY database/ /app/database/
 RUN npm run build
-RUN mkdir -p dist/database && cp src/database/schema.sql dist/database/schema.sql
+RUN mkdir -p dist/database && cp src/database/*.sql dist/database/
 RUN npm prune --omit=dev
 
 FROM node:22-alpine AS runner
