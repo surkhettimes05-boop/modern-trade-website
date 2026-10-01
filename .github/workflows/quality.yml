@@ -3,7 +3,7 @@ name: Quality gates
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/fix-ghcr-publish]
 
 permissions:
   contents: read
