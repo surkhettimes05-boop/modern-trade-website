@@ -59,6 +59,21 @@ CROSS JOIN stores s
 WHERE p.sku IN ('RICE-5KG', 'OIL-1L', 'WATER-1L', 'NOODLES-FAM', 'LAUNDRY-1KG', 'SHAMPOO-340')
   AND NOT EXISTS (SELECT 1 FROM product_prices pp WHERE pp.product_id = p.id AND pp.store_id = s.id);
 
+-- Customer storefront pricing is organization-level. Store prices above remain
+-- available for legacy staff/operations views, but the public catalog must not
+-- depend on a customer-selected store.
+INSERT INTO product_prices (product_id, store_id, price, original_price, currency_code)
+SELECT p.id, NULL,
+  CASE p.sku WHEN 'RICE-5KG' THEN 799 WHEN 'OIL-1L' THEN 179 WHEN 'WATER-1L' THEN 25 WHEN 'NOODLES-FAM' THEN 120 WHEN 'LAUNDRY-1KG' THEN 245 WHEN 'SHAMPOO-340' THEN 299 END,
+  CASE p.sku WHEN 'RICE-5KG' THEN 999 WHEN 'OIL-1L' THEN 219 WHEN 'WATER-1L' THEN 30 ELSE NULL END,
+  'NPR'
+FROM products p
+WHERE p.sku IN ('RICE-5KG', 'OIL-1L', 'WATER-1L', 'NOODLES-FAM', 'LAUNDRY-1KG', 'SHAMPOO-340')
+  AND NOT EXISTS (
+    SELECT 1 FROM product_prices pp
+    WHERE pp.product_id = p.id AND pp.store_id IS NULL AND pp.active = TRUE
+  );
+
 INSERT INTO suppliers (supplier_code, supplier_name, contact_person, phone, email, city, payment_terms, status, approval_status, created_by)
 VALUES ('SUP-DEMO-NP', 'Nepal Wholesale Supply', 'Demo Supplier', '9841234567', 'supplier@novamart.local', 'Kathmandu', 'NET30', 'ACTIVE', 'APPROVED', 'development-seed')
 ON CONFLICT (supplier_code) DO NOTHING;
