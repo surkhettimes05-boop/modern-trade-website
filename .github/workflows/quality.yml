@@ -1,6 +1,7 @@
 name: Quality gates
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main, codex/fix-ghcr-publish]
@@ -14,7 +15,7 @@ concurrency:
 
 jobs:
   infrastructure:
-    continue-on-error: true
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
