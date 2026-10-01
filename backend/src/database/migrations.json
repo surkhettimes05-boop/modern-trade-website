@@ -130,5 +130,9 @@
   [
     "029_pgcrypto_password_runtime",
     "../database/029_pgcrypto_password_runtime.sql"
+  ],
+  [
+    "034_central_order_loyalty_compatibility",
+    "src/database/034_central_order_loyalty_compatibility.sql"
   ]
 ]
