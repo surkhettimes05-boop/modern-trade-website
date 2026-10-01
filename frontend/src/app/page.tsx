@@ -31,7 +31,7 @@ import { buildMetadata, SITE } from '@/lib/seo';
 import styles from './homepage.module.css';
 
 export const metadata: Metadata = buildMetadata({
-  title: 'Grocery shopping in Nepal',
+  title: 'Pasalho grocery shopping in Nepal',
   description:
     'Discover groceries, everyday essentials, current offers and published Pasalho stores in Nepal. Shop online or learn about the Pasalho app and own brands.',
   path: '/',
