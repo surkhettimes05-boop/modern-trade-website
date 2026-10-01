@@ -65,8 +65,13 @@ const fastify = Fastify({
   connectionTimeout: resilience.httpConnectionTimeoutMs,
   keepAliveTimeout: resilience.httpKeepAliveTimeoutMs,
   return503OnClosing: true,
-  trustProxy: process.env.TRUST_PROXY_HOPS
-    ? Number.parseInt(process.env.TRUST_PROXY_HOPS, 10)
+  // Fastify 5.12+ intentionally rejects hop-count trust proxy configuration
+  // because it can be spoofed when request paths contain a variable number of
+  // intermediaries. Trust only explicit proxy addresses/CIDRs.
+  trustProxy: process.env.TRUST_PROXY_ADDRESSES
+    ? process.env.TRUST_PROXY_ADDRESSES.split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
     : false,
 });
 
