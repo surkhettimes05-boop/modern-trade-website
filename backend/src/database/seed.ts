@@ -9,10 +9,22 @@ const baseSql = await readFile(
   resolve(process.cwd(), "../database/development_seed.sql"),
   "utf8",
 );
-const customerCommerceSql = await readFile(
+const customerSeedCandidates = [
   resolve(process.cwd(), "src/database/development_customer_seed.sql"),
-  "utf8",
-);
+  resolve(process.cwd(), "dist/database/development_customer_seed.sql"),
+];
+let customerCommerceSql: string | undefined;
+for (const candidate of customerSeedCandidates) {
+  try {
+    customerCommerceSql = await readFile(candidate, "utf8");
+    break;
+  } catch {
+    // Try the next source/compiled layout.
+  }
+}
+if (!customerCommerceSql) {
+  throw new Error("development_customer_seed.sql was not found");
+}
 const client = await getPool().connect();
 try {
   await client.query("BEGIN");
