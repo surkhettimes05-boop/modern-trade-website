@@ -134,7 +134,7 @@ export class CheckoutService {
              shipping_country, delivery_type, notes)
            VALUES ('WO-' || TO_CHAR(NOW(), 'YYYYMMDDHH24MISS') || '-' || SUBSTRING($1, 1, 8),
              $2, NULL, $3, $1, 'PENDING_PAYMENT', $4, $5, $6, 0, $7, '${MARKET.currencyCode}',
-             'COD', 'PENDING', $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
+             'COD', 'PENDING', $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
           [
             input.idempotencyKey,
             input.customerId,

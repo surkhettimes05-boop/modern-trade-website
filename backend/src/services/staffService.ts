@@ -1,6 +1,5 @@
 import { query } from "../database/connection.js";
 import { encryptMfaSecret } from "../utils/totp.js";
-import bcrypt from "bcrypt";
 
 interface Staff {
   id: string;
@@ -35,6 +34,14 @@ function safeStaff(row: Record<string, any>): Staff {
   return safe as Staff;
 }
 
+async function hashPassword(password: string): Promise<string> {
+  const result = await query(
+    "SELECT public.crypt($1, public.gen_salt('bf', 12)) AS password_hash",
+    [password],
+  );
+  return result.rows[0].password_hash;
+}
+
 export class StaffService {
   /**
    * Create staff member
@@ -61,7 +68,7 @@ export class StaffService {
     let passwordHash: string | null = null;
 
     if (staffData.password) {
-      passwordHash = await bcrypt.hash(staffData.password, 12);
+      passwordHash = await hashPassword(staffData.password);
     }
 
     const result = await query(
@@ -308,12 +315,10 @@ export class StaffService {
    * Update password
    */
   async updatePassword(staffId: string, newPassword: string): Promise<void> {
-    const passwordHash = await bcrypt.hash(newPassword, 12);
-
     await query(
       `WITH changed_staff AS (
          UPDATE staff
-            SET password_hash = $1, updated_at = NOW()
+            SET password_hash = public.crypt($1, public.gen_salt('bf', 12)), updated_at = NOW()
           WHERE id = $2
           RETURNING id
        )
@@ -321,7 +326,7 @@ export class StaffService {
           SET is_revoked = TRUE, revoked_at = NOW(), revoked_reason = 'password_changed'
         WHERE staff_id IN (SELECT id FROM changed_staff)
           AND is_revoked = FALSE`,
-      [passwordHash, staffId],
+      [newPassword, staffId],
     );
   }
 
@@ -364,15 +369,13 @@ export class StaffService {
    */
   async verifyPassword(staffId: string, password: string): Promise<boolean> {
     const result = await query(
-      "SELECT password_hash FROM staff WHERE id = $1",
-      [staffId],
+      `SELECT password_hash IS NOT NULL
+              AND password_hash = public.crypt($2, password_hash) AS password_valid
+         FROM staff
+        WHERE id = $1`,
+      [staffId, password],
     );
-    const passwordHash = result.rows[0]?.password_hash;
-    if (!passwordHash) {
-      return false;
-    }
-
-    return bcrypt.compare(password, passwordHash);
+    return Boolean(result.rows[0]?.password_valid);
   }
 
   /**

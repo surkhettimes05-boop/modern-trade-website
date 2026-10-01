@@ -106,9 +106,9 @@ export function validateProductionEnvironment(
   if (env.EXPOSE_DEVELOPMENT_OTP === "true") {
     throw new Error("EXPOSE_DEVELOPMENT_OTP cannot be enabled in production");
   }
+  const workerRuntime = env.CLOUDFLARE_WORKER === "true";
   const required = [
     "DATABASE_URL",
-    "REDIS_URL",
     "CORS_ORIGIN",
     "APP_URL",
     "JWT_SECRET",
@@ -122,17 +122,21 @@ export function validateProductionEnvironment(
     "DATABASE_RUNTIME_ROLE",
     "DATABASE_MIGRATION_ROLE",
   ] as const;
-  const missing = required.filter((name) => !env[name]?.trim());
+  const missing = [
+    ...required.filter((name) => !env[name]?.trim()),
+    ...(!workerRuntime && !env.REDIS_URL?.trim() ? ["REDIS_URL"] : []),
+  ];
   if (missing.length)
     throw new Error(
       `Missing required production configuration: ${missing.join(", ")}`,
     );
-  for (const name of [
+  const absoluteUrlNames = [
     "DATABASE_URL",
-    "REDIS_URL",
     "CORS_ORIGIN",
     "APP_URL",
-  ] as const) {
+    ...(!workerRuntime ? (["REDIS_URL"] as const) : []),
+  ] as const;
+  for (const name of absoluteUrlNames) {
     try {
       const value = new URL(env[name]!);
       if (
@@ -205,8 +209,8 @@ export function validateProductionEnvironment(
       "Production cryptographic secrets cannot use placeholder values",
     );
   }
-  const redisUrl = new URL(env.REDIS_URL!);
-  if (redisUrl.protocol !== "rediss:") {
+  const redisUrl = workerRuntime ? null : new URL(env.REDIS_URL!);
+  if (redisUrl && redisUrl.protocol !== "rediss:") {
     const explicitlyPrivate =
       env.REDIS_ALLOW_PLAINTEXT_PRIVATE === "true" &&
       (/^(localhost|127\.0\.0\.1|::1)$/i.test(redisUrl.hostname) ||

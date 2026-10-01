@@ -4,7 +4,7 @@ import { PRODUCTION_ROUTE_SECURITY } from "../productionRouteSecurity.js";
 
 describe("production route security inventory", () => {
   it("classifies every route plugin registered by the production entrypoint", () => {
-    const source = readFileSync(resolve(process.cwd(), "src/index.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "src/app.ts"), "utf8");
     const applicationPlugins = new Set(
       [
         ...source.matchAll(

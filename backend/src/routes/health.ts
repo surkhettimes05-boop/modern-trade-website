@@ -67,7 +67,8 @@ export async function healthRoutes(fastify: FastifyInstance) {
           checks: { database: "ok", migrations: "outdated", redis: "unknown" },
         };
       }
-      const redisOk = await redisService.healthCheck();
+      const workerRuntime = process.env.CLOUDFLARE_WORKER === "true";
+      const redisOk = workerRuntime || (await redisService.healthCheck());
       if (!redisOk) {
         reply.status(503);
         return {
@@ -77,7 +78,11 @@ export async function healthRoutes(fastify: FastifyInstance) {
       }
       return {
         status: "ready",
-        checks: { database: "ok", migrations: "current", redis: "ok" },
+        checks: {
+          database: "ok",
+          migrations: "current",
+          redis: workerRuntime ? "not_required" : "ok",
+        },
       };
     } catch {
       reply.status(503);

@@ -1,4 +1,3 @@
-import bcrypt from "bcrypt";
 import Fastify from "fastify";
 import jwt from "@fastify/jwt";
 import { query } from "../../database/connection.js";
@@ -8,14 +7,13 @@ jest.mock("../../database/connection.js", () => ({ query: jest.fn() }));
 
 describe("operations MFA security", () => {
   it("counts a missing or invalid MFA code toward the account lock", async () => {
-    const passwordHash = await bcrypt.hash("correct-password", 4);
     (query as jest.Mock)
       .mockResolvedValueOnce({
         rows: [
           {
             id: "10000000-0000-4000-8000-000000000001",
             username: "admin",
-            password_hash: passwordHash,
+            password_valid: true,
             status: "ACTIVE",
             failed_login_attempts: 0,
             locked_until: null,

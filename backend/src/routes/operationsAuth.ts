@@ -1,6 +1,5 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import bcrypt from "bcrypt";
 import { query } from "../database/connection.js";
 import crypto from "node:crypto";
 import {
@@ -40,23 +39,31 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
         .parse(request.body);
 
       const result = await query(
-        `SELECT s.id, s.staff_number, s.first_name, s.last_name, s.username, s.password_hash,
-              s.role, s.status, s.store_id, s.permissions, s.failed_login_attempts, s.locked_until,
-              s.role_id, s.capabilities, s.scope_type, s.scope_store_ids, s.scope_organization_id,
-              s.mfa_enabled, s.mfa_secret, r.role_key
-       FROM staff s LEFT JOIN roles r ON r.id = s.role_id
-       WHERE LOWER(s.username) = LOWER($1) LIMIT 1`,
-        [username],
+        `SELECT candidate.*,
+                CASE
+                  WHEN candidate.password_hash IS NULL
+                    THEN public.crypt($2, $3) = $3 AND FALSE
+                  ELSE candidate.password_hash = public.crypt($2, candidate.password_hash)
+                END AS password_valid
+           FROM (VALUES (1)) AS guard(_)
+           LEFT JOIN LATERAL (
+             SELECT s.id, s.staff_number, s.first_name, s.last_name, s.username, s.password_hash,
+                    s.role, s.status, s.store_id, s.permissions, s.failed_login_attempts, s.locked_until,
+                    s.role_id, s.capabilities, s.scope_type, s.scope_store_ids, s.scope_organization_id,
+                    s.mfa_enabled, s.mfa_secret, r.role_key
+               FROM staff s
+               LEFT JOIN roles r ON r.id = s.role_id
+              WHERE LOWER(s.username) = LOWER($1)
+              LIMIT 1
+           ) AS candidate ON TRUE`,
+        [username, password, DUMMY_PASSWORD_HASH],
       );
       const staff = result.rows[0];
       const locked = Boolean(
         staff?.locked_until &&
         new Date(staff.locked_until).getTime() > Date.now(),
       );
-      const validPassword = await bcrypt.compare(
-        password,
-        staff?.password_hash || DUMMY_PASSWORD_HASH,
-      );
+      const validPassword = Boolean(staff?.password_valid);
       if (!validPassword || staff?.status !== "ACTIVE" || locked) {
         if (staff?.id) {
           await query(

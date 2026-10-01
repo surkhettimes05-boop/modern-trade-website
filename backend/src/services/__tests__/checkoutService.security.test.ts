@@ -3,6 +3,32 @@ import { CheckoutService } from "../checkoutService.js";
 
 jest.mock("../../database/connection.js", () => ({ getPool: jest.fn() }));
 
+function splitSqlValues(list: string): string[] {
+  const values: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let start = 0;
+  for (let index = 0; index < list.length; index++) {
+    const char = list[index];
+    if (char === "'") {
+      if (quoted && list[index + 1] === "'") {
+        index++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (!quoted) {
+      if (char === "(") depth++;
+      if (char === ")") depth--;
+      if (char === "," && depth === 0) {
+        values.push(list.slice(start, index).trim());
+        start = index + 1;
+      }
+    }
+  }
+  values.push(list.slice(start).trim());
+  return values;
+}
+
 describe("checkout query batching", () => {
   const release = jest.fn();
   const clientQuery = jest.fn();
@@ -45,7 +71,10 @@ describe("checkout query batching", () => {
       return { rows: [], rowCount: 1 };
     });
 
-    const order = await new CheckoutService().createCodOrder(checkoutInput);
+    const order = await new CheckoutService().createCodOrder({
+      ...checkoutInput,
+      notes: "Leave at the gate",
+    });
 
     expect(order.id).toBe("order-1");
     const calls = clientQuery.mock.calls.map(([sql]) => String(sql));
@@ -54,6 +83,24 @@ describe("checkout query batching", () => {
     expect(calls.some((sql) => sql.includes("pg_advisory_xact_lock"))).toBe(false);
     expect(calls.filter((sql) => sql.includes("INSERT INTO web_order_items"))).toHaveLength(1);
     expect(calls.filter((sql) => sql.includes("INSERT INTO stock_reservations"))).toHaveLength(0);
+    const insertCall = clientQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("INSERT INTO web_orders"),
+    );
+    expect(insertCall).toBeDefined();
+    const [insertSql, insertParams] = insertCall as [string, unknown[]];
+    const insertParts = insertSql.match(
+      /INSERT INTO web_orders\s*\(([\s\S]*?)\)\s*VALUES\s*\(([\s\S]*)\)\s*RETURNING\s+\*/i,
+    );
+    expect(insertParts).not.toBeNull();
+    const columns = splitSqlValues(insertParts![1]);
+    const values = splitSqlValues(insertParts![2]);
+    const boundParameters = [...insertSql.matchAll(/\$(\d+)/g)].map((match) =>
+      Number(match[1]),
+    );
+    expect(values).toHaveLength(columns.length);
+    expect(Math.max(...boundParameters)).toBe(insertParams.length);
+    expect(values[columns.indexOf("notes")]).toBe(`$${insertParams.length}`);
+    expect(insertParams.at(-1)).toBe("Leave at the gate");
     expect(clientQuery).toHaveBeenCalledWith("COMMIT");
     expect(release).toHaveBeenCalledTimes(1);
   });
