@@ -1,0 +1,43 @@
+name: Refresh frontend security lock
+
+on:
+  push:
+    branches: [codex/fix-ghcr-publish]
+    paths:
+      - '.github/workflows/refresh-frontend-security-lock.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/fix-ghcr-publish
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Patch Next.js and transitive production vulnerabilities
+        working-directory: frontend
+        run: |
+          npm install next@16.3.8 --save-exact
+          npm audit fix
+      - name: Verify production audit
+        working-directory: frontend
+        run: npm audit --audit-level=high --omit=dev
+      - name: Commit patched frontend dependencies
+        shell: bash
+        run: |
+          if git diff --quiet -- frontend/package.json frontend/package-lock.json; then
+            echo "No frontend dependency change required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package.json frontend/package-lock.json
+          git commit -m "fix: patch frontend production vulnerabilities"
+          git push origin HEAD:codex/fix-ghcr-publish
