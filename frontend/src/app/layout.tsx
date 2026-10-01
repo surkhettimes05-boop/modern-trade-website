@@ -8,6 +8,10 @@ import { absoluteUrl, SITE } from "@/lib/seo";
 import WebVitals from "@/components/WebVitals";
 import RouteChrome from "@/components/RouteChrome";
 
+// The customer catalog is supplied by the Commerce backend at runtime. Do not
+// freeze an empty catalog into the production image during `next build`.
+export const dynamic = "force-dynamic";
+
 const montserrat = Montserrat({
   subsets: ["latin"],
   variable: "--font-montserrat",
