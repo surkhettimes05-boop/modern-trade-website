@@ -43,7 +43,15 @@ export default function AccountPage() {
       const data = await readApiResponse(response);
 
       if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send OTP');
+        if (response.status === 429) {
+          const seconds = Number(response.headers.get('retry-after'));
+          const wait = Number.isFinite(seconds) && seconds > 0
+            ? ` Try again in ${Math.ceil(seconds / 60)} minute(s).`
+            : ' Please wait before requesting another code.';
+          throw new Error(`Too many OTP requests.${wait}`);
+        }
+        throw new Error(typeof data.error === 'string' ? data.error
+          : typeof data.message === 'string' ? data.message : 'Failed to send OTP');
       }
 
       const returnedOtp = typeof data.otp === 'string' ? data.otp : '';

@@ -153,10 +153,10 @@ export class ShoppingCartService {
       // Update existing item
       const result = await query(
         `UPDATE cart_items 
-         SET quantity = quantity + $1,
-             unit_price = $2,
-             discount_amount = $3,
-             line_total = (quantity + $1) * $2 - $3,
+         SET quantity = quantity + $1::integer,
+             unit_price = $2::numeric,
+             discount_amount = $3::numeric,
+             line_total = (quantity + $1::integer) * $2::numeric - $3::numeric,
              updated_at = NOW()
          WHERE id = $4
          RETURNING *`,
@@ -206,27 +206,14 @@ export class ShoppingCartService {
     );
     if (!price.rows[0] || price.rows[0].price === null)
       throw new Error("Product price is no longer available");
-    const fields: string[] = ["unit_price = $1"];
-    const values: any[] = [Number(price.rows[0].price)];
-    let paramIndex = 2;
-
-    if (updates.quantity !== undefined) {
-      fields.push(`quantity = $${paramIndex}`);
-      values.push(updates.quantity);
-      paramIndex++;
-    }
-
-    if (fields.length === 0) {
-      throw new Error("No fields to update");
-    }
-
-    fields.push(`line_total = quantity * unit_price - discount_amount`);
-    fields.push(`updated_at = NOW()`);
-    values.push(itemId);
-
     const result = await query(
-      `UPDATE cart_items SET ${fields.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
-      values,
+      `UPDATE cart_items
+          SET quantity = COALESCE($1::integer, quantity),
+              unit_price = $2::numeric,
+              line_total = COALESCE($1::integer, quantity) * $2::numeric - discount_amount,
+              updated_at = NOW()
+        WHERE id = $3::uuid RETURNING *`,
+      [updates.quantity ?? null, Number(price.rows[0].price), itemId],
     );
 
     return result.rows[0];

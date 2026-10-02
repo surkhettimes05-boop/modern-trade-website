@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { AtSign, BriefcaseBusiness, Camera, MessageCircle } from 'lucide-react';
 
 type FooterLink = { label: string; href: string };
@@ -39,7 +38,7 @@ const socialLinks = [
 export default function Footer() {
   return <footer>
     <div className="footer-top shell">
-      <Link href="/" className="logo light" aria-label="Pasalho home"><Image src="/brand/pasalho-logo-white.svg" alt="Pasalho" width={140} height={42} /></Link>
+      <Link href="/" className="logo light" aria-label="Pasalho home"><span className="fresh-logo">pasalho.</span></Link>
       <p>Better value for everyday shopping.<br />Groceries, household essentials and convenient ordering.</p>
       <nav className="socials" aria-label="Pasalho links">
         {socialLinks.map(({ label, href, icon: Icon }) => <Link href={href} key={label} aria-label={label} title={label}><Icon aria-hidden="true" /></Link>)}

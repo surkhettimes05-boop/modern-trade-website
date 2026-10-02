@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import "./globals.css";
+import "@fontsource-variable/inter";
+import "./storefront.css";
 import { CommerceProvider } from "@/components/CommerceClient";
 import JsonLd from "@/components/JsonLd";
 import { getCatalog } from "@/lib/serverCatalog";

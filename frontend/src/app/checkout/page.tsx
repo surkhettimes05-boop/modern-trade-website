@@ -1,5 +1,9 @@
 'use client';
 
+import Link from 'next/link';
+import Image from 'next/image';
+import { MapPin, Wallet } from 'lucide-react';
+import { formatPrice } from '@/lib/catalog';
 import { FormEvent, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useShop } from '@/components/CommerceClient';
@@ -11,7 +15,7 @@ function csrfToken() {
 }
 
 export default function CheckoutPage() {
-  const { items, cartId, flushCartWrites } = useShop();
+  const { items, cartId, flushCartWrites, clearCart } = useShop();
   const router = useRouter();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -68,6 +72,7 @@ export default function CheckoutPage() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Checkout failed');
+      clearCart();
       router.push(`/account/orders/${result.id}`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Checkout failed');
@@ -79,19 +84,19 @@ export default function CheckoutPage() {
   if (!items.length) return <div className="shell page"><h1>Your cart is empty</h1></div>;
 
   return <div className="shell page">
-    <h1>Checkout</h1>
-      <p className="mt-2 text-slate-600">Cash on delivery · Home delivery</p>
-    <form onSubmit={submit} className="mt-8 grid max-w-2xl gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <label>Full name<input required name="name" autoComplete="name" className="mt-1 w-full rounded border p-2" /></label>
+    <div className="checkout-intro"><Link href="/cart">← Back to basket</Link><h1>Let’s get your basket home.</h1><p>Add your delivery details and pay when your order arrives.</p></div><div className="checkout-layout">
+    <form onSubmit={submit} className="checkout-form">
+      <h2><MapPin size={18} className="inline mr-2" /> Delivery address</h2><label>Full name<input required name="name" autoComplete="name" className="mt-1 w-full rounded border p-2" /></label>
       <label>Phone<input required name="phone" autoComplete="tel" placeholder="+977 98XXXXXXXX" className="mt-1 w-full rounded border p-2" /></label>
       <label>Delivery address<input required name="address" autoComplete="street-address" className="mt-1 w-full rounded border p-2" /></label>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="checkout-address-row">
         <label>City<input required name="city" autoComplete="address-level2" className="mt-1 w-full rounded border p-2" /></label>
         <label>Province<input required name="state" autoComplete="address-level1" className="mt-1 w-full rounded border p-2" /></label>
         <label>Postal code<input required name="postal_code" autoComplete="postal-code" className="mt-1 w-full rounded border p-2" /></label>
       </div>
+      <div className="checkout-payment"><Wallet size={22} /><span><strong>Cash on delivery</strong><br /><small>Pay in cash when your order arrives</small></span></div>
       {error && <p role="alert" className="rounded bg-red-50 p-3 text-red-700">{error}</p>}
       <button disabled={busy} className="primary-btn">{busy ? 'Placing order…' : 'Place COD order'}</button>
-    </form>
+    </form><aside className="checkout-summary"><h2>Your basket · {items.reduce((n, item) => n + item.qty, 0)} items</h2>{items.map(item => <div key={item.product.id} className="checkout-summary-item"><Image src={item.product.image} width={48} height={48} alt="" /><div><b>{item.product.name}</b><small>{item.product.unit} · Qty {item.qty}</small></div><strong>{formatPrice(item.product.price * item.qty)}</strong></div>)}<div className="checkout-subtotal"><span>Items subtotal</span><strong>{formatPrice(items.reduce((n, item) => n + item.product.price * item.qty, 0))}</strong></div><p>Delivery charges and applicable taxes are calculated when your order is placed. Your order confirmation shows the final total.</p></aside></div>
   </div>;
 }
