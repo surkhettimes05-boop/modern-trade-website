@@ -4,7 +4,7 @@ import { ArrowRight, ShoppingBag, ShieldCheck, Wallet, Leaf } from 'lucide-react
 import HomeProductRail from '@/components/home/HomeProductRail';
 import { getCatalog } from '@/lib/serverCatalog';
 import { buildMetadata } from '@/lib/seo';
-export const metadata = buildMetadata({ title: 'Groceries & everyday essentials', description: 'Shop groceries, snacks and household essentials at Pasalho. Order online with cash on delivery in Nepal.', path: '/' });
+export const metadata = buildMetadata({ title: 'Pasalho | Groceries & everyday essentials', description: 'Shop groceries, snacks and household essentials at Pasalho. Order online with cash on delivery in Nepal.', path: '/' });
 export default async function Home() {
   const { products, categories } = await getCatalog();
   const pantry = products.filter(p => /rice|oil|noodle|water|dal|flour/i.test(p.name));
