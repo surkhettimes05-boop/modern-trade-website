@@ -5,7 +5,7 @@ import JsonLd from '@/components/JsonLd';
 import { buildMetadata, absoluteUrl } from '@/lib/seo';
 import { getCatalog } from '@/lib/serverCatalog';
 
-export const metadata: Metadata = buildMetadata({ title: 'Current offers', description: 'See current NOVA MART grocery and household offers, campaign dates and terms for shoppers in Nepal.', path: '/offers' });
+export const metadata: Metadata = buildMetadata({ title: 'Current offers', description: 'See current Pasalho grocery and household offers, campaign dates and terms for shoppers in Nepal.', path: '/offers' });
 
 export default async function OffersPage() {
   const { offers, products } = await getCatalog();
@@ -13,7 +13,7 @@ export default async function OffersPage() {
   const regularOffers = offers.filter((offer) => !offer.is_featured);
   const dealProducts = products.filter((product) => product.originalPrice && product.originalPrice > product.price);
   const schema = {
-    '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Current NOVA MART offers', url: absoluteUrl('/offers'),
+    '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Current Pasalho offers', url: absoluteUrl('/offers'),
     mainEntity: { '@type': 'ItemList', numberOfItems: offers.length + dealProducts.length, itemListElement: [
       ...offers.map((offer, index) => ({ '@type': 'ListItem', position: index + 1, name: offer.title })),
       ...dealProducts.map((product, index) => ({ '@type': 'ListItem', position: offers.length + index + 1, name: product.name, url: absoluteUrl(`/product/${product.slug}`) })),

@@ -43,7 +43,15 @@ export default function AccountPage() {
       const data = await readApiResponse(response);
 
       if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to send OTP');
+        if (response.status === 429) {
+          const seconds = Number(response.headers.get('retry-after'));
+          const wait = Number.isFinite(seconds) && seconds > 0
+            ? ` Try again in ${Math.ceil(seconds / 60)} minute(s).`
+            : ' Please wait before requesting another code.';
+          throw new Error(`Too many OTP requests.${wait}`);
+        }
+        throw new Error(typeof data.error === 'string' ? data.error
+          : typeof data.message === 'string' ? data.message : 'Failed to send OTP');
       }
 
       const returnedOtp = typeof data.otp === 'string' ? data.otp : '';
@@ -75,7 +83,9 @@ export default function AccountPage() {
         throw new Error(typeof data.error === 'string' ? data.error : 'Failed to verify OTP');
       }
 
-      router.push('/account/dashboard');
+      const requestedNext = new URLSearchParams(window.location.search).get('next');
+      const next = requestedNext?.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/account/dashboard';
+      router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify OTP');
     } finally {
@@ -86,7 +96,7 @@ export default function AccountPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-center mb-6">StoreSync Account</h1>
+        <h1 className="text-2xl font-bold text-center mb-6">Pasalho Account</h1>
         
         {!otpSent ? (
           <form onSubmit={handleRequestOtp} className="space-y-4">

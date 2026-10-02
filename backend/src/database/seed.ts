@@ -5,14 +5,31 @@ import { assertDevelopmentSeedEnvironment } from "../config/environment.js";
 import { getPool, closePool } from "./connection.js";
 
 assertDevelopmentSeedEnvironment();
-const sql = await readFile(
+const baseSql = await readFile(
   resolve(process.cwd(), "../database/development_seed.sql"),
   "utf8",
 );
+const customerSeedCandidates = [
+  resolve(process.cwd(), "src/database/development_customer_seed.sql"),
+  resolve(process.cwd(), "dist/database/development_customer_seed.sql"),
+];
+let customerCommerceSql: string | undefined;
+for (const candidate of customerSeedCandidates) {
+  try {
+    customerCommerceSql = await readFile(candidate, "utf8");
+    break;
+  } catch {
+    // Try the next source/compiled layout.
+  }
+}
+if (!customerCommerceSql) {
+  throw new Error("development_customer_seed.sql was not found");
+}
 const client = await getPool().connect();
 try {
   await client.query("BEGIN");
-  await client.query(sql);
+  await client.query(baseSql);
+  await client.query(customerCommerceSql);
   await client.query("COMMIT");
   console.log("Development seed applied for Nepal MVP");
 } catch (error) {

@@ -23,8 +23,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
 
   Future<List<Map<String, dynamic>>> _load() async {
     final state = AppScope.of(context);
-    final response =
-        await state.customerRepository.loadAddresses(state.customer!.id);
+    final response = await state.customerRepository.loadAddresses();
     if (response is! List) return const [];
     return response
         .whereType<Map>()
@@ -52,11 +51,13 @@ class _AddressesScreenState extends State<AddressesScreen> {
         content: const Text('This saved address will be permanently removed.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -85,7 +86,9 @@ class _AddressesScreenState extends State<AddressesScreen> {
                 title: 'Could not load addresses',
                 message: 'Please check your connection and try again.',
                 action: ElevatedButton(
-                    onPressed: _reload, child: const Text('Try again')),
+                  onPressed: _reload,
+                  child: const Text('Try again'),
+                ),
               );
             }
             final addresses = snapshot.data ?? const [];
@@ -127,22 +130,26 @@ class _AddressesScreenState extends State<AddressesScreen> {
                     ),
                     title: Row(
                       children: [
-                        Text(title,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w900)),
+                        Text(
+                          title,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
                         if (address['is_default'] == true) ...[
                           const SizedBox(width: 8),
-                          const Text('DEFAULT',
-                              style: TextStyle(
-                                color: AppColors.brand,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w900,
-                              )),
+                          const Text(
+                            'DEFAULT',
+                            style: TextStyle(
+                              color: AppColors.brand,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ],
                       ],
                     ),
-                    subtitle:
-                        Text(parts.isEmpty ? 'Saved delivery address' : parts),
+                    subtitle: Text(
+                      parts.isEmpty ? 'Saved delivery address' : parts,
+                    ),
                     trailing: IconButton(
                       tooltip: 'Delete address',
                       onPressed: () => _delete(address['id'].toString()),
@@ -190,7 +197,7 @@ class _AddressFormState extends State<_AddressForm> {
       _landmark,
       _postal,
       _phone,
-      _instructions
+      _instructions,
     ]) {
       controller.dispose();
     }
@@ -236,11 +243,13 @@ class _AddressFormState extends State<_AddressForm> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Add delivery address',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w900)),
+                Text(
+                  'Add delivery address',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w900),
+                ),
                 const SizedBox(height: 16),
                 SegmentedButton<String>(
                   segments: const [
@@ -295,8 +304,9 @@ class _AddressFormState extends State<_AddressForm> {
                 TextFormField(
                   controller: _instructions,
                   maxLines: 2,
-                  decoration:
-                      const InputDecoration(labelText: 'Delivery instructions'),
+                  decoration: const InputDecoration(
+                    labelText: 'Delivery instructions',
+                  ),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -314,7 +324,9 @@ class _AddressFormState extends State<_AddressForm> {
                       ? const SizedBox.square(
                           dimension: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text('Save address'),
                 ),

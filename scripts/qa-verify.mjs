@@ -76,6 +76,21 @@ results.push(
   ),
 );
 
+const publicCatalogResponse = await fetch("http://localhost:53001/api/public/products", {
+  signal: AbortSignal.timeout(5_000),
+});
+if (!publicCatalogResponse.ok) {
+  throw new Error(`Public catalog returned HTTP ${publicCatalogResponse.status}`);
+}
+const publicCatalog = await publicCatalogResponse.json();
+if (!Array.isArray(publicCatalog) || publicCatalog.length === 0) {
+  throw new Error(`Public catalog is empty: ${JSON.stringify(publicCatalog)}`);
+}
+if (!publicCatalog.some((product) => product.sku === "RICE-5KG" && Number(product.price) === 799)) {
+  throw new Error(`Public catalog is missing the seeded RICE-5KG organization price: ${JSON.stringify(publicCatalog.slice(0, 10))}`);
+}
+results.push(`public catalog: ${publicCatalog.length} priced products`);
+
 const postgres = runDocker([
   "exec",
   "-T",
@@ -86,7 +101,7 @@ const postgres = runDocker([
   "-d",
   "storesync_qa",
   "-Atc",
-  "SELECT count(*) FROM schema_migrations; SELECT to_regclass('public.order_events'); SELECT count(*) FROM stores; SELECT count(*) FROM staff;",
+  "SELECT count(*) FROM schema_migrations; SELECT to_regclass('public.order_events'); SELECT count(*) FROM stores; SELECT count(*) FROM staff; SELECT count(*) FROM product_prices WHERE store_id IS NULL AND active = TRUE;",
 ]);
 const postgresLines = postgres
   .split(/\r?\n/)
@@ -94,12 +109,12 @@ const postgresLines = postgres
   .filter(Boolean);
 if (
   postgresLines.join("\n") !==
-  `${expectedMigrationCount}\norder_events\n2\n1`
+  `${expectedMigrationCount}\norder_events\n2\n1\n6`
 ) {
   throw new Error(`Unexpected PostgreSQL QA verification output:\n${postgres}`);
 }
 results.push(
-  `PostgreSQL: ${expectedMigrationCount} migrations, order_events, 2 stores, 1 staff`,
+  `PostgreSQL: ${expectedMigrationCount} migrations, order_events, 2 stores, 1 staff, 6 organization prices`,
 );
 
 const roleVerification = runDocker([

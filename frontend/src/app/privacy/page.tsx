@@ -66,7 +66,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Policy status</h2>
             <p className="text-gray-600">
-              This draft is excluded from search indexing until legal counsel approves the final policy. Customers should contact NOVA MART for the current privacy terms before submitting sensitive information.
+              This draft is excluded from search indexing until legal counsel approves the final policy. Customers should contact PASALHO for the current privacy terms before submitting sensitive information.
             </p>
           </section>
         </div>

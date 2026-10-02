@@ -25,7 +25,7 @@ export async function shoppingCartRoutes(fastify: FastifyInstance) {
   fastify.post("/shopping-cart", async (request, reply) => {
     const schema = z
       .object({
-        store_id: z.string().uuid(),
+        store_id: z.string().uuid().optional(),
       })
       .strict();
 
@@ -34,7 +34,7 @@ export async function shoppingCartRoutes(fastify: FastifyInstance) {
     try {
       const cart = await shoppingCartService.getOrCreateCart({
         customer_id: customerId(request),
-        store_id: cartData.store_id,
+        store_id: cartData.store_id ?? null,
       });
       return reply.send(cart);
     } catch {

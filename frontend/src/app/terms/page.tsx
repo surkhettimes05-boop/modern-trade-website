@@ -73,7 +73,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Terms status</h2>
             <p className="text-gray-600">
-              These draft terms are excluded from search indexing until legal counsel approves the final version. Contact NOVA MART for the current terms that apply to a purchase or service.
+              These draft terms are excluded from search indexing until legal counsel approves the final version. Contact PASALHO for the current terms that apply to a purchase or service.
             </p>
           </section>
         </div>

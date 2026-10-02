@@ -75,8 +75,8 @@ export async function buildApp(
     return503OnClosing: true,
     trustProxy: workerRuntime
       ? true
-      : process.env.TRUST_PROXY_HOPS
-        ? Number.parseInt(process.env.TRUST_PROXY_HOPS, 10)
+      : process.env.TRUST_PROXY_ADDRESSES
+        ? process.env.TRUST_PROXY_ADDRESSES.split(",").map((value) => value.trim()).filter(Boolean)
         : false,
   });
 

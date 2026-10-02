@@ -31,6 +31,24 @@ processors:
         action: delete
       - key: user.address
         action: delete
+      - key: http.request.body
+        action: delete
+      - key: gen_ai.prompt
+        action: delete
+      - key: gen_ai.completion
+        action: delete
+      - key: gen_ai.input.messages
+        action: delete
+      - key: gen_ai.output.messages
+        action: delete
+      - key: llm.prompts
+        action: delete
+      - key: llm.completions
+        action: delete
+      - key: input.value
+        action: delete
+      - key: output.value
+        action: delete
   batch:
     send_batch_size: 512
     timeout: 5s

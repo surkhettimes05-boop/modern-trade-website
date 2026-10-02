@@ -1,8 +1,15 @@
 "use client";
-import Link from "next/link"; import {Heart,MapPin,Menu,UserRound,X} from "lucide-react"; import {useState} from "react";
-import {CartButton,MegaMenu,SearchBox,useShop} from "./CommerceClient";
-export default function Header(){const[mega,setMega]=useState(false);const[mobile,setMobile]=useState(false);const{selectedStore}=useShop();return <>
- <div className="utility"><div className="shell"><span><MapPin size={13}/> Delivering to <b>{selectedStore?.name || 'Choose a store'}</b></span><nav><Link href="/stores">Find a store</Link><Link href="/faq">Help</Link><Link href="/about">Careers</Link><Link href="/about">Business / Wholesale</Link><Link href="/account">Sign in</Link></nav></div></div>
- <header className="site-header"><div className="shell header-row"><Link href="/" className="logo" aria-label="NOVA MART home"><i>N</i><span>NOVA<b>MART</b></span></Link><button className="category-trigger" onClick={()=>setMega(!mega)} aria-expanded={mega}><Menu size={19}/> Categories</button><SearchBox/><nav className="main-links"><Link href="/offers">Offers</Link><Link href="/shop?sort=new">New Arrivals</Link><Link href="/stores">Stores</Link></nav><div className="header-actions"><Link className="nav-action" href="/account"><UserRound/><span>Account</span></Link><Link className="nav-action" href="/account"><Heart/><span>Wishlist</span></Link><CartButton/></div><button className="mobile-menu" onClick={()=>setMobile(!mobile)} aria-label="Menu">{mobile?<X/>:<Menu/>}</button></div>
- {mega?<div className="mega-wrap"><MegaMenu open={mega} onClose={()=>setMega(false)}/></div>:null}{mobile?<nav className="mobile-panel"><Link href="/shop">Shop all products</Link><Link href="/offers">Today’s offers</Link><Link href="/stores">Find a store</Link><Link href="/account">My account</Link></nav>:null}
- </header></>}
+import Link from "next/link";
+import { ChevronDown, MapPin, ShoppingBag, UserRound } from "lucide-react";
+import { useState } from "react";
+import { CartButton, MegaMenu, SearchBox } from "./CommerceClient";
+export default function Header() {
+  const [categories, setCategories] = useState(false);
+  return <header className="site-header"><div className="shell header-row">
+    <Link href="/" className="fresh-logo" aria-label="Pasalho home"><ShoppingBag size={28} /><span>pasalho<span className="logo-dot">.</span></span></Link>
+    <Link href="/checkout" className="delivery-link"><MapPin size={20} /><span><strong>Deliver to your doorstep</strong><small>Choose address at checkout <ChevronDown size={12} /></small></span></Link>
+    <SearchBox /><div className="header-actions"><Link className="nav-action" href="/account" aria-label="Account"><UserRound size={20} /><span>Account</span></Link><CartButton /></div></div>
+    <nav className="shop-tabs shell" aria-label="Shop navigation"><button onClick={() => setCategories(!categories)} aria-expanded={categories}>All categories <ChevronDown size={14} /></button><Link href="/shop">Shop all</Link><Link href="/category/rice">Daily essentials</Link><Link href="/category/chips-snacks">Snacks & drinks</Link><Link href="/category/personal-hygiene">Personal care</Link><Link href="/offers">Offers</Link><Link href="/account/orders">My orders</Link></nav>
+    {categories && <div className="mega-wrap"><MegaMenu open onClose={() => setCategories(false)} /></div>}
+  </header>;
+}

@@ -31,11 +31,8 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       .object({ orderId: z.string().uuid() })
       .parse(request.params);
     const db = await import("../database/connection.js");
-    const order = await db.query(
-      "SELECT * FROM web_orders WHERE id = $1 AND customer_id = $2",
-      [orderId, customerId(request)],
-    );
-    if (!order.rows[0])
+    const syncedOrder = await checkout.syncFulfillmentStatus(orderId, customerId(request));
+    if (!syncedOrder)
       return reply.status(404).send({ error: "Order not found" });
     const items = await db.query(
       "SELECT * FROM web_order_items WHERE order_id = $1 ORDER BY created_at",
@@ -45,7 +42,7 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       "SELECT * FROM order_events WHERE order_id = $1 ORDER BY created_at",
       [orderId],
     );
-    return { ...order.rows[0], items: items.rows, events: events.rows };
+    return { ...syncedOrder, items: items.rows, events: events.rows };
   });
   fastify.post("/customer/orders/:orderId/cancel", async (request, reply) => {
     const { orderId } = z
@@ -72,6 +69,16 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ error: "Failed to cancel order" });
     }
   });
+
+  fastify.post("/customer/orders/:orderId/fulfillment/retry", async (request, reply) => {
+    const { orderId } = z.object({ orderId: z.string().uuid() }).parse(request.params);
+    try {
+      return await checkout.retryFulfillment(orderId, customerId(request));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Fulfillment retry failed";
+      return reply.status(message === "Order not found" ? 404 : 409).send({ error: message });
+    }
+  });
   fastify.post("/checkout/cod", async (request, reply) => {
     const body = CodCheckoutBodySchema.parse(request.body);
     try {
@@ -79,7 +86,6 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         await checkout.createCodOrder({
           ...body,
           customerId: customerId(request),
-          storeId: body.store_id,
           cartId: body.cart_id,
           idempotencyKey: body.idempotency_key,
           deliveryType: body.delivery_type,
@@ -110,11 +116,12 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         message.includes("stock") ||
         message.includes("Cart") ||
         message.includes("Price") ||
+        message.includes("Idempotency") ||
         message.includes("store") ||
         message.includes("delivery address");
       if (!clientError) request.log.error({ error }, "COD checkout failed");
       return reply
-        .status(clientError ? 400 : 500)
+        .status(message.includes("Idempotency") ? 409 : clientError ? 400 : 500)
         .send({ error: clientError ? message : "Checkout failed" });
     }
   });

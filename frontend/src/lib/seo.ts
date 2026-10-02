@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 
 export const SITE = {
-  name: 'NOVA MART',
-  legalName: 'NOVA MART Retail Nepal Pvt. Ltd.',
+  name: 'Pasalho',
+  legalName: 'Pasalho Retail Nepal Pvt. Ltd.',
   description: 'Shop groceries, fresh food and home essentials at dependable everyday prices across Nepal.',
   locale: 'en_NP',
   language: 'en-NP',
   country: 'NP',
   currency: 'NPR',
-  url: (process.env.NEXT_PUBLIC_SITE_URL || 'https://storesync.com').replace(/\/$/, ''),
+  url: (process.env.NEXT_PUBLIC_SITE_URL || 'https://pasalho.com').replace(/\/$/, ''),
 } as const;
 
 export function absoluteUrl(path = '/') {
@@ -37,7 +37,7 @@ export function buildMetadata({ title, description, path, image, noIndex = false
 }
 
 export function privateMetadata(title: string, path = '/'): Metadata {
-  return buildMetadata({ title, description: `${title} for NOVA MART customers and staff.`, path, noIndex: true });
+  return buildMetadata({ title, description: `${title} for Pasalho customers and staff.`, path, noIndex: true });
 }
 
 export function breadcrumbSchema(items: Array<{ name: string; path: string }>) {

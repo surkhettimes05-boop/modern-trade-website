@@ -1,11 +1,53 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { MARKET } from "../config/market.js";
+import { analyticsService } from "../services/analyticsService.js";
 
 // Validation schemas
 const langSchema = z.enum(["en", "ne"]).optional().default("en");
 
 export async function publicRoutes(fastify: FastifyInstance) {
+  fastify.post(
+    "/analytics/events",
+    { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      const body = z
+        .object({
+          event_type: z.enum([
+            "PRODUCT_VIEWED",
+            "SEARCH",
+            "CATEGORY_VIEWED",
+            "ADD_TO_CART",
+            "REMOVE_FROM_CART",
+            "OFFER_VIEWED",
+            "COUPON_APPLIED",
+            "LOYALTY_POINTS_VIEWED",
+            "LOYALTY_POINTS_REDEEMED",
+            "CHECKOUT_STARTED",
+            "ORDER_COMPLETED",
+            "REORDER_CLICKED",
+          ]),
+          product_id: z.string().uuid().optional(),
+          store_id: z.string().uuid().optional(),
+          order_id: z.string().uuid().optional(),
+          event_data: z.record(z.string(), z.unknown()).optional(),
+        })
+        .strict()
+        .parse(request.body);
+
+      try {
+        return reply.status(201).send(
+          await analyticsService.trackEvent({
+            ...body,
+            event_category: "CUSTOMER_STOREFRONT",
+          }),
+        );
+      } catch {
+        return reply.status(500).send({ error: "Failed to track event" });
+      }
+    },
+  );
+
   // Get published content page
   fastify.get("/pages/:slug", async (request, reply) => {
     const { slug } = request.params as { slug: string };
@@ -159,16 +201,27 @@ export async function publicRoutes(fastify: FastifyInstance) {
     const {
       lang: validatedLang,
       category,
+      q,
+      min_price: minPrice,
+      max_price: maxPrice,
+      on_sale: onSale,
+      sort,
       featured,
-      store_id,
       limit,
       offset,
     } = z
       .object({
         lang: langSchema,
         category: z.string().uuid().optional(),
+        q: z.string().trim().min(1).max(120).optional(),
+        min_price: z.coerce.number().nonnegative().optional(),
+        max_price: z.coerce.number().nonnegative().optional(),
+        availability: z.enum(["AVAILABLE", "OUT_OF_STOCK"]).optional(),
+        on_sale: z.enum(["true", "false"]).optional(),
+        sort: z
+          .enum(["relevance", "price_asc", "price_desc", "name"])
+          .default("relevance"),
         featured: z.enum(["true", "false"]).optional(),
-        store_id: z.string().uuid().optional(),
         limit: z.coerce.number().int().min(1).max(200).default(100),
         offset: z.coerce.number().int().min(0).max(100_000).default(0),
       })
@@ -182,6 +235,7 @@ export async function publicRoutes(fastify: FastifyInstance) {
         SELECT 
           products.id,
           products.sku,
+          products.brand_name AS brand,
           COALESCE(products.name_${validatedLang}, products.name_en) as name,
           COALESCE(products.description_${validatedLang}, products.description_en) as description,
           products.category_id,
@@ -190,33 +244,28 @@ export async function publicRoutes(fastify: FastifyInstance) {
           COALESCE(products.unit_${validatedLang}, products.unit_en) as unit,
           products.image_url,
           products.images,
+          products.barcode,
           products.is_featured,
-          COALESCE(store_price.price, organization_price.price) as price,
-          COALESCE(store_price.original_price, organization_price.original_price) as original_price,
-          COALESCE(store_price.currency_code, organization_price.currency_code, '${MARKET.currencyCode}') as currency_code,
-          COALESCE(spa.availability_status, CASE WHEN EXISTS (SELECT 1 FROM batch_inventory bi WHERE bi.product_id = products.id AND bi.store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1)) AND bi.quantity > 0) THEN 'AVAILABLE' ELSE 'OUT_OF_STOCK' END) as availability_status,
+          organization_price.price as price,
+          organization_price.original_price as original_price,
+          COALESCE(organization_price.currency_code, '${MARKET.currencyCode}') as currency_code,
+          'CHECK_AT_CHECKOUT'::text as availability_status,
           COALESCE(products.meta_title_${validatedLang}, products.meta_title_en) as meta_title,
           COALESCE(products.meta_description_${validatedLang}, products.meta_description_en) as meta_description
         FROM products
         LEFT JOIN categories c ON c.id = products.category_id
         LEFT JOIN LATERAL (
           SELECT pp.price, pp.original_price, pp.currency_code FROM product_prices pp
-          WHERE pp.product_id = products.id AND pp.store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1)) AND pp.active = TRUE
-            AND pp.valid_from <= NOW() AND (pp.valid_to IS NULL OR pp.valid_to > NOW())
-          ORDER BY pp.valid_from DESC LIMIT 1
-        ) store_price ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT pp.price, pp.original_price, pp.currency_code FROM product_prices pp
           WHERE pp.product_id = products.id AND pp.store_id IS NULL AND pp.active = TRUE
             AND pp.valid_from <= NOW() AND (pp.valid_to IS NULL OR pp.valid_to > NOW())
           ORDER BY pp.valid_from DESC LIMIT 1
         ) organization_price ON TRUE
-        LEFT JOIN store_product_availability spa ON spa.product_id = products.id AND spa.store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1))
         WHERE products.status = 'PUBLISHED'
           AND (expires_at IS NULL OR expires_at > NOW())
       `;
-      const params: unknown[] = [store_id || null];
-      let paramIndex = 2;
+      const params: unknown[] = [];
+      let paramIndex = 1;
+      let searchParamIndex: number | undefined;
 
       if (category) {
         queryText += ` AND category_id = $${paramIndex}`;
@@ -224,12 +273,43 @@ export async function publicRoutes(fastify: FastifyInstance) {
         paramIndex++;
       }
 
+      if (q) {
+        searchParamIndex = paramIndex;
+        queryText += ` AND (products.name_en ILIKE $${paramIndex} OR products.name_ne ILIKE $${paramIndex} OR products.sku ILIKE $${paramIndex})`;
+        params.push(`%${q}%`);
+        paramIndex++;
+      }
+
+      if (minPrice !== undefined) {
+        queryText += ` AND organization_price.price >= $${paramIndex}`;
+        params.push(minPrice);
+        paramIndex++;
+      }
+
+      if (maxPrice !== undefined) {
+        queryText += ` AND organization_price.price <= $${paramIndex}`;
+        params.push(maxPrice);
+        paramIndex++;
+      }
+
+      if (onSale === "true") {
+        queryText += " AND organization_price.original_price > organization_price.price";
+      }
+
       if (featured === "true") {
         queryText += ` AND is_featured = true`;
       }
 
       params.push(limit, offset);
-      queryText += ` ORDER BY products.name_en LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      const orderBy = {
+        price_asc: "organization_price.price ASC NULLS LAST, products.name_en",
+        price_desc: "organization_price.price DESC NULLS LAST, products.name_en",
+        name: "products.name_en",
+        relevance: searchParamIndex
+          ? `CASE WHEN products.name_en ILIKE $${searchParamIndex} THEN 0 ELSE 1 END, products.name_en`
+          : "products.name_en",
+      }[sort];
+      queryText += ` ORDER BY ${orderBy} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
 
       const result = await query(queryText, params);
       return result.rows;
@@ -259,6 +339,8 @@ export async function publicRoutes(fastify: FastifyInstance) {
           COALESCE(unit_${validatedLang}, unit_en) as unit,
           image_url,
           images,
+          brand_name AS brand,
+          barcode,
           is_featured,
           COALESCE(meta_title_${validatedLang}, meta_title_en) as meta_title,
           COALESCE(meta_description_${validatedLang}, meta_description_en) as meta_description

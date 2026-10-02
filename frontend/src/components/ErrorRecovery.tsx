@@ -9,17 +9,17 @@ const styles: Record<string, CSSProperties> = {
     display: 'grid',
     placeItems: 'center',
     padding: '32px 20px',
-    background: '#f6f3eb',
-    color: '#17221b',
+    background: 'var(--pasalho-off-white)',
+    color: 'var(--pasalho-dark)',
     fontFamily: 'Arial, sans-serif',
   },
   card: {
     width: 'min(100%, 560px)',
     padding: '32px',
-    border: '1px solid #dedfd9',
+    border: '1px solid var(--line)',
     borderRadius: '16px',
-    background: '#fff',
-    boxShadow: '0 12px 36px rgba(23,34,27,.09)',
+    background: 'var(--pasalho-white)',
+    boxShadow: '0 12px 36px rgba(6,59,92,.08)',
     textAlign: 'center',
   },
   actions: {
@@ -34,8 +34,8 @@ const styles: Record<string, CSSProperties> = {
     padding: '0 20px',
     border: 0,
     borderRadius: '9px',
-    background: '#075d43',
-    color: '#fff',
+    background: 'var(--pasalho-teal)',
+    color: 'var(--pasalho-white)',
     fontWeight: 700,
   },
   secondary: {
@@ -43,15 +43,15 @@ const styles: Record<string, CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     padding: '0 20px',
-    border: '1px solid #cfd4cf',
+    border: '1px solid var(--line)',
     borderRadius: '9px',
-    background: '#fff',
-    color: '#17221b',
+    background: 'var(--pasalho-white)',
+    color: 'var(--pasalho-dark)',
     cursor: 'pointer',
     fontWeight: 700,
     textDecoration: 'none',
   },
-  reference: { marginTop: '20px', color: '#667069', fontSize: '12px' },
+  reference: { marginTop: '20px', color: 'var(--muted)', fontSize: '12px' },
 };
 
 export default function ErrorRecovery({
@@ -76,8 +76,8 @@ export default function ErrorRecovery({
         role="alert"
         style={styles.card}
       >
-        <p style={{ color: '#075d43', fontSize: '12px', fontWeight: 800 }}>
-          NOVA MART
+        <p style={{ color: '#063B5C', fontSize: '12px', fontWeight: 800 }}>
+          PASALHO
         </p>
         <h1 id="recovery-title" ref={headingRef} tabIndex={-1}>
           We couldn&apos;t load this page

@@ -5,7 +5,6 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SkipLink from "@/components/SkipLink";
 import { MobileNav } from "@/components/CommerceClient";
-import WhatsAppOrderShortcut from "@/components/WhatsAppOrderShortcut";
 
 export default function RouteChrome({
   children,
@@ -19,15 +18,15 @@ export default function RouteChrome({
   if (isStaffWorkspace) return children;
 
   return (
-    <>
+    <div className="storefront">
       <SkipLink />
       <Header />
       <main id="main-content" className="flex-1">
         {children}
       </main>
       <Footer />
-      <WhatsAppOrderShortcut />
+
       <MobileNav />
-    </>
+    </div>
   );
 }

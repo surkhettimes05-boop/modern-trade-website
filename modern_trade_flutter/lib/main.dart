@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'core/app_config.dart';
 import 'core/app_theme.dart';
 import 'screens/app_shell.dart';
 import 'state/app_state.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  AppConfig.validate();
   final state = AppState();
   unawaited(state.initialize());
   runApp(NovaMartApp(state: state));
@@ -30,11 +32,7 @@ class NovaMartApp extends StatelessWidget {
 }
 
 class AppScope extends InheritedNotifier<AppState> {
-  const AppScope({
-    super.key,
-    required super.notifier,
-    required super.child,
-  });
+  const AppScope({super.key, required super.notifier, required super.child});
 
   static AppState of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();

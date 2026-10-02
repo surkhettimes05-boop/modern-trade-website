@@ -10,6 +10,42 @@ import { requirePrivilegedAdministration } from "../plugins/privilegedAdministra
 const addressService = new AddressService();
 
 export async function addressRoutes(fastify: FastifyInstance) {
+  // Session-derived routes are the canonical customer contract. They avoid
+  // accepting an owner identifier from an untrusted client altogether.
+  fastify.get(
+    "/customer/addresses",
+    { onRequest: authenticateCustomer },
+    async (request, reply) => {
+      try {
+        return reply.send(
+          await addressService.getCustomerAddresses(customerId(request)),
+        );
+      } catch {
+        return reply.status(500).send({ error: "Failed to get addresses" });
+      }
+    },
+  );
+
+  fastify.get(
+    "/customer/addresses/default",
+    { onRequest: authenticateCustomer },
+    async (request, reply) => {
+      try {
+        const address = await addressService.getDefaultAddress(
+          customerId(request),
+        );
+        if (!address) {
+          return reply.status(404).send({ error: "Default address not found" });
+        }
+        return reply.send(address);
+      } catch {
+        return reply
+          .status(500)
+          .send({ error: "Failed to get default address" });
+      }
+    },
+  );
+
   // Address: Create address
   fastify.post(
     "/addresses",
@@ -21,6 +57,12 @@ export async function addressRoutes(fastify: FastifyInstance) {
           district_id: z.number().optional(),
           municipality_id: z.number().optional(),
           ward_id: z.number().optional(),
+          // Customer app compatibility fields. The canonical schema stores
+          // these values in metadata because customer_addresses has no
+          // recipient/city/state columns.
+          recipient_name: z.string().optional(),
+          city: z.string().optional(),
+          state: z.string().optional(),
           tole_locality: z.string().optional(),
           landmark: z.string().optional(),
           street: z.string().optional(),
@@ -36,11 +78,28 @@ export async function addressRoutes(fastify: FastifyInstance) {
         })
         .strict();
 
-      const addressData = schema.parse(request.body);
+      const {
+        recipient_name,
+        city,
+        state,
+        metadata: suppliedMetadata,
+        ...addressData
+      } = schema.parse(request.body);
+      const metadata = {
+        ...(suppliedMetadata &&
+        typeof suppliedMetadata === "object" &&
+        !Array.isArray(suppliedMetadata)
+          ? suppliedMetadata
+          : {}),
+        ...(recipient_name ? { recipient_name } : {}),
+        ...(city ? { city } : {}),
+        ...(state ? { state } : {}),
+      };
 
       try {
         const address = await addressService.createAddress({
           ...addressData,
+          metadata,
           customer_id: customerId(request),
           created_by: customerId(request),
         });
@@ -77,7 +136,8 @@ export async function addressRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // Address: Get customer addresses
+  // Compatibility route for older clients. Remove after the supported mobile
+  // version has migrated to /customer/addresses.
   fastify.get(
     "/addresses/customer/:customerId",
     { onRequest: authenticateCustomer },

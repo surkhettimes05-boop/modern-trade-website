@@ -14,17 +14,13 @@ const cols: Record<string, FooterLink[]> = {
     { label: 'Delivery & pickup', href: '/services' },
     { label: 'Contact us', href: '/contact' },
   ],
-  'About NOVA MART': [
-    { label: 'Our story', href: '/about' }, { label: 'Sustainability', href: '/about' },
-    { label: 'Quality promise', href: '/about' }, { label: 'NOVA Foundation', href: '/about' },
-  ],
-  Corporate: [
-    { label: 'Investors', href: '/about' }, { label: 'Newsroom', href: '/about' },
-    { label: 'Suppliers', href: '/contact' }, { label: 'Real estate', href: '/contact' },
+  'About Pasalho': [
+    { label: 'Our story', href: '/about' }, { label: 'Store locations', href: '/stores' },
+    { label: 'Contact us', href: '/contact' }, { label: 'Frequently asked questions', href: '/faq' },
   ],
   'Work With Us': [
-    { label: 'Careers', href: '/about' }, { label: 'Sell with us', href: '/contact' },
-    { label: 'Franchise', href: '/contact' }, { label: 'Partner portal', href: '/contact' },
+    { label: 'Careers', href: '/contact' }, { label: 'Supply to Pasalho', href: '/contact' },
+    { label: 'Business / wholesale', href: '/contact' }, { label: 'Franchise enquiries', href: '/contact' },
   ],
   Policies: [
     { label: 'Privacy', href: '/privacy' }, { label: 'Terms of use', href: '/terms' }, { label: 'Editorial policy', href: '/editorial-policy' },
@@ -33,22 +29,22 @@ const cols: Record<string, FooterLink[]> = {
 };
 
 const socialLinks = [
-  { label: 'Contact NOVA MART', href: '/contact', icon: MessageCircle },
-  { label: 'Find a NOVA MART store', href: '/stores', icon: Camera },
-  { label: 'Open your NOVA MART account', href: '/account', icon: AtSign },
-  { label: 'Work with NOVA MART', href: '/about', icon: BriefcaseBusiness },
+  { label: 'Contact Pasalho', href: '/contact', icon: MessageCircle },
+  { label: 'Find a Pasalho store', href: '/stores', icon: Camera },
+  { label: 'Open your Pasalho account', href: '/account', icon: AtSign },
+  { label: 'Work with Pasalho', href: '/about', icon: BriefcaseBusiness },
 ];
 
 export default function Footer() {
   return <footer>
     <div className="footer-top shell">
-      <Link href="/" className="logo light" aria-label="NOVA MART home"><i>N</i><span>NOVA<b>MART</b></span></Link>
-      <p>Everyday value. Modern retail.<br />Built for every home.</p>
-      <nav className="socials" aria-label="NOVA MART links">
+      <Link href="/" className="logo light" aria-label="Pasalho home"><span className="fresh-logo">pasalho.</span></Link>
+      <p>Better value for everyday shopping.<br />Groceries, household essentials and convenient ordering.</p>
+      <nav className="socials" aria-label="Pasalho links">
         {socialLinks.map(({ label, href, icon: Icon }) => <Link href={href} key={label} aria-label={label} title={label}><Icon aria-hidden="true" /></Link>)}
       </nav>
     </div>
     <div className="footer-grid shell">{Object.entries(cols).map(([heading, links]) => <div key={heading}><h3>{heading}</h3>{links.map(({ label, href }) => <Link href={href} key={label}>{label}</Link>)}</div>)}</div>
-    <div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Nepal Pvt. Ltd.</span><span>Nepal · English</span><span>Cash on delivery · Cash at POS</span></div>
+    <div className="footer-bottom shell"><span>© 2026 Pasalho Retail Nepal Pvt. Ltd.</span><span>Nepal · English</span><span>Cash on delivery · Cash at POS</span></div>
   </footer>;
 }

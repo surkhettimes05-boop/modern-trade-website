@@ -27,7 +27,7 @@ export const slugify = (value: string) => value.toLowerCase().trim().replace(/[^
 
 const image = (id: string) => id.startsWith('/') ? id : `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=82`;
 
-// StoreSync Opening SKU Plan v2: 642 launch SKUs across 29 practical departments.
+// Pasalho opening assortment: 642 launch SKUs across 29 practical departments.
 export const openingCategories: StorefrontCategory[] = [
   ['Rice', 25, 'Core', 'Local rice, basmati, jeera masino, sona mansuli'],
   ['Dal & pulses', 30, 'Core', 'Masoor, moong, rahar, chana, black dal, rajma'],
@@ -80,7 +80,7 @@ export const openingCategories: StorefrontCategory[] = [
 }));
 
 export const openingProducts: Product[] = [
-  { id: 'opening-rice-5kg', slug: 'premium-basmati-rice-5kg', sku: 'RICE-5KG', name: 'Premium Basmati Rice 5kg', brand: 'StoreSync Select', category: 'Rice', categoryId: 'opening-1', description: 'Long-grain premium rice for everyday family meals.', image: image('photo-1586201375761-83865001e31c'), price: 799, originalPrice: 999, rating: 4.8, reviews: 42, availability: 'AVAILABLE', tags: ['Core', 'Opening range'], unit: '5 kg bag', specifications: { SKU: 'RICE-5KG', Pack: '5 kg', Department: 'Rice' } },
+  { id: 'opening-rice-5kg', slug: 'premium-basmati-rice-5kg', sku: 'RICE-5KG', name: 'Premium Basmati Rice 5kg', brand: 'Pasalho Select', category: 'Rice', categoryId: 'opening-1', description: 'Long-grain premium rice for everyday family meals.', image: image('photo-1586201375761-83865001e31c'), price: 799, originalPrice: 999, rating: 4.8, reviews: 42, availability: 'AVAILABLE', tags: ['Core', 'Opening range'], unit: '5 kg bag', specifications: { SKU: 'RICE-5KG', Pack: '5 kg', Department: 'Rice' } },
   { id: 'opening-oil-1l', slug: 'sunflower-oil-1l', sku: 'OIL-1L', name: 'Sunflower Oil 1L', brand: 'StoreSync Select', category: 'Cooking oil & ghee', categoryId: 'opening-4', description: 'Refined sunflower oil for daily cooking.', image: image('photo-1474979266404-7eaacbcd87c5'), price: 179, originalPrice: 219, rating: 4.7, reviews: 35, availability: 'AVAILABLE', tags: ['Core', 'Opening range'], unit: '1 L bottle', specifications: { SKU: 'OIL-1L', Pack: '1 L', Department: 'Cooking oil & ghee' } },
   { id: 'opening-water-1l', slug: 'mineral-water-1l', sku: 'WATER-1L', name: 'Mineral Water 1L', brand: 'StoreSync Select', category: 'Water', categoryId: 'opening-11', description: 'Purified mineral water for home and on-the-go.', image: image('photo-1548839140-29a749e1cf4d'), price: 25, originalPrice: 30, rating: 4.6, reviews: 28, availability: 'AVAILABLE', tags: ['Core', 'Opening range'], unit: '1 L bottle', specifications: { SKU: 'WATER-1L', Pack: '1 L', Department: 'Water' } },
   { id: 'opening-noodles', slug: 'instant-noodles-family-pack', sku: 'NOODLES-FAM', name: 'Instant Noodles Family Pack', brand: 'Wai Wai', category: 'Instant noodles', categoryId: 'opening-6', description: 'Fast, familiar pantry comfort for busy days.', image: image('photo-1569718212165-3a8278d5f624'), price: 120, rating: 4.7, reviews: 31, availability: 'AVAILABLE', tags: ['Core', 'Opening range'], unit: '5 x 70 g', specifications: { SKU: 'NOODLES-FAM', Pack: '5 pack', Department: 'Instant noodles' } },
@@ -89,6 +89,11 @@ export const openingProducts: Product[] = [
 ];
 export function mapProduct(row: Record<string, unknown>): Product {
   const name = String(row.name || 'Product');
-  const image = String(row.image_url || (Array.isArray(row.images) ? row.images[0] : '') || '/placeholder-product.svg');
-  return { id: String(row.id), slug: slugify(name), sku: row.sku ? String(row.sku) : undefined, name, brand: String(row.brand || 'NOVA MART'), category: String(row.category_name || 'Everyday essentials'), categoryId: row.category_id ? String(row.category_id) : undefined, description: String(row.description || ''), image, price: Number(row.price || 0), originalPrice: row.original_price ? Number(row.original_price) : undefined, rating: Number(row.rating || 0), reviews: Number(row.review_count || 0), availability: String(row.availability_status || 'OUT_OF_STOCK').replaceAll('_', ' '), tags: row.is_featured ? ['Featured'] : [], unit: row.unit ? String(row.unit) : undefined, specifications: { SKU: String(row.sku || '—'), Pack: String(row.pack_size || '—'), Department: String(row.category_name || 'Everyday essentials') } };
+  const suppliedImage = String(row.image_url || (Array.isArray(row.images) ? row.images[0] : '') || '');
+  const artwork = suppliedImage || (name.toLowerCase().includes('avaru') ? '/products/avaru-momo-achar-masala-50g.webp'
+    : name.toLowerCase().includes('saanjh') && name.toLowerCase().includes('chana') ? '/products/saanjh-whole-chana-1kg.webp'
+    : name.toLowerCase().includes('gharchamak') && name.toLowerCase().includes('toilet') ? '/products/gharchamak-toilet-cleaner-500ml.webp'
+    : '/placeholder-product.svg');
+  const image = artwork;
+  return { id: String(row.id), slug: slugify(name), sku: row.sku ? String(row.sku) : undefined, name, brand: String(row.brand || 'Pasalho'), category: String(row.category_name || 'Everyday essentials'), categoryId: row.category_id ? String(row.category_id) : undefined, description: String(row.description || ''), image, price: Number(row.price || 0), originalPrice: row.original_price ? Number(row.original_price) : undefined, rating: Number(row.rating || 0), reviews: Number(row.review_count || 0), availability: String(row.availability_status || 'OUT_OF_STOCK').replaceAll('_', ' '), tags: row.is_featured ? ['Featured'] : [], unit: row.unit ? String(row.unit) : undefined, specifications: { SKU: String(row.sku || '—'), Pack: String(row.pack_size || '—'), Department: String(row.category_name || 'Everyday essentials') } };
 }

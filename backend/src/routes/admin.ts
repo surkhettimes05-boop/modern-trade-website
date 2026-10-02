@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { preHandler } from "../middleware/authentication.js";
 import { MARKET } from "../config/market.js";
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
 
 type AdminActor = {
   id: string;
@@ -690,6 +690,122 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Products CRUD
+  fastify.post("/products/sync-pasalo", async (request, reply) => {
+    const baseUrl = process.env.PASALHO_API_URL?.replace(/\/$/, "");
+    const apiKey = process.env.PASALHO_API_KEY;
+    if (!baseUrl || !apiKey) {
+      return reply.status(503).send({ error: "PASALHO catalog integration is not configured" });
+    }
+
+    const catalog: Array<Record<string, any>> = [];
+    const pageSize = 200;
+    let page = 1;
+    let total = Number.POSITIVE_INFINITY;
+    while (catalog.length < total) {
+      const url = new URL(`${baseUrl}/catalog/products`);
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("limit", String(pageSize));
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        request.log.warn({ status: response.status }, "PASALHO catalog sync fetch failed");
+        return reply.status(502).send({ error: "PASALHO catalog could not be fetched" });
+      }
+      const payload = await response.json() as any;
+      const result = payload?.data?.items ? payload.data : payload?.items ? payload : null;
+      if (!result || !Array.isArray(result.items) || !Number.isFinite(Number(result.total))) {
+        return reply.status(502).send({ error: "PASALHO returned an invalid catalog response" });
+      }
+      catalog.push(...result.items);
+      total = Number(result.total);
+      if (!result.items.length || catalog.length >= total) break;
+      page += 1;
+    }
+
+    const client = await getPool().connect();
+    let created = 0;
+    let updated = 0;
+    try {
+      await client.query("BEGIN");
+      for (const item of catalog) {
+        const id = String(item.id ?? "");
+        const sku = String(item.skuCode ?? "").trim();
+        const name = String(item.name ?? "").trim();
+        if (!id || !sku || !name) throw new Error("PASALHO catalog contains a product without ID, SKU, or name");
+        const category = item.category && typeof item.category === "object" ? item.category : null;
+        let categoryId: string | null = null;
+        if (category?.id && category?.name) {
+          const categoryResult = await client.query(
+            `INSERT INTO categories (pasalo_category_id, name_en, slug, status, published_at)
+             VALUES ($1, $2, $3, 'PUBLISHED', NOW())
+             ON CONFLICT (pasalo_category_id) WHERE pasalo_category_id IS NOT NULL
+             DO UPDATE SET name_en = EXCLUDED.name_en, status = 'PUBLISHED', published_at = COALESCE(categories.published_at, NOW()), updated_at = NOW()
+             RETURNING id`,
+            [category.id, String(category.name), `pasalo-${String(category.id).toLowerCase()}`],
+          );
+          categoryId = String(categoryResult.rows[0].id);
+        }
+        const rawImage = typeof item.imageUrl === "string" ? item.imageUrl : null;
+        let imageUrl: string | null = null;
+        if (rawImage) {
+          try { if (new URL(rawImage).protocol === "https:") imageUrl = rawImage; } catch { /* omit invalid source image */ }
+        }
+        const images = imageUrl ? JSON.stringify([imageUrl]) : null;
+        const unit = item.defaultUnit && typeof item.defaultUnit === "object" ? item.defaultUnit : null;
+        const existing = await client.query(
+          `SELECT id, sku, pasalo_product_id FROM products
+           WHERE pasalo_product_id = $1 OR sku = $2 FOR UPDATE`,
+          [id, sku],
+        );
+        const mapped = existing.rows.find((row) => row.pasalo_product_id === id);
+        const skuMatch = existing.rows.find((row) => row.sku === sku);
+        if (mapped && skuMatch && mapped.id !== skuMatch.id) {
+          throw new Error(`SKU ${sku} conflicts with an existing PASALHO product mapping`);
+        }
+        const target = mapped ?? skuMatch;
+        if (target && target.pasalo_product_id && target.pasalo_product_id !== id) {
+          throw new Error(`SKU ${sku} is already mapped to a different PASALHO product`);
+        }
+        const values = [id, sku, item.barcode ? String(item.barcode) : null, name,
+          item.description ? String(item.description) : null,
+          item.brand?.name ? String(item.brand.name) : null, categoryId,
+          item.packSize ? String(item.packSize) : null,
+          unit?.symbol ? String(unit.symbol) : unit?.name ? String(unit.name) : null, imageUrl, images];
+        if (target) {
+          await client.query(
+            `UPDATE products SET pasalo_product_id = $1, sku = $2, barcode = $3,
+               name_en = $4, description_en = $5, brand_name = $6, category_id = $7,
+               pack_size_en = $8, unit_en = $9, image_url = COALESCE($10, image_url),
+               images = COALESCE($11::jsonb, images), status = 'PUBLISHED',
+               published_at = COALESCE(published_at, NOW()), updated_at = NOW()
+             WHERE id = $12`,
+            [...values, target.id],
+          );
+          updated += 1;
+        } else {
+          await client.query(
+            `INSERT INTO products
+               (pasalo_product_id, sku, barcode, name_en, description_en, brand_name, category_id,
+                pack_size_en, unit_en, image_url, images, status, published_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, 'PUBLISHED', NOW())`,
+            values,
+          );
+          created += 1;
+        }
+      }
+      await client.query("COMMIT");
+      return { success: true, synced: catalog.length, created, updated };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      request.log.error({ error }, "PASALHO catalog sync failed");
+      return reply.status(409).send({ error: "PASALHO catalog sync was rolled back" });
+    } finally {
+      client.release();
+    }
+  });
+
   fastify.get("/products", async (request, reply) => {
     const input = z
       .object({

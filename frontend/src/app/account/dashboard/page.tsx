@@ -3,6 +3,7 @@
 import { useCallback, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { resilientFetch } from '@/lib/resilientFetch';
+import { trackStorefrontEvent } from '@/lib/analytics';
 
 interface Customer {
   id: string;
@@ -72,6 +73,7 @@ export default function AccountDashboard() {
         credentials: 'include',
         cache: 'no-store',
       });
+      trackStorefrontEvent('LOYALTY_POINTS_VIEWED');
       const loyaltyData = await loyaltyResponse.json() as LoyaltySummary & { error?: string };
       if (!loyaltyResponse.ok) {
         throw new Error(loyaltyData.error || 'Failed to load loyalty account');
@@ -141,7 +143,7 @@ export default function AccountDashboard() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold text-gray-900">StoreSync</h1>
+          <h1 className="text-xl font-bold text-gray-900">Pasalho</h1>
           <button
             onClick={handleLogout}
             className="text-gray-600 hover:text-gray-900"
@@ -153,7 +155,7 @@ export default function AccountDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Points Balance Card */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 mb-8 text-white">
+        <div className="bg-linear-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 mb-8 text-white">
           <h2 className="text-lg font-medium mb-2">Available Points</h2>
           <p className="text-5xl font-bold mb-4">{balance?.available || 0}</p>
           <div className="grid grid-cols-2 gap-4 text-sm">

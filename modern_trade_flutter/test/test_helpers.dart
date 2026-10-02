@@ -14,16 +14,29 @@ class MemorySessionStore implements SecureSessionStore {
   Future<void> write(String key, String value) async => values[key] = value;
 }
 
-ApiClient testApi(Future<http.Response> Function(http.Request) handler,
-        {MemorySessionStore? store, SessionExpiredCallback? onExpired}) =>
+ApiClient testApi(
+  Future<http.Response> Function(http.Request) handler, {
+  MemorySessionStore? store,
+  SessionExpiredCallback? onExpired,
+  ApiRequestObserver? onMetric,
+  List<Duration> retryDelays = const [],
+}) =>
     ApiClient(
       baseUrl: 'https://example.test',
       client: MockClient(handler),
       sessionStore: store ?? MemorySessionStore(),
       onSessionExpired: onExpired,
+      onRequestMetric: onMetric,
+      retryDelays: retryDelays,
     );
 
-http.Response jsonResponse(Object? body,
-        [int status = 200, Map<String, String>? headers]) =>
-    http.Response(jsonEncode(body), status,
-        headers: headers ?? {'content-type': 'application/json'});
+http.Response jsonResponse(
+  Object? body, [
+  int status = 200,
+  Map<String, String>? headers,
+]) =>
+    http.Response(
+      jsonEncode(body),
+      status,
+      headers: headers ?? {'content-type': 'application/json'},
+    );

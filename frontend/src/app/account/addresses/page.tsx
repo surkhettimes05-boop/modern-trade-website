@@ -32,7 +32,7 @@ export default function SavedAddressesPage() {
         const session = await loadCustomerSession();
         if (controller.signal.aborted || !session) return;
         setCustomer(session);
-        const saved = await loadCustomerAddresses(session.id);
+        const saved = await loadCustomerAddresses();
         if (!controller.signal.aborted) setAddresses(saved);
       } catch (caught) {
         if (!controller.signal.aborted)

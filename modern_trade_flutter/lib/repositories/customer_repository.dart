@@ -7,8 +7,7 @@ class CustomerRepository {
   final ApiClient api;
   Future<List<CustomerOrder>> loadOrders() async =>
       mapList(await api.get('/api/customer/orders'), CustomerOrder.fromJson);
-  Future<dynamic> loadAddresses(String customerId) =>
-      api.get('/api/addresses/customer/$customerId');
+  Future<dynamic> loadAddresses() => api.get('/api/customer/addresses');
   Future<void> deleteAddress(String addressId) async =>
       api.delete('/api/addresses/$addressId');
   Future<void> createAddress(Map<String, Object?> address) async =>

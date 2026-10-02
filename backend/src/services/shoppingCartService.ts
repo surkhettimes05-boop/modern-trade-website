@@ -4,7 +4,7 @@ interface ShoppingCart {
   id: string;
   customer_id: string;
   session_id: string;
-  store_id: string;
+  store_id: string | null;
   status: string;
   created_at: Date;
   updated_at: Date;
@@ -31,7 +31,7 @@ export class ShoppingCartService {
   async getOrCreateCart(cartData: {
     customer_id?: string;
     session_id?: string;
-    store_id: string;
+    store_id?: string | null;
   }): Promise<ShoppingCart> {
     // Try to find existing cart
     let cart: ShoppingCart | null = null;
@@ -39,9 +39,9 @@ export class ShoppingCartService {
     if (cartData.customer_id) {
       const result = await query(
         `SELECT * FROM shopping_carts 
-         WHERE customer_id = $1 AND store_id = $2 AND status = 'ACTIVE'
+         WHERE customer_id = $1 AND store_id IS NOT DISTINCT FROM $2 AND status = 'ACTIVE'
          ORDER BY created_at DESC LIMIT 1`,
-        [cartData.customer_id, cartData.store_id],
+        [cartData.customer_id, cartData.store_id ?? null],
       );
       if (result.rows.length > 0) {
         cart = result.rows[0];
@@ -51,9 +51,9 @@ export class ShoppingCartService {
     if (!cart && cartData.session_id) {
       const result = await query(
         `SELECT * FROM shopping_carts 
-         WHERE session_id = $1 AND store_id = $2 AND status = 'ACTIVE'
+         WHERE session_id = $1 AND store_id IS NOT DISTINCT FROM $2 AND status = 'ACTIVE'
          ORDER BY created_at DESC LIMIT 1`,
-        [cartData.session_id, cartData.store_id],
+        [cartData.session_id, cartData.store_id ?? null],
       );
       if (result.rows.length > 0) {
         cart = result.rows[0];
@@ -80,7 +80,7 @@ export class ShoppingCartService {
       [
         cartData.customer_id || null,
         cartData.session_id || null,
-        cartData.store_id,
+        cartData.store_id ?? null,
       ],
     );
 
@@ -102,7 +102,7 @@ export class ShoppingCartService {
    */
   async getCartItems(cartId: string): Promise<CartItem[]> {
     const result = await query(
-      `SELECT ci.*, p.name as product_name, p.sku 
+      `SELECT ci.*, p.name_en as product_name, p.sku
        FROM cart_items ci
        LEFT JOIN products p ON ci.product_id = p.id
        WHERE ci.cart_id = $1
@@ -124,13 +124,11 @@ export class ShoppingCartService {
     metadata?: any;
   }): Promise<CartItem> {
     const product = await query(
-      `SELECT COALESCE(store_price.price, organization_price.price) AS price,
-              COALESCE(spa.availability_status, CASE WHEN EXISTS (SELECT 1 FROM batch_inventory bi WHERE bi.product_id = p.id AND bi.store_id = sc.store_id AND bi.quantity > 0) THEN 'AVAILABLE' ELSE 'OUT_OF_STOCK' END) AS availability_status
+      `SELECT organization_price.price AS price,
+              'CHECK_AT_CHECKOUT'::text AS availability_status
        FROM shopping_carts sc
        JOIN products p ON p.id = $2 AND p.status = 'PUBLISHED'
-       LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = sc.store_id AND active = TRUE ORDER BY valid_from DESC LIMIT 1) store_price ON TRUE
        LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id IS NULL AND active = TRUE ORDER BY valid_from DESC LIMIT 1) organization_price ON TRUE
-       LEFT JOIN store_product_availability spa ON spa.product_id = p.id AND spa.store_id = sc.store_id
        WHERE sc.id = $1 AND sc.status = 'ACTIVE'`,
       [itemData.cart_id, itemData.product_id],
     );
@@ -155,10 +153,10 @@ export class ShoppingCartService {
       // Update existing item
       const result = await query(
         `UPDATE cart_items 
-         SET quantity = quantity + $1,
-             unit_price = $2,
-             discount_amount = $3,
-             line_total = (quantity + $1) * $2 - $3,
+         SET quantity = quantity + $1::integer,
+             unit_price = $2::numeric,
+             discount_amount = $3::numeric,
+             line_total = (quantity + $1::integer) * $2::numeric - $3::numeric,
              updated_at = NOW()
          WHERE id = $4
          RETURNING *`,
@@ -208,27 +206,14 @@ export class ShoppingCartService {
     );
     if (!price.rows[0] || price.rows[0].price === null)
       throw new Error("Product price is no longer available");
-    const fields: string[] = ["unit_price = $1"];
-    const values: any[] = [Number(price.rows[0].price)];
-    let paramIndex = 2;
-
-    if (updates.quantity !== undefined) {
-      fields.push(`quantity = $${paramIndex}`);
-      values.push(updates.quantity);
-      paramIndex++;
-    }
-
-    if (fields.length === 0) {
-      throw new Error("No fields to update");
-    }
-
-    fields.push(`line_total = quantity * unit_price - discount_amount`);
-    fields.push(`updated_at = NOW()`);
-    values.push(itemId);
-
     const result = await query(
-      `UPDATE cart_items SET ${fields.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
-      values,
+      `UPDATE cart_items
+          SET quantity = COALESCE($1::integer, quantity),
+              unit_price = $2::numeric,
+              line_total = COALESCE($1::integer, quantity) * $2::numeric - discount_amount,
+              updated_at = NOW()
+        WHERE id = $3::uuid RETURNING *`,
+      [updates.quantity ?? null, Number(price.rows[0].price), itemId],
     );
 
     return result.rows[0];

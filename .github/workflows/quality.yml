@@ -1,9 +1,10 @@
 name: Quality gates
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/fix-ghcr-publish]
 
 permissions:
   contents: read
@@ -13,6 +14,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  infrastructure:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ops/terraform/cloudflare
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.11.4
+      - run: terraform fmt -check
+      - run: terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform validate
+
   flutter:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -23,14 +40,35 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: subosito/flutter-action@e938fdf56512cc96ef2f93601a5a40bde3801046 # v2
         with:
+          flutter-version: 3.47.1
           channel: stable
           cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
+      - run: dart run tool/check_secrets.dart
       - run: dart format --output=none --set-exit-if-changed .
-      - run: flutter analyze
-      - run: flutter test
-      - name: Validate unsigned release bundle
-        run: flutter build appbundle --release --dart-define=API_BASE_URL=https://storesync-backend-dg8z.onrender.com
+      - run: flutter analyze --fatal-infos
+      - run: flutter test --coverage
+      - name: Generate disposable CI release key
+        shell: bash
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/ci-release.jks" \
+            -storepass ci-release-only \
+            -keypass ci-release-only \
+            -alias ci-release \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=CI Release,OU=Test,O=StoreSync,L=Kathmandu,C=NP"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/ci-release.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=ci-release-only" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=ci-release" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=ci-release-only" >> "$GITHUB_ENV"
+      - name: Validate shrunk and obfuscated release bundle
+        run: >-
+          flutter build appbundle --release
+          --obfuscate
+          --split-debug-info=build/symbols/android-ci
+          --dart-define=APP_ENV=staging
+          --dart-define=API_BASE_URL=https://staging.invalid
 
   quality:
     runs-on: ubuntu-latest

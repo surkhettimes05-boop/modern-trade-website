@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Montserrat } from "next/font/google";
 import "./globals.css";
+import "@fontsource-variable/inter";
+import "./storefront.css";
 import { CommerceProvider } from "@/components/CommerceClient";
 import JsonLd from "@/components/JsonLd";
 import { getCatalog } from "@/lib/serverCatalog";
@@ -8,23 +10,27 @@ import { absoluteUrl, SITE } from "@/lib/seo";
 import WebVitals from "@/components/WebVitals";
 import RouteChrome from "@/components/RouteChrome";
 
-const inter = localFont({
-  src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+// The customer catalog is supplied by the Commerce backend at runtime. Do not
+// freeze an empty catalog into the production image during `next build`.
+export const dynamic = "force-dynamic";
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  variable: "--font-montserrat",
   display: "swap",
-  variable: "--font-inter",
-  weight: "100 900",
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "NOVA MART — Everyday value for every home",
-    template: "%s | NOVA MART",
+    default: "Pasalho — Your Money Deserves Proper Value.",
+    template: "%s | Pasalho",
   },
   description: SITE.description,
   metadataBase: new URL(SITE.url),
   alternates: { canonical: absoluteUrl("/") },
   openGraph: {
-    title: "NOVA MART — Everyday value for every home",
+    title: "Pasalho — Your Money Deserves Proper Value.",
     description: SITE.description,
     url: absoluteUrl("/"),
     siteName: SITE.name,
@@ -33,7 +39,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "NOVA MART — Everyday value for every home",
+    title: "Pasalho — Your Money Deserves Proper Value.",
     description: SITE.description,
   },
   robots: { index: true, follow: true },
@@ -44,7 +50,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { products, categories, stores } = await getCatalog();
+  const { products, categories } = await getCatalog();
   const organization = {
     "@context": "https://schema.org",
     "@type": "Organization",
@@ -64,13 +70,13 @@ export default async function RootLayout({
   };
   return (
     <html lang="en-NP" className="antialiased">
-      <body className={`${inter.variable} min-h-screen flex flex-col`}>
+      <body className={`${montserrat.variable} min-h-screen flex flex-col`}>
         <JsonLd data={[organization, website]} />
         <WebVitals />
         <CommerceProvider
           initialProducts={products}
           initialCategories={categories}
-          initialStores={stores}
+          initialCatalogLoaded
         >
           <RouteChrome>{children}</RouteChrome>
         </CommerceProvider>

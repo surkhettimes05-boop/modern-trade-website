@@ -24,9 +24,9 @@ test.describe("Core Web Vitals release budget", () => {
     });
 
     await page.goto("/", { waitUntil: "load" });
-    await page.locator(".hero-main img").waitFor({ state: "visible" });
+    await page.locator(".fresh-hero img").first().waitFor({ state: "visible" });
     await page.waitForFunction(() => {
-      const image = document.querySelector<HTMLImageElement>(".hero-main img");
+      const image = document.querySelector<HTMLImageElement>(".fresh-hero img");
       return Boolean(image?.complete && image.naturalWidth > 0);
     });
     await page.waitForTimeout(250);

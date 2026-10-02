@@ -51,7 +51,7 @@ export default function FAQPage() {
 
         <div className="mt-12 p-6 bg-emerald-50 border border-emerald-200 rounded-lg">
           <h2 className="text-lg font-semibold text-emerald-900 mb-2">Still need help?</h2>
-          <p className="text-emerald-800">Contact NOVA MART support or ask the team at your selected store for information specific to your location.</p>
+          <p className="text-emerald-800">Contact PASALHO support or ask the team at your selected store for information specific to your location.</p>
         </div>
       </div>
     </div>

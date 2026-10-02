@@ -42,8 +42,9 @@ export async function operationsAuthRoutes(fastify: FastifyInstance) {
         `SELECT candidate.*,
                 CASE
                   WHEN candidate.password_hash IS NULL
-                    THEN public.crypt($2, $3) = $3 AND FALSE
-                  ELSE candidate.password_hash = public.crypt($2, candidate.password_hash)
+                    THEN public.crypt($2, replace($3, '$2b$', '$2a$')) = replace($3, '$2b$', '$2a$') AND FALSE
+                  ELSE replace(candidate.password_hash, '$2b$', '$2a$') =
+                       public.crypt($2, replace(candidate.password_hash, '$2b$', '$2a$'))
                 END AS password_valid
            FROM (VALUES (1)) AS guard(_)
            LEFT JOIN LATERAL (

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" fill="none">
+  <rect x="0" y="0" width="60" height="60" rx="12" fill="#063B5C"/>
+  <path d="M18 15C18 11.6863 20.6863 9 24 9H33C38.25 9 43 13.75 43 19C43 24.25 38.25 29 33 29H27.5V45C27.5 48.3137 24.8137 51 21.5 51C18.1863 51 15.5 48.3137 15.5 45V15H18ZM27.5 18.5V24.5H33C35.25 24.5 37 22.75 37 20.5C37 18.25 35.25 16.5 33 16.5H27.5V18.5Z" fill="#F7F5EF"/>
+  <text x="72" y="40" font-family="Montserrat, Arial, sans-serif" font-weight="900" font-size="28" fill="#063B5C" letter-spacing="-0.5">PASALHO</text>
+</svg>
