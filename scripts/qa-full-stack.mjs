@@ -11,6 +11,11 @@ const qaEnv = {
   QA_BOOTSTRAP_ADMIN_PASSWORD:
     process.env.QA_BOOTSTRAP_ADMIN_PASSWORD ||
     `Qa!${crypto.randomBytes(24).toString("base64url")}9`,
+  QA_DEMO_OTP_PHONE: process.env.QA_DEMO_OTP_PHONE || "9800000001",
+  QA_DEMO_OTP_CODE: process.env.QA_DEMO_OTP_CODE || "654321",
+  QA_DEMO_OTP_EXPIRES_AT:
+    process.env.QA_DEMO_OTP_EXPIRES_AT ||
+    new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   PLAYWRIGHT_BASE_URL:
     process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:53000",
 };

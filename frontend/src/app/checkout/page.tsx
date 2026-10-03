@@ -7,8 +7,9 @@ import { useShop } from '@/components/CommerceClient';
 import { MARKET, formatPrice } from '@/lib/market';
 import { resilientFetch } from '@/lib/resilientFetch';
 
-type Division = { id: number; name_en?: string; name?: string; ward_number?: number };
+type Division = { id: number; name_en?: string; name?: string; ward_number?: number; wards?: Division[] };
 type DeliveryQuote = {
+  key?: string;
   serviceable: boolean;
   reason?: string;
   zone_name?: string;
@@ -29,7 +30,6 @@ export default function CheckoutPage() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [deliveryType, setDeliveryType] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY');
   const [municipalities, setMunicipalities] = useState<Division[]>([]);
-  const [wards, setWards] = useState<Division[]>([]);
   const [municipalityId, setMunicipalityId] = useState('');
   const [wardId, setWardId] = useState('');
   const [quote, setQuote] = useState<DeliveryQuote | null>(null);
@@ -37,27 +37,31 @@ export default function CheckoutPage() {
     () => items.reduce((total, item) => total + item.product.price * item.qty, 0),
     [items],
   );
+  const wards = useMemo(
+    () =>
+      municipalities.find(
+        (candidate) => String(candidate.id) === municipalityId,
+      )?.wards || [],
+    [municipalities, municipalityId],
+  );
+  const quoteKey =
+    deliveryType === 'DELIVERY' &&
+    authenticated &&
+    selectedStore &&
+    municipalityId &&
+    wardId
+      ? [selectedStore.id, municipalityId, wardId, subtotal].join(':')
+      : '';
+  const activeQuote = quote?.key === quoteKey ? quote : null;
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      resilientFetch('/api/auth/session/validate', {
-        signal: controller.signal,
-        credentials: 'include',
-        cache: 'no-store',
-      }),
-      resilientFetch('/api/admin/divisions/municipalities', {
-        signal: controller.signal,
-        cache: 'no-store',
-      }),
-    ])
-      .then(async ([sessionResponse, municipalityResponse]) => {
-        setAuthenticated(sessionResponse.ok);
-        if (municipalityResponse.ok) {
-          const body: unknown = await municipalityResponse.json();
-          if (Array.isArray(body)) setMunicipalities(body as Division[]);
-        }
-      })
+    resilientFetch('/api/auth/session/validate', {
+      signal: controller.signal,
+      credentials: 'include',
+      cache: 'no-store',
+    })
+      .then((sessionResponse) => setAuthenticated(sessionResponse.ok))
       .catch(() => {
         if (!controller.signal.aborted) setAuthenticated(false);
       });
@@ -65,38 +69,25 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    if (!municipalityId) {
-      setWards([]);
-      setWardId('');
-      return;
-    }
+    if (!authenticated || !selectedStore) return;
     const controller = new AbortController();
     resilientFetch(
-      `/api/admin/divisions/wards?municipality_id=${encodeURIComponent(municipalityId)}`,
-      { signal: controller.signal, cache: 'no-store' },
+      `/api/checkout/service-areas?store_id=${encodeURIComponent(selectedStore.id)}`,
+      { signal: controller.signal, credentials: 'include', cache: 'no-store' },
     )
       .then(async (response) => {
-        if (!response.ok) throw new Error('Could not load wards');
+        if (!response.ok) throw new Error('Could not load delivery areas');
         const body: unknown = await response.json();
-        setWards(Array.isArray(body) ? (body as Division[]) : []);
+        setMunicipalities(Array.isArray(body) ? (body as Division[]) : []);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setWards([]);
+        if (!controller.signal.aborted) setMunicipalities([]);
       });
     return () => controller.abort();
-  }, [municipalityId]);
+  }, [authenticated, selectedStore]);
 
   useEffect(() => {
-    if (
-      deliveryType !== 'DELIVERY' ||
-      !authenticated ||
-      !selectedStore ||
-      !municipalityId ||
-      !wardId
-    ) {
-      setQuote(null);
-      return;
-    }
+    if (!quoteKey || !selectedStore) return;
     const controller = new AbortController();
     resilientFetch('/api/checkout/delivery-quote', {
       method: 'POST',
@@ -115,15 +106,23 @@ export default function CheckoutPage() {
     })
       .then(async (response) => {
         const body = (await response.json().catch(() => ({}))) as DeliveryQuote;
-        setQuote({ ...body, serviceable: response.ok && body.serviceable !== false });
+        setQuote({
+          ...body,
+          key: quoteKey,
+          serviceable: response.ok && body.serviceable !== false,
+        });
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setQuote({ serviceable: false, reason: 'Could not verify delivery area' });
+          setQuote({
+            key: quoteKey,
+            serviceable: false,
+            reason: 'Could not verify delivery area',
+          });
         }
       });
     return () => controller.abort();
-  }, [authenticated, deliveryType, municipalityId, selectedStore, subtotal, wardId]);
+  }, [municipalityId, quoteKey, selectedStore, subtotal, wardId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -139,8 +138,8 @@ export default function CheckoutPage() {
       setError('Sign in with your phone number before placing an order.');
       return;
     }
-    if (deliveryType === 'DELIVERY' && !quote?.serviceable) {
-      setError(quote?.reason || 'Choose a serviceable delivery area.');
+    if (deliveryType === 'DELIVERY' && !activeQuote?.serviceable) {
+      setError(activeQuote?.reason || 'Choose a serviceable delivery area.');
       return;
     }
 
@@ -174,7 +173,7 @@ export default function CheckoutPage() {
       const clearResponse = await resilientFetch(`/api/shopping-cart/${cart.id}/clear`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+        headers: { 'x-csrf-token': csrf },
       });
       if (!clearResponse.ok) {
         const clearBody = await clearResponse.json().catch(() => ({}));
@@ -283,7 +282,10 @@ export default function CheckoutPage() {
           <select
             name="delivery_type"
             value={deliveryType}
-            onChange={(event) => setDeliveryType(event.target.value as 'DELIVERY' | 'PICKUP')}
+            onChange={(event) => {
+              setDeliveryType(event.target.value as 'DELIVERY' | 'PICKUP');
+              setQuote(null);
+            }}
             className="mt-1 w-full rounded border p-2"
           >
             <option value="DELIVERY">Delivery</option>
@@ -306,10 +308,11 @@ export default function CheckoutPage() {
                   onChange={(event) => {
                     setMunicipalityId(event.target.value);
                     setWardId('');
+                    setQuote(null);
                   }}
                   className="mt-1 w-full rounded border p-2"
                 >
-                  <option value="">Choose municipality</option>
+                  <option value="">Choose service area</option>
                   {municipalities.map((municipality) => (
                     <option key={municipality.id} value={municipality.id}>
                       {municipality.name_en || municipality.name || `Municipality ${municipality.id}`}
@@ -322,7 +325,10 @@ export default function CheckoutPage() {
                 <select
                   required
                   value={wardId}
-                  onChange={(event) => setWardId(event.target.value)}
+                  onChange={(event) => {
+                    setWardId(event.target.value);
+                    setQuote(null);
+                  }}
                   disabled={!municipalityId}
                   className="mt-1 w-full rounded border p-2 disabled:bg-slate-100"
                 >
@@ -341,12 +347,12 @@ export default function CheckoutPage() {
             </label>
 
             {municipalityId && wardId ? (
-              <div className={`rounded-xl border p-4 text-sm ${quote?.serviceable ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
-                {quote === null
+              <div className={`rounded-xl border p-4 text-sm ${activeQuote?.serviceable ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+                {activeQuote === null
                   ? 'Checking delivery availability…'
-                  : quote.serviceable
-                    ? `${quote.zone_name || 'Delivery area'} · Delivery ${formatPrice(Number(quote.delivery_fee || 0))}${quote.estimated_delivery_hours ? ` · about ${quote.estimated_delivery_hours}h` : ''}`
-                    : quote.reason || 'This address is outside the current delivery area.'}
+                  : activeQuote.serviceable
+                    ? `${activeQuote.zone_name || 'Delivery area'} · Delivery ${formatPrice(Number(activeQuote.delivery_fee || 0))}${activeQuote.estimated_delivery_hours ? ` · about ${activeQuote.estimated_delivery_hours}h` : ''}`
+                    : activeQuote.reason || 'This address is outside the current delivery area.'}
               </div>
             ) : null}
           </>
@@ -358,8 +364,8 @@ export default function CheckoutPage() {
 
         <div className="rounded-xl bg-slate-50 p-4 text-sm">
           <p className="flex justify-between"><span>Products</span><strong>{formatPrice(subtotal)}</strong></p>
-          <p className="mt-2 flex justify-between"><span>Delivery</span><strong>{deliveryType === 'PICKUP' ? formatPrice(0) : quote?.serviceable ? formatPrice(Number(quote.delivery_fee || 0)) : 'Calculated by area'}</strong></p>
-          <p className="mt-3 flex justify-between border-t border-slate-200 pt-3 text-base"><span>Total</span><strong>{formatPrice(subtotal + (deliveryType === 'DELIVERY' && quote?.serviceable ? Number(quote.delivery_fee || 0) : 0))}</strong></p>
+          <p className="mt-2 flex justify-between"><span>Delivery</span><strong>{deliveryType === 'PICKUP' ? formatPrice(0) : activeQuote?.serviceable ? formatPrice(Number(activeQuote.delivery_fee || 0)) : 'Calculated by area'}</strong></p>
+          <p className="mt-3 flex justify-between border-t border-slate-200 pt-3 text-base"><span>Total</span><strong>{formatPrice(subtotal + (deliveryType === 'DELIVERY' && activeQuote?.serviceable ? Number(activeQuote.delivery_fee || 0) : 0))}</strong></p>
         </div>
 
         {error ? <p role="alert" className="rounded bg-red-50 p-3 text-red-700">{error}</p> : null}
@@ -369,7 +375,7 @@ export default function CheckoutPage() {
             authenticated !== true ||
             !selectedStore ||
             selectedStore.is_temporarily_closed ||
-            (deliveryType === 'DELIVERY' && !quote?.serviceable)
+            (deliveryType === 'DELIVERY' && !activeQuote?.serviceable)
           }
           className="primary-btn"
         >

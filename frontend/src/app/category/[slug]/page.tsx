@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { CatalogGrid } from '@/components/CatalogClient';
 import JsonLd from '@/components/JsonLd';
-import { openingCategories } from '@/lib/catalog';
+
 import { absoluteUrl, breadcrumbSchema, buildMetadata } from '@/lib/seo';
 import { getCatalog, getCategoryBySlug } from '@/lib/serverCatalog';
 
 type Props = { params: Promise<{ slug: string }> };
 export const dynamicParams = true;
-export function generateStaticParams() { return openingCategories.map(({ slug }) => ({ slug })); }
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;

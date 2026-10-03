@@ -49,12 +49,19 @@ jobs:
           migration_password="$(openssl rand -hex 24)"
           app_password="$(openssl rand -hex 24)"
           bootstrap_password="Qa!$(openssl rand -hex 24)9"
+          demo_otp_phone="9800000001"
+          demo_otp_code="654321"
+          demo_otp_expires_at="$(date -u -d '+1 hour' +'%Y-%m-%dT%H:%M:%SZ')"
           echo "::add-mask::$migration_password"
           echo "::add-mask::$app_password"
           echo "::add-mask::$bootstrap_password"
+          echo "::add-mask::$demo_otp_code"
           echo "QA_MIGRATION_DB_PASSWORD=$migration_password" >> "$GITHUB_ENV"
           echo "QA_APP_DB_PASSWORD=$app_password" >> "$GITHUB_ENV"
           echo "QA_BOOTSTRAP_ADMIN_PASSWORD=$bootstrap_password" >> "$GITHUB_ENV"
+          echo "QA_DEMO_OTP_PHONE=$demo_otp_phone" >> "$GITHUB_ENV"
+          echo "QA_DEMO_OTP_CODE=$demo_otp_code" >> "$GITHUB_ENV"
+          echo "QA_DEMO_OTP_EXPIRES_AT=$demo_otp_expires_at" >> "$GITHUB_ENV"
       - name: Security static checks
         run: npm run security:static
       - run: npm ci --prefix backend

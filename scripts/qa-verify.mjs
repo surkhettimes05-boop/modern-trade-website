@@ -86,20 +86,47 @@ const postgres = runDocker([
   "-d",
   "storesync_qa",
   "-Atc",
-  "SELECT count(*) FROM schema_migrations; SELECT to_regclass('public.order_events'); SELECT count(*) FROM stores; SELECT count(*) FROM staff;",
+  [
+    "SELECT count(*) FROM schema_migrations",
+    "SELECT count(*) FROM schema_migrations WHERE migration_id = '030_launch_order_hardening'",
+    "SELECT to_regclass('public.order_events')",
+    "SELECT count(*) FROM stores WHERE status = 'PUBLISHED'",
+    "SELECT count(*) FROM staff WHERE status = 'ACTIVE'",
+    "SELECT count(*) FROM delivery_zones WHERE is_active = TRUE",
+    "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'web_orders' AND column_name IN ('shipping_municipality_id','shipping_ward_id','delivery_zone_id','delivery_fee','delivery_quote','fulfillment_store_id','cod_collected_at','cod_collected_by')",
+  ].join("; ") + ";",
 ]);
 const postgresLines = postgres
   .split(/\r?\n/)
   .map((line) => line.trim())
   .filter(Boolean);
-if (
-  postgresLines.join("\n") !==
-  `${expectedMigrationCount}\norder_events\n2\n1`
-) {
-  throw new Error(`Unexpected PostgreSQL QA verification output:\n${postgres}`);
+
+const [
+  migrationCount,
+  launchMigrationCount,
+  orderEventsTable,
+  publishedStores,
+  activeStaff,
+  activeDeliveryZones,
+  launchOrderColumns,
+] = postgresLines;
+
+const valid =
+  Number(migrationCount) === expectedMigrationCount &&
+  Number(launchMigrationCount) === 1 &&
+  orderEventsTable === "order_events" &&
+  Number(publishedStores) >= 1 &&
+  Number(activeStaff) >= 1 &&
+  Number(activeDeliveryZones) >= 1 &&
+  Number(launchOrderColumns) === 8;
+
+if (!valid) {
+  throw new Error(
+    `Unexpected PostgreSQL QA verification output:\n${postgres}\nExpected migrations=${expectedMigrationCount}, launch migration=1, published stores>=1, active staff>=1, active delivery zones>=1, launch order columns=8`,
+  );
 }
 results.push(
-  `PostgreSQL: ${expectedMigrationCount} migrations, order_events, 2 stores, 1 staff`,
+  `PostgreSQL: ${expectedMigrationCount} migrations, launch order schema, published store, staff and delivery zone verified`,
 );
 
 const roleVerification = runDocker([

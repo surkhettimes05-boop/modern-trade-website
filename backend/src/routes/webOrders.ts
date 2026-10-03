@@ -6,10 +6,8 @@ import { csrfMatches } from "../utils/csrf.js";
 import { requireStoreAccess } from "../plugins/authorization.js";
 import { query } from "../database/connection.js";
 import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
-import { CheckoutService } from "../services/checkoutService.js";
 
 const webOrderService = new WebOrderService();
-const checkoutService = new CheckoutService();
 
 export async function webOrderRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", authenticateStaff);
@@ -90,56 +88,8 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       });
     }
   });
-  // Web Order: Create order from cart
-  fastify.post("/web-orders", async (request, reply) => {
-    const schema = z
-      .object({
-        customer_id: z.string().uuid(),
-        store_id: z.string().uuid(),
-        cart_id: z.string().uuid(),
-        payment_method: z.literal("COD"),
-        idempotency_key: z.string().min(8).max(100),
-        shipping_name: z.string().min(1),
-        shipping_phone: z.string(),
-        shipping_address: z.string().min(1),
-        shipping_city: z.string(),
-        shipping_state: z.string(),
-        shipping_postal_code: z.string(),
-        shipping_country: z.string(),
-        delivery_type: z.enum(["DELIVERY", "PICKUP"]),
-        delivery_date: z.coerce.date().optional(),
-        delivery_time_slot: z.string().optional(),
-        notes: z.string().optional(),
-      })
-      .strict();
-
-    const orderData = schema.parse(request.body);
-
-    try {
-      const order = await checkoutService.createCodOrder({
-        customerId: orderData.customer_id,
-        storeId: orderData.store_id,
-        cartId: orderData.cart_id,
-        idempotencyKey: orderData.idempotency_key,
-        deliveryType: orderData.delivery_type,
-        shippingName: orderData.shipping_name,
-        shippingPhone: orderData.shipping_phone,
-        shippingAddress: orderData.shipping_address,
-        shippingCity: orderData.shipping_city,
-        shippingState: orderData.shipping_state,
-        shippingPostalCode: orderData.shipping_postal_code,
-        shippingCountry: orderData.shipping_country,
-        notes: orderData.notes,
-        actorId: (request.user as { id: string }).id,
-      });
-      return reply.status(201).send(order);
-    } catch (error) {
-      if (error instanceof Error && error.message === "Cart is empty") {
-        return reply.status(400).send({ error: "Cart is empty" });
-      }
-      return reply.status(500).send({ error: "Failed to create web order" });
-    }
-  });
+  // Order creation is intentionally handled only by /checkout/cod.
+  // Staff routes below operate on already-created orders.
 
   // Web Order: Get order by ID
   fastify.get("/web-orders/:orderId", async (request, reply) => {
@@ -219,6 +169,23 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Web Order: Get reservation state for fulfillment/reconciliation.
+  // This inherits order read capability and authoritative store scoping from
+  // the route-level preHandler instead of requiring privileged-admin MFA.
+  fastify.get("/web-orders/:orderId/reservations", async (request, reply) => {
+    const schema = z.object({ orderId: z.string().uuid() });
+    const { orderId } = schema.parse(request.params);
+    const result = await query(
+      `SELECT reservation_id, product_id, store_id, quantity, status,
+              reserved_at, expires_at, updated_at
+         FROM stock_reservations
+        WHERE order_id = $1
+        ORDER BY reserved_at, reservation_id`,
+      [orderId],
+    );
+    return reply.send(result.rows);
+  });
+
   // Web Order: Get order items
   fastify.get("/web-orders/:orderId/items", async (request, reply) => {
     const schema = z.object({
@@ -279,6 +246,12 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         message.startsWith("Invalid transition") ||
         message.includes("COD cash receipt") ||
         message.includes("Insufficient inventory");
+      if (!clientError) {
+        request.log.error(
+          { err: error, orderId, requestedStatus: status },
+          "Web order status transition failed",
+        );
+      }
       return reply.status(clientError ? 409 : 500).send({ error: message });
     }
   });

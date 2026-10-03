@@ -1,7 +1,6 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
-import { stockReservationRoutes } from "../routes/stockReservations.js";
 import { deliveryZoneRoutes } from "../routes/deliveryZones.js";
 import { codPolicyRoutes } from "../routes/codPolicies.js";
 import { orderLifecycleRoutes } from "../routes/orderLifecycle.js";
@@ -112,7 +111,6 @@ export async function privilegedAdministration(fastify: FastifyInstance) {
     }
   });
 
-  await fastify.register(stockReservationRoutes);
   await fastify.register(deliveryZoneRoutes);
   await fastify.register(codPolicyRoutes);
   await fastify.register(orderLifecycleRoutes);

@@ -76,7 +76,8 @@ export async function buildApp(
     trustProxy: workerRuntime
       ? true
       : process.env.TRUST_PROXY_HOPS
-        ? Number.parseInt(process.env.TRUST_PROXY_HOPS, 10)
+        ? (_address: string, hop: number) =>
+            hop < Number.parseInt(process.env.TRUST_PROXY_HOPS || "0", 10)
         : false,
   });
 

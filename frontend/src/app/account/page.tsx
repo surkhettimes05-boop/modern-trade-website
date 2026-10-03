@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { resilientFetch } from '@/lib/resilientFetch';
 
 async function readApiResponse(response: Response): Promise<Record<string, unknown>> {
@@ -27,8 +27,6 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const next = searchParams.get('next');
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +75,7 @@ export default function AccountPage() {
         throw new Error(typeof data.error === 'string' ? data.error : 'Failed to verify OTP');
       }
 
+      const next = new URLSearchParams(window.location.search).get('next');
       router.push(next && next.startsWith('/') ? next : '/account/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify OTP');

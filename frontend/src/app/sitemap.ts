@@ -2,6 +2,8 @@ import type { MetadataRoute } from 'next';
 import { absoluteUrl } from '@/lib/seo';
 import { getCatalog } from '@/lib/serverCatalog';
 
+export const dynamic = 'force-dynamic';
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { categories, products } = await getCatalog();
   const staticPages: Array<{ path: string; changeFrequency: 'daily' | 'weekly' | 'monthly' | 'yearly'; priority: number }> = [

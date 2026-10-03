@@ -127,7 +127,8 @@ export class CheckoutService {
       let subtotalPaisa = 0;
       const pricedItems = items.rows.map((item) => {
         const stock = stockByProduct.get(String(item.product_id));
-        if (Number(item.authoritative_price) <= 0) {
+        const authoritativePrice = Number(item.authoritative_price);
+        if (!Number.isFinite(authoritativePrice) || authoritativePrice <= 0) {
           throw new Error(`Price unavailable for ${item.name_en}`);
         }
         if (
@@ -137,7 +138,7 @@ export class CheckoutService {
           throw new Error(`Insufficient stock for ${item.name_en}`);
         }
         const linePaisa =
-          Math.round(Number(item.authoritative_price) * 100) *
+          Math.round(authoritativePrice * 100) *
           Number(item.quantity);
         subtotalPaisa += linePaisa;
         return {

@@ -35,6 +35,10 @@ x-backend: &backend
     ENCRYPTION_KEY: ${QA_ENCRYPTION_KEY:-qa-only-encryption-key-32-bytes!}
     SIGNATURE_SECRET: ${QA_SIGNATURE_SECRET:-qa-only-signature-secret-32!}
     OTP_HASH_SECRET: ${QA_OTP_HASH_SECRET:-qa-only-otp-hash-secret-32-bytes!}
+    SMS_PROVIDER: demo
+    OTP_DEMO_PHONE: ${QA_DEMO_OTP_PHONE:?Set QA_DEMO_OTP_PHONE}
+    OTP_DEMO_CODE: ${QA_DEMO_OTP_CODE:?Set QA_DEMO_OTP_CODE}
+    OTP_DEMO_EXPIRES_AT: ${QA_DEMO_OTP_EXPIRES_AT:?Set QA_DEMO_OTP_EXPIRES_AT}
     PAYMENT_ENCRYPTION_KEY: ${QA_PAYMENT_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
     ENABLE_ADMIN_API: "true"
     ENABLE_ELECTRONIC_PAYMENTS: "false"
@@ -171,6 +175,7 @@ services:
     tmpfs:
       - /tmp:size=64m,noexec,nosuid,nodev
       - /app/.next/cache:size=128m,noexec,nosuid,nodev,uid=1000,gid=1000
+      - /app/.next/server/route-cache:size=64m,noexec,nosuid,nodev,uid=1000,gid=1000
     ports:
       - "127.0.0.1:53000:3000"
     depends_on:

@@ -79,7 +79,13 @@ export function LiveOrderConsole() {
     try {
       const response = await resilientFetch(
         `/api/web-orders?store_id=${encodeURIComponent(storeId)}&limit=100`,
-        { credentials: 'include', cache: 'no-store', timeoutMs: 8000, retries: 1 },
+        {
+          credentials: 'include',
+          cache: 'no-store',
+          timeoutMs: 8000,
+          retries: 1,
+          headers: { 'x-csrf-token': readCsrfToken() },
+        },
       );
       const body = await response.json().catch(() => ([]));
       if (!response.ok) throw new Error(body.error || 'Could not load orders');

@@ -202,17 +202,22 @@ export async function publicRoutes(fastify: FastifyInstance) {
         LEFT JOIN LATERAL (
           SELECT pp.price, pp.original_price, pp.currency_code FROM product_prices pp
           WHERE pp.product_id = products.id AND pp.store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1)) AND pp.active = TRUE
+            AND pp.price > 0
+            AND pp.price::text NOT IN ('NaN', 'Infinity', '-Infinity')
             AND pp.valid_from <= NOW() AND (pp.valid_to IS NULL OR pp.valid_to > NOW())
           ORDER BY pp.valid_from DESC LIMIT 1
         ) store_price ON TRUE
         LEFT JOIN LATERAL (
           SELECT pp.price, pp.original_price, pp.currency_code FROM product_prices pp
           WHERE pp.product_id = products.id AND pp.store_id IS NULL AND pp.active = TRUE
+            AND pp.price > 0
+            AND pp.price::text NOT IN ('NaN', 'Infinity', '-Infinity')
             AND pp.valid_from <= NOW() AND (pp.valid_to IS NULL OR pp.valid_to > NOW())
           ORDER BY pp.valid_from DESC LIMIT 1
         ) organization_price ON TRUE
         LEFT JOIN store_product_availability spa ON spa.product_id = products.id AND spa.store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1))
         WHERE products.status = 'PUBLISHED'
+          AND COALESCE(store_price.price, organization_price.price) IS NOT NULL
           AND (expires_at IS NULL OR expires_at > NOW())
       `;
       const params: unknown[] = [store_id || null];
