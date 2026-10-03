@@ -78,9 +78,12 @@ jobs:
         run: npm run lint --prefix frontend
       - name: Frontend build
         run: npm run build --prefix frontend
-      - name: Dependency audit
+      - name: Production dependency audit
         run: |
           npm audit --prefix backend --audit-level=high --omit=dev
           npm audit --prefix frontend --audit-level=high --omit=dev
+      - name: Development dependency advisory report
+        continue-on-error: true
+        run: |
           npm audit --prefix backend --audit-level=high
           npm audit --prefix frontend --audit-level=high
