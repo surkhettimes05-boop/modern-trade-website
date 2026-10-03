@@ -497,6 +497,15 @@ export class WebOrderService {
     } catch (error) {
       await client.query("ROLLBACK");
       const message = error instanceof Error ? error.message : "Unknown database error";
+      if (
+        message.startsWith("Invalid transition") ||
+        message.includes("COD cash receipt") ||
+        message.includes("Insufficient inventory") ||
+        message.includes("Order has no items") ||
+        message === "Order not found"
+      ) {
+        throw error;
+      }
       throw new Error(`Web order transition failed at ${stage}: ${message}`, {
         cause: error,
       });
