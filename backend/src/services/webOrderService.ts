@@ -1,5 +1,7 @@
+import type { PoolClient } from "pg";
 import { getPool, query } from "../database/connection.js";
 import { MARKET } from "../config/market.js";
+import { orderRealtimeService } from "./orderRealtimeService.js";
 
 interface WebOrder {
   id: string;
@@ -51,6 +53,7 @@ interface WebOrderItem {
 
 export class WebOrderService {
   private readonly validStatusTransitions: Record<string, string[]> = {
+    DRAFT: ["PENDING_PAYMENT", "CANCELLED"],
     PENDING: ["CONFIRMED", "CANCELLED"],
     PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
     CONFIRMED: ["PICKING", "CANCELLED"],
@@ -70,6 +73,102 @@ export class WebOrderService {
     PAID: ["REFUNDED"],
     REFUNDED: [],
   };
+
+  private async assertActiveOrderReservations(
+    client: PoolClient,
+    orderId: string,
+  ): Promise<void> {
+    const [items, reservations] = await Promise.all([
+      client.query(
+        `SELECT product_id, quantity
+           FROM web_order_items
+          WHERE order_id = $1`,
+        [orderId],
+      ),
+      client.query(
+        `SELECT product_id, quantity
+           FROM stock_reservations
+          WHERE order_id = $1
+            AND status = 'ACTIVE'
+            AND expires_at > NOW()
+          FOR UPDATE`,
+        [orderId],
+      ),
+    ]);
+
+    const reservedByProduct = new Map<string, number>();
+    for (const reservation of reservations.rows) {
+      const productId = String(reservation.product_id);
+      reservedByProduct.set(
+        productId,
+        (reservedByProduct.get(productId) || 0) + Number(reservation.quantity),
+      );
+    }
+
+    const missing = items.rows.find(
+      (item) =>
+        (reservedByProduct.get(String(item.product_id)) || 0) <
+        Number(item.quantity),
+    );
+    if (missing) {
+      throw new Error(
+        "Order stock reservation expired; cancel the order or recreate it after stock revalidation",
+      );
+    }
+  }
+
+  private async finalizeReservedInventory(
+    client: PoolClient,
+    orderId: string,
+  ): Promise<void> {
+    const reservations = await client.query(
+      `SELECT id, product_id, store_id, quantity
+         FROM stock_reservations
+        WHERE order_id = $1 AND status = 'ACTIVE'
+        ORDER BY created_at
+        FOR UPDATE`,
+      [orderId],
+    );
+
+    for (const reservation of reservations.rows) {
+      let remaining = Number(reservation.quantity);
+      const batches = await client.query(
+        `SELECT id, quantity
+           FROM batch_inventory
+          WHERE product_id = $1 AND store_id = $2 AND quantity > 0
+          ORDER BY expiry_date ASC NULLS LAST, created_at ASC
+          FOR UPDATE`,
+        [reservation.product_id, reservation.store_id],
+      );
+
+      for (const batch of batches.rows) {
+        if (remaining <= 0) break;
+        const deduct = Math.min(Number(batch.quantity), remaining);
+        await client.query(
+          `UPDATE batch_inventory
+              SET quantity = quantity - $1, updated_at = NOW()
+            WHERE id = $2`,
+          [deduct, batch.id],
+        );
+        remaining -= deduct;
+      }
+
+      if (remaining > 0) {
+        throw new Error(
+          `Insufficient inventory to finalize order ${orderId}`,
+        );
+      }
+    }
+
+    if (reservations.rowCount) {
+      await client.query(
+        `UPDATE stock_reservations
+            SET status = 'CONSUMED', updated_at = NOW()
+          WHERE order_id = $1 AND status = 'ACTIVE'`,
+        [orderId],
+      );
+    }
+  }
   /**
    * Create web order from cart
    */
@@ -325,6 +424,12 @@ export class WebOrderService {
       if (!this.validStatusTransitions[order.status]?.includes(status)) {
         throw new Error(`Invalid transition from ${order.status} to ${status}`);
       }
+      if (status === "CONFIRMED") {
+        await this.assertActiveOrderReservations(client, orderId);
+      }
+      if (status === "DELIVERED") {
+        await this.finalizeReservedInventory(client, orderId);
+      }
       const result = await client.query(
         `UPDATE web_orders
          SET status = $1,
@@ -356,7 +461,23 @@ export class WebOrderService {
         ],
       );
       await client.query("COMMIT");
-      return result.rows[0];
+      const updatedOrder = result.rows[0];
+      await orderRealtimeService.safePublish({
+        type: "ORDER_STATUS_CHANGED",
+        store_id: updatedOrder.store_id,
+        order: {
+          id: updatedOrder.id,
+          order_number: updatedOrder.order_number,
+          status: updatedOrder.status,
+          total_amount: Number(updatedOrder.total_amount || 0),
+          currency: updatedOrder.currency || MARKET.currencyCode,
+          delivery_type: updatedOrder.delivery_type,
+          created_at: updatedOrder.created_at
+            ? new Date(updatedOrder.created_at).toISOString()
+            : undefined,
+        },
+      });
+      return updatedOrder;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

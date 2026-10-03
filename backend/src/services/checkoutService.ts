@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getPool } from "../database/connection.js";
 import { MARKET } from "../config/market.js";
+import { orderRealtimeService } from "./orderRealtimeService.js";
 
 export class CheckoutService {
   async createCodOrder(input: {
@@ -214,7 +215,27 @@ export class CheckoutService {
         ],
       );
       await client.query("COMMIT");
-      return order.rows[0];
+      const createdOrder = order.rows[0];
+      await orderRealtimeService.safePublish({
+        type: "ORDER_CREATED",
+        store_id: input.storeId,
+        order: {
+          id: createdOrder.id,
+          order_number: createdOrder.order_number,
+          status: createdOrder.status,
+          total_amount: Number(createdOrder.total_amount ?? total),
+          currency: createdOrder.currency || MARKET.currencyCode,
+          delivery_type: createdOrder.delivery_type || input.deliveryType,
+          item_count: pricedItems.reduce(
+            (sum, item) => sum + Number(item.quantity),
+            0,
+          ),
+          created_at: createdOrder.created_at
+            ? new Date(createdOrder.created_at).toISOString()
+            : new Date().toISOString(),
+        },
+      });
+      return createdOrder;
     } catch (error) {
       await client.query("ROLLBACK");
       if (
