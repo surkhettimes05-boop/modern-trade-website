@@ -244,7 +244,7 @@ test("complete Pasalho COD order flow reconciles inventory and payment", async (
     }, url) as Promise<T>;
 
   const reservationsBefore = await staffGet<Array<{ status: string }>>(
-    `/api/stock-reservations/order/${orderId}`,
+    `/api/web-orders/${orderId}/reservations`,
   );
   expect(reservationsBefore.every((row) => row.status === "ACTIVE")).toBe(true);
 
@@ -269,7 +269,7 @@ test("complete Pasalho COD order flow reconciles inventory and payment", async (
   await expect(page.getByText(order.order_number)).toHaveCount(0, { timeout: 10_000 });
 
   const reservationsAfter = await staffGet<Array<{ status: string }>>(
-    `/api/stock-reservations/order/${orderId}`,
+    `/api/web-orders/${orderId}/reservations`,
   );
   expect(reservationsAfter.every((row) => row.status === "CONSUMED")).toBe(true);
 
