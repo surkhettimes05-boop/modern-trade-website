@@ -33,6 +33,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   }
 
   const requestHeaders = proxyRequestHeaders(request.headers);
+  const isEventStream = request.method === "GET" && path === "store-orders/stream";
 
   let requestBody: ArrayBuffer | undefined;
   try {
@@ -51,16 +52,22 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       body: requestBody,
       redirect: "manual",
       cache: "no-store",
-      signal: AbortSignal.any([
-        request.signal,
-        AbortSignal.timeout(upstreamTimeoutMs()),
-      ]),
+      signal: isEventStream
+        ? request.signal
+        : AbortSignal.any([
+            request.signal,
+            AbortSignal.timeout(upstreamTimeoutMs()),
+          ]),
     });
 
     const contentType = upstream.headers.get("content-type") || "";
-    if (!contentType.toLowerCase().includes("application/json")) {
+    const normalizedContentType = contentType.toLowerCase();
+    const supportedContentType =
+      normalizedContentType.includes("application/json") ||
+      (isEventStream && normalizedContentType.includes("text/event-stream"));
+    if (!supportedContentType) {
       return NextResponse.json(
-        { error: "Backend returned a non-JSON response; check the Vercel API_URL configuration" },
+        { error: "Backend returned an unsupported response; check the Vercel API_URL configuration" },
         { status: 502 },
       );
     }
