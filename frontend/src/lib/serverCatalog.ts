@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { cache } from 'react';
-import { mapProduct, openingCategories, openingProducts, type Offer, type Product, type Store, type StorefrontCategory } from '@/lib/catalog';
+import { mapProduct, type Offer, type Product, type Store, type StorefrontCategory } from '@/lib/catalog';
 import { configuredServerApiUrl } from '@/lib/serverApiUrl';
 
 type CatalogData = { products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[] };
@@ -40,12 +40,8 @@ export const getCatalog = cache(async (): Promise<CatalogData> => {
     fetchPublic<Store>('stores'),
     fetchPublic<Offer>('offers'),
   ]);
-  const apiProducts = productRows.map(mapProduct).filter((product) => product.price > 0);
-  const categoriesBySlug = new Map(categoryRows.map((category) => [category.slug, category]));
-  const categories = openingCategories
-    .map((opening) => ({ ...opening, ...categoriesBySlug.get(opening.slug), id: opening.id }))
-    .concat(categoryRows.filter((category) => !openingCategories.some((opening) => opening.slug === category.slug)));
-  return { products: apiProducts.length ? apiProducts : openingProducts, categories, stores, offers };
+  const products = productRows.map(mapProduct).filter((product) => product.price > 0);
+  return { products, categories: categoryRows, stores, offers };
 });
 
 export const getProductBySlug = cache(async (slug: string) => {
