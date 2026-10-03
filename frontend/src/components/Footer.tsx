@@ -14,9 +14,9 @@ const cols: Record<string, FooterLink[]> = {
     { label: 'Delivery & pickup', href: '/services' },
     { label: 'Contact us', href: '/contact' },
   ],
-  'About NOVA MART': [
+  'About Pasalho': [
     { label: 'Our story', href: '/about' }, { label: 'Sustainability', href: '/about' },
-    { label: 'Quality promise', href: '/about' }, { label: 'NOVA Foundation', href: '/about' },
+    { label: 'Quality promise', href: '/about' }, { label: 'Our community', href: '/about' },
   ],
   Corporate: [
     { label: 'Investors', href: '/about' }, { label: 'Newsroom', href: '/about' },
@@ -33,22 +33,22 @@ const cols: Record<string, FooterLink[]> = {
 };
 
 const socialLinks = [
-  { label: 'Contact NOVA MART', href: '/contact', icon: MessageCircle },
-  { label: 'Find a NOVA MART store', href: '/stores', icon: Camera },
-  { label: 'Open your NOVA MART account', href: '/account', icon: AtSign },
-  { label: 'Work with NOVA MART', href: '/about', icon: BriefcaseBusiness },
+  { label: 'Contact Pasalho', href: '/contact', icon: MessageCircle },
+  { label: 'Find a Pasalho store', href: '/stores', icon: Camera },
+  { label: 'Open your Pasalho account', href: '/account', icon: AtSign },
+  { label: 'Work with Pasalho', href: '/about', icon: BriefcaseBusiness },
 ];
 
 export default function Footer() {
   return <footer>
     <div className="footer-top shell">
-      <Link href="/" className="logo light" aria-label="NOVA MART home"><i>N</i><span>NOVA<b>MART</b></span></Link>
+      <Link href="/" className="logo light" aria-label="Pasalho home"><i>P</i><span>PASALHO</span></Link>
       <p>Everyday value. Modern retail.<br />Built for every home.</p>
-      <nav className="socials" aria-label="NOVA MART links">
+      <nav className="socials" aria-label="Pasalho links">
         {socialLinks.map(({ label, href, icon: Icon }) => <Link href={href} key={label} aria-label={label} title={label}><Icon aria-hidden="true" /></Link>)}
       </nav>
     </div>
     <div className="footer-grid shell">{Object.entries(cols).map(([heading, links]) => <div key={heading}><h3>{heading}</h3>{links.map(({ label, href }) => <Link href={href} key={label}>{label}</Link>)}</div>)}</div>
-    <div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Nepal Pvt. Ltd.</span><span>Nepal · English</span><span>Cash on delivery · Store pickup</span></div>
+    <div className="footer-bottom shell"><span>© 2026 Pasalho</span><span>Nepal · English</span><span>Cash on delivery · Store pickup</span></div>
   </footer>;
 }
