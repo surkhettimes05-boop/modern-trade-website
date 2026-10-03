@@ -58,7 +58,7 @@ async function sendTwilioSms(
   const form = new URLSearchParams({
     To: `+977${toLocalNumber}`,
     From: fromNumber,
-    Body: `Your StoreSync login code is ${otpCode}. It expires in 5 minutes.`,
+    Body: `Your Pasalho login code is ${otpCode}. It expires in 5 minutes.`,
   });
   const response = await fetch(
     `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
