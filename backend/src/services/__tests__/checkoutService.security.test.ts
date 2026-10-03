@@ -1,7 +1,11 @@
 import { getPool } from "../../database/connection.js";
 import { CheckoutService } from "../checkoutService.js";
+import { orderRealtimeService } from "../orderRealtimeService.js";
 
 jest.mock("../../database/connection.js", () => ({ getPool: jest.fn() }));
+jest.mock("../orderRealtimeService.js", () => ({
+  orderRealtimeService: { safePublish: jest.fn() },
+}));
 
 describe("checkout query batching", () => {
   const release = jest.fn();
@@ -10,6 +14,7 @@ describe("checkout query batching", () => {
   beforeEach(() => {
     release.mockReset();
     clientQuery.mockReset();
+    (orderRealtimeService.safePublish as jest.Mock).mockReset();
     (getPool as jest.Mock).mockReturnValue({
       connect: jest.fn().mockResolvedValue({ query: clientQuery, release }),
       query: jest.fn(),
@@ -53,7 +58,7 @@ describe("checkout query batching", () => {
         };
       }
       if (sql.includes("INSERT INTO web_orders")) {
-        return { rows: [{ id: "order-1", status: "PENDING_PAYMENT" }] };
+        return { rows: [{ id: "order-1", order_number: "WO-1", status: "PENDING_PAYMENT", total_amount: "378.25", currency: "NPR", delivery_type: "DELIVERY" }] };
       }
       return { rows: [], rowCount: 1 };
     });
@@ -80,6 +85,18 @@ describe("checkout query batching", () => {
     expect(calls.filter((sql) => sql.includes("INSERT INTO web_order_items"))).toHaveLength(1);
     expect(calls.filter((sql) => sql.includes("INSERT INTO stock_reservations"))).toHaveLength(1);
     expect(clientQuery).toHaveBeenCalledWith("COMMIT");
+    expect(orderRealtimeService.safePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "ORDER_CREATED",
+        store_id: "00000000-0000-0000-0000-000000000010",
+        order: expect.objectContaining({
+          id: "order-1",
+          order_number: "WO-1",
+          status: "PENDING_PAYMENT",
+          item_count: 3,
+        }),
+      }),
+    );
     expect(release).toHaveBeenCalledTimes(1);
   });
 });
