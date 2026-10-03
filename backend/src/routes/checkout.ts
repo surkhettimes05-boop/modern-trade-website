@@ -74,6 +74,54 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ error: "Failed to cancel order" });
     }
   });
+  fastify.get("/checkout/service-areas", async (request) => {
+    const { store_id } = z
+      .object({ store_id: z.string().uuid() })
+      .strict()
+      .parse(request.query);
+    const db = await import("../database/connection.js");
+    const result = await db.query(
+      `WITH active_zones AS (
+         SELECT included_municipalities, included_wards
+           FROM delivery_zones
+          WHERE store_id = $1
+            AND is_active = TRUE
+            AND (effective_date IS NULL OR effective_date <= CURRENT_DATE)
+            AND (expiry_date IS NULL OR expiry_date >= CURRENT_DATE)
+       )
+       SELECT m.id,
+              m.name_en,
+              COALESCE(
+                json_agg(
+                  DISTINCT jsonb_build_object(
+                    'id', w.id,
+                    'ward_number', w.ward_number,
+                    'name_en', w.name_en
+                  )
+                ) FILTER (WHERE w.id IS NOT NULL),
+                '[]'::json
+              ) AS wards
+         FROM nepal_municipalities m
+         JOIN nepal_wards w ON w.municipality_id = m.id
+        WHERE EXISTS (
+          SELECT 1
+            FROM active_zones z
+           WHERE (
+             m.id = ANY(COALESCE(z.included_municipalities, ARRAY[]::integer[]))
+             OR w.id = ANY(COALESCE(z.included_wards, ARRAY[]::integer[]))
+           )
+             AND (
+               COALESCE(cardinality(z.included_wards), 0) = 0
+               OR w.id = ANY(z.included_wards)
+             )
+        )
+        GROUP BY m.id, m.name_en
+        ORDER BY m.name_en`,
+      [store_id],
+    );
+    return result.rows;
+  });
+
   fastify.post("/checkout/delivery-quote", async (request, reply) => {
     const body = z
       .object({
