@@ -62,6 +62,7 @@ export function LiveOrderAlert() {
   const storeId = session?.storeAssignment?.id;
   const [activeOrder, setActiveOrder] = useState<OrderSummary | null>(null);
   const [accepting, setAccepting] = useState(false);
+  const [acceptError, setAcceptError] = useState("");
   const [streamOnline, setStreamOnline] = useState(false);
   const activeIdRef = useRef<string | null>(null);
 
@@ -139,6 +140,7 @@ export function LiveOrderAlert() {
   const acceptOrder = useCallback(async () => {
     if (!activeOrder || !hasCapability("orders.fulfil")) return;
     setAccepting(true);
+    setAcceptError("");
     try {
       const response = await resilientFetch(
         `/api/web-orders/${encodeURIComponent(activeOrder.id)}/status`,
@@ -158,6 +160,10 @@ export function LiveOrderAlert() {
       await loadPending();
       router.push("/operations/orders");
       router.refresh();
+    } catch (error) {
+      setAcceptError(
+        error instanceof Error ? error.message : "Could not accept order",
+      );
     } finally {
       setAccepting(false);
     }
@@ -208,6 +214,11 @@ export function LiveOrderAlert() {
         <p className="mt-5 font-semibold text-slate-700">
           This alert stays on screen and repeats the sound until the order is accepted by a staff member.
         </p>
+        {acceptError ? (
+          <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {acceptError}
+          </p>
+        ) : null}
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           {hasCapability("orders.fulfil") ? (
