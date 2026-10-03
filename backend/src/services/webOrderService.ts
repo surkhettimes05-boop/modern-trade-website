@@ -284,9 +284,33 @@ export class WebOrderService {
     const offsetClause = `OFFSET $${paramIndex + 1}`;
 
     const result = await query(
-      `SELECT wo.*, c.preferred_name AS customer_name, s.name_en AS store_name
-       FROM web_orders wo LEFT JOIN customers c ON c.id = wo.customer_id LEFT JOIN stores s ON s.id = wo.store_id
-       ${whereClause} ORDER BY wo.order_date DESC ${limitClause} ${offsetClause}`,
+      `SELECT wo.*,
+              c.preferred_name AS customer_name,
+              s.name_en AS store_name,
+              COALESCE(order_items.items, '[]'::json) AS items
+         FROM web_orders wo
+         LEFT JOIN customers c ON c.id = wo.customer_id
+         LEFT JOIN stores s ON s.id = wo.store_id
+         LEFT JOIN LATERAL (
+           SELECT json_agg(
+             json_build_object(
+               'id', woi.id,
+               'product_id', woi.product_id,
+               'sku', p.sku,
+               'product_name', woi.product_name,
+               'quantity', woi.quantity,
+               'unit_price', woi.unit_price,
+               'line_total', woi.line_total
+             )
+             ORDER BY woi.id
+           ) AS items
+             FROM web_order_items woi
+             LEFT JOIN products p ON p.id = woi.product_id
+            WHERE woi.order_id = wo.id
+         ) order_items ON TRUE
+         ${whereClause}
+         ORDER BY wo.order_date DESC
+         ${limitClause} ${offsetClause}`,
       params,
     );
 
@@ -312,6 +336,7 @@ export class WebOrderService {
     status: string,
     actorId: string,
     reason?: string,
+    codReceived = false,
   ): Promise<WebOrder> {
     const client = await getPool().connect();
     try {
@@ -324,6 +349,13 @@ export class WebOrderService {
       if (!order) throw new Error("Order not found");
       if (!this.validStatusTransitions[order.status]?.includes(status)) {
         throw new Error(`Invalid transition from ${order.status} to ${status}`);
+      }
+      if (
+        status === "DELIVERED" &&
+        order.payment_method === "COD" &&
+        !codReceived
+      ) {
+        throw new Error("COD cash receipt must be confirmed before delivery");
       }
 
       // Keep reserved stock unavailable while staff fulfils the order. When the
@@ -383,6 +415,18 @@ export class WebOrderService {
              cancellation_reason = CASE WHEN $1 = 'CANCELLED' THEN $2 ELSE cancellation_reason END,
              cancelled_at = CASE WHEN $1 = 'CANCELLED' THEN NOW() ELSE cancelled_at END,
              cancelled_by = CASE WHEN $1 = 'CANCELLED' THEN $3 ELSE cancelled_by END,
+             payment_status = CASE
+               WHEN $1 = 'DELIVERED' AND payment_method = 'COD' THEN 'PAID'
+               ELSE payment_status
+             END,
+             cod_collected_at = CASE
+               WHEN $1 = 'DELIVERED' AND payment_method = 'COD' THEN NOW()
+               ELSE cod_collected_at
+             END,
+             cod_collected_by = CASE
+               WHEN $1 = 'DELIVERED' AND payment_method = 'COD' THEN $3
+               ELSE cod_collected_by
+             END,
              updated_at = NOW()
          WHERE id = $4 RETURNING *`,
         [status, reason || null, actorId, orderId],
@@ -416,7 +460,14 @@ export class WebOrderService {
       await client.query(
         `INSERT INTO order_events
           (order_id, event_type, from_status, to_status, reason, metadata, created_by)
-         VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, $6)`,
+         VALUES (
+           $1, $2, $3, $4, $5,
+           jsonb_build_object(
+             'cod_received',
+             CASE WHEN $4 = 'DELIVERED' THEN $7::boolean ELSE FALSE END
+           ),
+           $6
+         )`,
         [
           orderId,
           status === "CANCELLED" ? "CANCELLED" : "STATUS_CHANGE",
@@ -424,6 +475,7 @@ export class WebOrderService {
           status,
           reason || null,
           actorId,
+          codReceived,
         ],
       );
       await client.query("COMMIT");
