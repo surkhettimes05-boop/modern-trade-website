@@ -53,6 +53,7 @@ interface WebOrderItem {
 
 export class WebOrderService {
   private readonly validStatusTransitions: Record<string, string[]> = {
+    DRAFT: ["PENDING_PAYMENT", "CANCELLED"],
     PENDING: ["CONFIRMED", "CANCELLED"],
     PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
     CONFIRMED: ["PICKING", "CANCELLED"],
