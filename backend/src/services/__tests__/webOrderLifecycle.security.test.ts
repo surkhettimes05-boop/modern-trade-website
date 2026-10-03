@@ -164,6 +164,29 @@ describe("web order lifecycle integrity", () => {
           ],
         };
       }
+      if (sql.includes("FROM web_order_items")) {
+        return {
+          rows: [
+            {
+              product_id: "00000000-0000-0000-0000-000000000001",
+              quantity: 2,
+            },
+          ],
+        };
+      }
+      if (
+        sql.includes("FROM stock_reservations") &&
+        sql.includes("expires_at > NOW()")
+      ) {
+        return {
+          rows: [
+            {
+              product_id: "00000000-0000-0000-0000-000000000001",
+              quantity: 2,
+            },
+          ],
+        };
+      }
       if (sql.includes("UPDATE web_orders")) {
         return {
           rows: [
@@ -192,6 +215,54 @@ describe("web order lifecycle integrity", () => {
         (sql) =>
           sql.includes("UPDATE stock_reservations") &&
           sql.includes("CONSUMED"),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects confirmation when the checkout reservation has expired", async () => {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.startsWith("SELECT * FROM web_orders")) {
+        return {
+          rows: [
+            {
+              id: "order-1",
+              order_number: "WO-1",
+              status: "PENDING_PAYMENT",
+              store_id: "00000000-0000-0000-0000-000000000010",
+            },
+          ],
+        };
+      }
+      if (sql.includes("FROM web_order_items")) {
+        return {
+          rows: [
+            {
+              product_id: "00000000-0000-0000-0000-000000000001",
+              quantity: 2,
+            },
+          ],
+        };
+      }
+      if (
+        sql.includes("FROM stock_reservations") &&
+        sql.includes("expires_at > NOW()")
+      ) {
+        return { rows: [] };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    await expect(
+      new WebOrderService().updateWebOrderStatus(
+        "order-1",
+        "CONFIRMED",
+        "staff-1",
+      ),
+    ).rejects.toThrow("Order stock reservation expired");
+    expect(clientQuery).toHaveBeenCalledWith("ROLLBACK");
+    expect(
+      clientQuery.mock.calls.some(([sql]) =>
+        String(sql).includes("UPDATE web_orders"),
       ),
     ).toBe(false);
   });
