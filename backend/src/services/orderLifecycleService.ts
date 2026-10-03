@@ -2,10 +2,12 @@ import { query } from "../database/connection.js";
 import { StockReservationService } from "./stockReservationService.js";
 import { DeliveryZoneService } from "./deliveryZoneService.js";
 import { CODPolicyService } from "./codPolicyService.js";
+import { WebOrderService } from "./webOrderService.js";
 
 const stockReservationService = new StockReservationService();
 const deliveryZoneService = new DeliveryZoneService();
 const codPolicyService = new CODPolicyService();
+const webOrderService = new WebOrderService();
 
 interface OrderEvent {
   id: string;
@@ -21,24 +23,9 @@ interface OrderEvent {
 
 export class OrderLifecycleService {
   /**
-   * Valid state transitions
-   */
-  private readonly validTransitions: Record<string, string[]> = {
-    DRAFT: ["PENDING_PAYMENT", "CANCELLED"],
-    PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
-    CONFIRMED: ["PICKING", "CANCELLED"],
-    PICKING: ["PACKED", "CANCELLED"],
-    PACKED: ["OUT_FOR_DELIVERY", "CANCELLED"],
-    OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED"],
-    DELIVERED: ["RETURN_REQUESTED"],
-    RETURN_REQUESTED: ["RETURNED"],
-    RETURNED: ["REFUNDED"],
-    CANCELLED: [],
-    REFUNDED: [],
-  };
-
-  /**
-   * Transition order status
+   * Transition order status through the canonical transactional order service.
+   * This keeps inventory reservations, audit events, and realtime store updates
+   * identical no matter which staff API initiates the transition.
    */
   async transitionOrderStatus(
     orderId: string,
@@ -49,49 +36,12 @@ export class OrderLifecycleService {
       metadata?: any;
     } = {},
   ): Promise<any> {
-    // Get current order status
-    const orderResult = await query(
-      "SELECT status FROM web_orders WHERE id = $1",
-      [orderId],
+    return webOrderService.updateWebOrderStatus(
+      orderId,
+      toStatus,
+      options.created_by || "system",
+      options.reason,
     );
-
-    if (orderResult.rows.length === 0) {
-      throw new Error("Order not found");
-    }
-
-    const currentStatus = orderResult.rows[0].status;
-
-    // Validate transition
-    if (!this.validTransitions[currentStatus]?.includes(toStatus)) {
-      throw new Error(
-        `Invalid transition from ${currentStatus} to ${toStatus}`,
-      );
-    }
-
-    // Update order status
-    const updateResult = await query(
-      `UPDATE web_orders 
-       SET status = $1, updated_at = NOW()
-       WHERE id = $2
-       RETURNING *`,
-      [toStatus, orderId],
-    );
-
-    // Log order event
-    await this.logOrderEvent({
-      order_id: orderId,
-      event_type: this.getEventTypeForTransition(currentStatus, toStatus),
-      from_status: currentStatus,
-      to_status: toStatus,
-      reason: options.reason,
-      metadata: options.metadata,
-      created_by: options.created_by,
-    });
-
-    // Handle specific transition side effects
-    await this.handleTransitionSideEffects(orderId, currentStatus, toStatus);
-
-    return updateResult.rows[0];
   }
 
   /**
@@ -139,7 +89,7 @@ export class OrderLifecycleService {
   }
 
   /**
-   * Cancel order
+   * Cancel order using the canonical transactional lifecycle implementation.
    */
   async cancelOrder(
     orderId: string,
@@ -148,51 +98,10 @@ export class OrderLifecycleService {
       cancelled_by?: string;
     } = {},
   ): Promise<any> {
-    // Get current order
-    const orderResult = await query("SELECT * FROM web_orders WHERE id = $1", [
-      orderId,
-    ]);
-
-    if (orderResult.rows.length === 0) {
-      throw new Error("Order not found");
-    }
-
-    const order = orderResult.rows[0];
-
-    // Check if order can be cancelled
-    if (
-      !["DRAFT", "PENDING_PAYMENT", "CONFIRMED", "PICKING", "PACKED"].includes(
-        order.status,
-      )
-    ) {
-      throw new Error(`Order in ${order.status} status cannot be cancelled`);
-    }
-
-    // Cancel order
-    const result = await this.transitionOrderStatus(orderId, "CANCELLED", {
+    return this.transitionOrderStatus(orderId, "CANCELLED", {
       reason: options.reason,
       created_by: options.cancelled_by,
     });
-
-    // Update cancellation details
-    await query(
-      `UPDATE web_orders 
-       SET cancellation_reason = $1, cancelled_at = NOW(), cancelled_by = $2
-       WHERE id = $3`,
-      [options.reason || null, options.cancelled_by || null, orderId],
-    );
-
-    // Release stock reservations
-    if (order.reservation_id) {
-      await stockReservationService.cancelReservation(order.reservation_id);
-    }
-
-    // Cancel cart reservations
-    if (order.cart_id) {
-      await stockReservationService.cancelCartReservations(order.cart_id);
-    }
-
-    return result;
   }
 
   /**
@@ -264,56 +173,6 @@ export class OrderLifecycleService {
     );
 
     return result;
-  }
-
-  /**
-   * Get event type for transition
-   */
-  private getEventTypeForTransition(
-    fromStatus: string,
-    toStatus: string,
-  ): string {
-    const transitionMap: Record<string, string> = {
-      "DRAFT->PENDING_PAYMENT": "CREATED",
-      "PENDING_PAYMENT->CONFIRMED": "CONFIRMED",
-      "CONFIRMED->PICKING": "PICKING",
-      "PICKING->PACKED": "PACKED",
-      "PACKED->OUT_FOR_DELIVERY": "SHIPPED",
-      "OUT_FOR_DELIVERY->DELIVERED": "DELIVERED",
-      "DELIVERED->RETURN_REQUESTED": "RETURN_REQUESTED",
-      "RETURN_REQUESTED->RETURNED": "RETURNED",
-      "RETURNED->REFUNDED": "REFUNDED",
-    };
-
-    const key = `${fromStatus}->${toStatus}`;
-    return transitionMap[key] || "STATUS_CHANGE";
-  }
-
-  /**
-   * Handle transition side effects
-   */
-  private async handleTransitionSideEffects(
-    orderId: string,
-    fromStatus: string,
-    toStatus: string,
-  ): Promise<void> {
-    // When order is confirmed, consume stock reservations
-    if (toStatus === "CONFIRMED") {
-      const orderResult = await query(
-        "SELECT reservation_id FROM web_orders WHERE id = $1",
-        [orderId],
-      );
-
-      if (orderResult.rows[0]?.reservation_id) {
-        await stockReservationService.consumeReservation(
-          orderResult.rows[0].reservation_id,
-        );
-      }
-    }
-
-    // When order is cancelled, release reservations (handled in cancelOrder)
-    // When order is delivered, trigger delivery confirmation
-    // When order is returned, trigger return processing
   }
 
   /**
