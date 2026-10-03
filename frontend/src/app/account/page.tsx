@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { resilientFetch } from '@/lib/resilientFetch';
 
 async function readApiResponse(response: Response): Promise<Record<string, unknown>> {
@@ -27,6 +27,8 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get('next');
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,7 +77,7 @@ export default function AccountPage() {
         throw new Error(typeof data.error === 'string' ? data.error : 'Failed to verify OTP');
       }
 
-      router.push('/account/dashboard');
+      router.push(next && next.startsWith('/') ? next : '/account/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify OTP');
     } finally {
@@ -86,7 +88,7 @@ export default function AccountPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-center mb-6">StoreSync Account</h1>
+        <h1 className="text-2xl font-bold text-center mb-6">Pasalho Account</h1>
         
         {!otpSent ? (
           <form onSubmit={handleRequestOtp} className="space-y-4">
@@ -103,7 +105,7 @@ export default function AccountPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">Enter your Nepali mobile number</p>
+              <p className="text-xs text-gray-500 mt-1">Enter your Nepal mobile number. New customers are created after OTP verification.</p>
             </div>
 
             {error && (
