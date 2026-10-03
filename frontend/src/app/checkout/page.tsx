@@ -7,7 +7,7 @@ import { useShop } from '@/components/CommerceClient';
 import { MARKET, formatPrice } from '@/lib/market';
 import { resilientFetch } from '@/lib/resilientFetch';
 
-type Division = { id: number; name_en?: string; name?: string; ward_number?: number };
+type Division = { id: number; name_en?: string; name?: string; ward_number?: number; wards?: Division[] };
 type DeliveryQuote = {
   serviceable: boolean;
   reason?: string;
@@ -40,24 +40,12 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      resilientFetch('/api/auth/session/validate', {
-        signal: controller.signal,
-        credentials: 'include',
-        cache: 'no-store',
-      }),
-      resilientFetch('/api/admin/divisions/municipalities', {
-        signal: controller.signal,
-        cache: 'no-store',
-      }),
-    ])
-      .then(async ([sessionResponse, municipalityResponse]) => {
-        setAuthenticated(sessionResponse.ok);
-        if (municipalityResponse.ok) {
-          const body: unknown = await municipalityResponse.json();
-          if (Array.isArray(body)) setMunicipalities(body as Division[]);
-        }
-      })
+    resilientFetch('/api/auth/session/validate', {
+      signal: controller.signal,
+      credentials: 'include',
+      cache: 'no-store',
+    })
+      .then((sessionResponse) => setAuthenticated(sessionResponse.ok))
       .catch(() => {
         if (!controller.signal.aborted) setAuthenticated(false);
       });
@@ -65,26 +53,34 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    if (!municipalityId) {
+    if (!authenticated || !selectedStore) {
+      setMunicipalities([]);
       setWards([]);
-      setWardId('');
       return;
     }
     const controller = new AbortController();
     resilientFetch(
-      `/api/admin/divisions/wards?municipality_id=${encodeURIComponent(municipalityId)}`,
-      { signal: controller.signal, cache: 'no-store' },
+      `/api/checkout/service-areas?store_id=${encodeURIComponent(selectedStore.id)}`,
+      { signal: controller.signal, credentials: 'include', cache: 'no-store' },
     )
       .then(async (response) => {
-        if (!response.ok) throw new Error('Could not load wards');
+        if (!response.ok) throw new Error('Could not load delivery areas');
         const body: unknown = await response.json();
-        setWards(Array.isArray(body) ? (body as Division[]) : []);
+        setMunicipalities(Array.isArray(body) ? (body as Division[]) : []);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setWards([]);
+        if (!controller.signal.aborted) setMunicipalities([]);
       });
     return () => controller.abort();
-  }, [municipalityId]);
+  }, [authenticated, selectedStore]);
+
+  useEffect(() => {
+    const municipality = municipalities.find(
+      (candidate) => String(candidate.id) === municipalityId,
+    );
+    setWards(municipality?.wards || []);
+    setWardId('');
+  }, [municipalities, municipalityId]);
 
   useEffect(() => {
     if (
@@ -309,7 +305,7 @@ export default function CheckoutPage() {
                   }}
                   className="mt-1 w-full rounded border p-2"
                 >
-                  <option value="">Choose municipality</option>
+                  <option value="">Choose service area</option>
                   {municipalities.map((municipality) => (
                     <option key={municipality.id} value={municipality.id}>
                       {municipality.name_en || municipality.name || `Municipality ${municipality.id}`}
