@@ -15,8 +15,8 @@ const deliveryCheckoutSchema = z
     ...commonCheckoutFields,
     delivery_type: z.literal("DELIVERY"),
     shipping_address: z.string().trim().min(1).max(500),
-    shipping_city: z.string().trim().min(1).max(100),
-    shipping_state: z.string().trim().min(1).max(100),
+    shipping_municipality_id: z.coerce.number().int().positive(),
+    shipping_ward_id: z.coerce.number().int().positive(),
     shipping_postal_code: NepalPostalCodeSchema,
     shipping_country: z.literal(MARKET.countryCode),
   })
