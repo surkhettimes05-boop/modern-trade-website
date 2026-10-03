@@ -11,7 +11,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Introduction</h2>
             <p className="text-gray-600">
-              StoreSync ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website or interact with our services.
+              Pasalho ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website or interact with our services.
             </p>
           </section>
 
@@ -59,14 +59,14 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Contact Us</h2>
             <p className="text-gray-600">
-              If you have questions about this Privacy Policy, please contact us through our contact form or at info@storesync.com
+              If you have questions about this Privacy Policy, please contact us through our contact form
             </p>
           </section>
 
           <section>
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Policy status</h2>
             <p className="text-gray-600">
-              This draft is excluded from search indexing until legal counsel approves the final policy. Customers should contact NOVA MART for the current privacy terms before submitting sensitive information.
+              This draft is excluded from search indexing until legal counsel approves the final policy. Customers should contact Pasalho for the current privacy terms before submitting sensitive information.
             </p>
           </section>
         </div>
