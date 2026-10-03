@@ -79,17 +79,15 @@ export async function authRoutes(fastify: FastifyInstance) {
         }
 
         const customer = await customerService.findByPhone(body.phone);
-        if (!customer) {
-          return {
-            success: true,
-            message:
-              "If a customer exists with this phone, an OTP will be sent",
-          };
-        }
 
+        // Login and first-time registration intentionally share one OTP flow.
+        // Unknown phone numbers are verified before a customer record is
+        // created, avoiding unverified account spam while keeping the public
+        // response enumeration-resistant.
         const otp = await otpService.createOTP({
           phone: body.phone,
           purpose: body.purpose,
+          customer_id: customer?.id,
           ip_address: (request as any).ip,
           user_agent: request.headers["user-agent"],
         });
@@ -157,15 +155,21 @@ export async function authRoutes(fastify: FastifyInstance) {
           return { error: "Invalid or expired OTP" };
         }
 
-        const customer = await customerService.findByPhone(body.phone);
+        let customer = await customerService.findByPhone(body.phone);
         if (!customer) {
-          reply.status(400);
-          return { error: "Invalid or expired OTP" };
+          customer = await customerService.createCustomer({
+            phone: body.phone,
+            enrollment_source: "WEB_SELF_REGISTRATION",
+            enrollment_channel: "WEB",
+            enrolled_by: "verified-self-registration",
+          });
         }
 
-        // Mark customer as verified if not already
         if (customer.verification_status === "UNVERIFIED") {
-          await customerService.markVerified(customer.id, "OTP_VERIFICATION");
+          customer = await customerService.markVerified(
+            customer.id,
+            "OTP_VERIFICATION",
+          );
         }
 
         // Update last login
