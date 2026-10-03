@@ -21,7 +21,7 @@ async function fetchPublic<T>(path: string): Promise<T[]> {
   if (!base) return [];
   try {
     const response = await fetch(new URL(`/api/public/${path}`, base), {
-      next: { revalidate: 300 },
+      cache: 'no-store',
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(5_000),
     });
