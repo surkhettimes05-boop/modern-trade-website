@@ -6,8 +6,10 @@ import {
 } from "../middleware/customerAuthentication.js";
 import { CheckoutService } from "../services/checkoutService.js";
 import { CodCheckoutBodySchema } from "../contracts/checkout.js";
+import { DeliveryZoneService } from "../services/deliveryZoneService.js";
 
 const checkout = new CheckoutService();
+const deliveryZones = new DeliveryZoneService();
 export async function checkoutRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", authenticateCustomer);
   fastify.get("/customer/orders", async (request) => {
@@ -72,6 +74,25 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ error: "Failed to cancel order" });
     }
   });
+  fastify.post("/checkout/delivery-quote", async (request, reply) => {
+    const body = z
+      .object({
+        store_id: z.string().uuid(),
+        municipality_id: z.coerce.number().int().positive(),
+        ward_id: z.coerce.number().int().positive(),
+        order_value: z.coerce.number().nonnegative(),
+      })
+      .strict()
+      .parse(request.body);
+    const quote = await deliveryZones.getDeliveryQuote({
+      store_id: body.store_id,
+      municipality_id: body.municipality_id,
+      ward_id: body.ward_id,
+      order_value: body.order_value,
+    });
+    return reply.status(quote.serviceable ? 200 : 400).send(quote);
+  });
+
   fastify.post("/checkout/cod", async (request, reply) => {
     const body = CodCheckoutBodySchema.parse(request.body);
     try {
@@ -89,10 +110,14 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
             body.delivery_type === "DELIVERY"
               ? body.shipping_address
               : undefined,
-          shippingCity:
-            body.delivery_type === "DELIVERY" ? body.shipping_city : undefined,
-          shippingState:
-            body.delivery_type === "DELIVERY" ? body.shipping_state : undefined,
+          shippingMunicipalityId:
+            body.delivery_type === "DELIVERY"
+              ? body.shipping_municipality_id
+              : undefined,
+          shippingWardId:
+            body.delivery_type === "DELIVERY"
+              ? body.shipping_ward_id
+              : undefined,
           shippingPostalCode:
             body.delivery_type === "DELIVERY"
               ? body.shipping_postal_code
@@ -111,7 +136,9 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         message.includes("Cart") ||
         message.includes("Price") ||
         message.includes("store") ||
-        message.includes("delivery address");
+        message.includes("delivery") ||
+        message.includes("municipality") ||
+        message.includes("Address");
       if (!clientError) request.log.error({ error }, "COD checkout failed");
       return reply
         .status(clientError ? 400 : 500)
