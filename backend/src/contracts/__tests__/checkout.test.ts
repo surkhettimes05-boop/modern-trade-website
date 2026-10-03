@@ -34,10 +34,10 @@ describe("COD checkout contract", () => {
       CodCheckoutBodySchema.parse({
         ...common,
         delivery_type: "DELIVERY",
-        shipping_address: "Ward 26, Thamel",
-        shipping_city: "Kathmandu",
-        shipping_state: "Bagmati",
-        shipping_postal_code: "44600",
+        shipping_address: "Ward 6, Birendranagar",
+        shipping_municipality_id: 1,
+        shipping_ward_id: 1,
+        shipping_postal_code: "21700",
         shipping_country: "NP",
       }),
     ).toMatchObject({ delivery_type: "DELIVERY", shipping_country: "NP" });
