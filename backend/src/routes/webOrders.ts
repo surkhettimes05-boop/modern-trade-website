@@ -255,10 +255,11 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         "REFUNDED",
       ]),
       reason: z.string().trim().min(1).max(500).optional(),
+      cod_received: z.boolean().optional().default(false),
     });
 
     const { orderId } = paramsSchema.parse(request.params);
-    const { status, reason } = bodySchema.parse(request.body);
+    const { status, reason, cod_received } = bodySchema.parse(request.body);
 
     try {
       const order = await webOrderService.updateWebOrderStatus(
@@ -266,6 +267,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         status,
         (request.user as { id: string }).id,
         reason,
+        cod_received,
       );
       return reply.send(order);
     } catch (error) {
@@ -273,9 +275,11 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         error instanceof Error
           ? error.message
           : "Failed to update order status";
-      return reply
-        .status(message.startsWith("Invalid transition") ? 409 : 500)
-        .send({ error: message });
+      const clientError =
+        message.startsWith("Invalid transition") ||
+        message.includes("COD cash receipt") ||
+        message.includes("Insufficient inventory");
+      return reply.status(clientError ? 409 : 500).send({ error: message });
     }
   });
 
