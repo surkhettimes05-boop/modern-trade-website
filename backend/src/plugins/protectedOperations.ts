@@ -21,6 +21,7 @@ import { tenderReconciliationRoutes } from "../routes/tenderReconciliation.js";
 import { staffRoutes } from "../routes/staff.js";
 import { auditReportRoutes } from "../routes/auditReports.js";
 import { posDeviceRoutes } from "../routes/posDevices.js";
+import { storeOrderRoutes } from "../routes/storeOrders.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
 import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
@@ -122,6 +123,11 @@ const capabilityAccess: Array<{
     write: ["orders.modify"],
   },
   { prefix: "/staff", read: ["staff.read"], write: ["staff.manage"] },
+  {
+    prefix: "/store-orders",
+    read: ["orders.read"],
+    write: ["orders.fulfil"],
+  },
 ];
 
 export function requiresStepUpMfa(method: string, routePath: string): boolean {
@@ -278,6 +284,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
   await fastify.register(tenderReconciliationRoutes);
   await fastify.register(staffRoutes);
   await fastify.register(auditReportRoutes);
+  await fastify.register(storeOrderRoutes);
   if (deferredFeatureEnabled("ENABLE_PROMOTION_ENGINE")) {
     await fastify.register(ruleRoutes, { prefix: "/rules" });
   }
