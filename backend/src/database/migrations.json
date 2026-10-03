@@ -72,10 +72,6 @@
     "../database/018_enable_public_rls.sql"
   ],
   [
-    "019_nepal_delivery_localization",
-    "../database/expansion_phase1_schema.sql"
-  ],
-  [
     "020_explicit_deny_supabase_api",
     "../database/020_explicit_deny_supabase_api.sql"
   ],
