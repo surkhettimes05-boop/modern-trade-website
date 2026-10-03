@@ -114,5 +114,9 @@
   [
     "030_launch_order_hardening",
     "../database/030_launch_order_hardening.sql"
+  ],
+  [
+    "031_loyalty_numeric_hardening",
+    "../database/031_loyalty_numeric_hardening.sql"
   ]
 ]
