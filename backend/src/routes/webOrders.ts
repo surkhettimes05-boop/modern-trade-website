@@ -246,6 +246,12 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         message.startsWith("Invalid transition") ||
         message.includes("COD cash receipt") ||
         message.includes("Insufficient inventory");
+      if (!clientError) {
+        request.log.error(
+          { error, orderId, requestedStatus: status },
+          "Web order status transition failed",
+        );
+      }
       return reply.status(clientError ? 409 : 500).send({ error: message });
     }
   });
