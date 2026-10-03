@@ -92,11 +92,12 @@ export function LiveOrderConsole() {
   }, [storeId]);
 
   useEffect(() => {
-    void loadOrders();
+    const initialLoad = window.setTimeout(() => void loadOrders(), 0);
     const interval = window.setInterval(() => void loadOrders(true), 2000);
     const onVisible = () => { if (document.visibilityState === 'visible') void loadOrders(true); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      window.clearTimeout(initialLoad);
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
