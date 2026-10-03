@@ -169,6 +169,23 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Web Order: Get reservation state for fulfillment/reconciliation.
+  // This inherits order read capability and authoritative store scoping from
+  // the route-level preHandler instead of requiring privileged-admin MFA.
+  fastify.get("/web-orders/:orderId/reservations", async (request, reply) => {
+    const schema = z.object({ orderId: z.string().uuid() });
+    const { orderId } = schema.parse(request.params);
+    const result = await query(
+      `SELECT reservation_id, product_id, store_id, quantity, status,
+              reserved_at, expires_at, updated_at
+         FROM stock_reservations
+        WHERE order_id = $1
+        ORDER BY reserved_at, reservation_id`,
+      [orderId],
+    );
+    return reply.send(result.rows);
+  });
+
   // Web Order: Get order items
   fastify.get("/web-orders/:orderId/items", async (request, reply) => {
     const schema = z.object({
