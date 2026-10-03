@@ -5,7 +5,8 @@ import { BellRing, CheckCircle2, PackageCheck, Truck, Volume2, VolumeX } from 'l
 import { useStaffSession } from '@/components/StaffSessionProvider';
 import { resilientFetch } from '@/lib/resilientFetch';
 
-type OrderRow = Record<string, unknown>;
+type OrderItem = { id?: string; sku?: string; product_name?: string; quantity?: number; unit_price?: number; line_total?: number };
+type OrderRow = Record<string, unknown> & { items?: OrderItem[] };
 
 const terminalStatuses = new Set(['DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED']);
 const alertStatuses = new Set(['PENDING', 'PENDING_PAYMENT']);
@@ -16,7 +17,7 @@ const nextStatus: Record<string, { status: string; label: string }> = {
   CONFIRMED: { status: 'PICKING', label: 'Start picking' },
   PICKING: { status: 'PACKED', label: 'Mark packed' },
   PACKED: { status: 'OUT_FOR_DELIVERY', label: 'Send for delivery' },
-  OUT_FOR_DELIVERY: { status: 'DELIVERED', label: 'Mark delivered' },
+  OUT_FOR_DELIVERY: { status: 'DELIVERED', label: 'Confirm delivered + cash received' },
 };
 
 function value(row: OrderRow, key: string, fallback = '—') {
@@ -157,7 +158,7 @@ export function LiveOrderConsole() {
           'Content-Type': 'application/json',
           'x-csrf-token': readCsrfToken(),
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, cod_received: status === 'DELIVERED' }),
         timeoutMs: 10000,
       });
       const body = await response.json().catch(() => ({}));
@@ -224,6 +225,23 @@ export function LiveOrderConsole() {
                     <div><p className="text-slate-500">Total</p><p className="font-semibold">{formatMoney(order.total_amount, order.currency)}</p></div>
                     <div><p className="text-slate-500">Payment</p><p className="font-semibold">{value(order, 'payment_method')} · {value(order, 'payment_status')}</p></div>
                     <div><p className="text-slate-500">Fulfilment</p><p className="font-semibold">{value(order, 'delivery_type')}</p></div>
+                    <div><p className="text-slate-500">Phone</p><p className="font-semibold">{value(order, 'shipping_phone')}</p></div>
+                    <div><p className="text-slate-500">Address</p><p className="font-semibold">{value(order, 'shipping_address')}</p></div>
+                  </div>
+                  <div className="mt-4 rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs font-black uppercase tracking-wide text-slate-500">Picking list</p>
+                    <div className="mt-3 space-y-2">
+                      {(Array.isArray(order.items) ? order.items : []).map((item, itemIndex) => (
+                        <div key={item.id || `${item.sku || item.product_name}-${itemIndex}`} className="flex items-start justify-between gap-4 border-b border-slate-200 pb-2 last:border-0 last:pb-0">
+                          <div>
+                            <p className="font-semibold">{item.product_name || 'Product'}</p>
+                            <p className="text-xs text-slate-500">SKU: {item.sku || '—'}</p>
+                          </div>
+                          <strong>× {Number(item.quantity || 0)}</strong>
+                        </div>
+                      ))}
+                      {(!Array.isArray(order.items) || order.items.length === 0) ? <p className="text-sm text-amber-700">No picking lines were returned. Refresh before fulfilling this order.</p> : null}
+                    </div>
                   </div>
                   {action && hasCapability('orders.fulfil') && (
                     <button
@@ -253,6 +271,17 @@ export function LiveOrderConsole() {
               <div><p className="text-xs uppercase text-slate-500">Total</p><p className="mt-1 font-bold">{formatMoney(alertOrder.total_amount, alertOrder.currency)}</p></div>
               <div><p className="text-xs uppercase text-slate-500">Payment</p><p className="mt-1 font-bold">{value(alertOrder, 'payment_method')}</p></div>
               <div><p className="text-xs uppercase text-slate-500">Type</p><p className="mt-1 font-bold">{value(alertOrder, 'delivery_type')}</p></div>
+            </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 p-5">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-500">Items to pick</p>
+              <div className="mt-3 space-y-2">
+                {(Array.isArray(alertOrder.items) ? alertOrder.items : []).map((item, itemIndex) => (
+                  <div key={item.id || `${item.sku || item.product_name}-${itemIndex}`} className="flex justify-between gap-4">
+                    <span>{item.product_name || 'Product'} <small className="text-slate-500">({item.sku || 'no SKU'})</small></span>
+                    <strong>× {Number(item.quantity || 0)}</strong>
+                  </div>
+                ))}
+              </div>
             </div>
             {!soundEnabled && <button type="button" onClick={() => void enableSound()} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-800"><Volume2 size={17} /> Enable repeating order sound</button>}
             <button
