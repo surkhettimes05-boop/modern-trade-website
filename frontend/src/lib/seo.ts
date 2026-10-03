@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 
 export const SITE = {
-  name: 'NOVA MART',
-  legalName: 'NOVA MART Retail Nepal Pvt. Ltd.',
-  description: 'Shop groceries, fresh food and home essentials at dependable everyday prices across Nepal.',
+  name: 'Pasalho',
+  legalName: 'Pasalho',
+  description: 'Shop everyday groceries and household essentials from Pasalho with store-based availability and clear NPR pricing.',
   locale: 'en_NP',
   language: 'en-NP',
   country: 'NP',
   currency: 'NPR',
-  url: (process.env.NEXT_PUBLIC_SITE_URL || 'https://storesync.com').replace(/\/$/, ''),
+  url: (process.env.NEXT_PUBLIC_SITE_URL || 'https://pasalho.com').replace(/\/$/, ''),
 } as const;
 
 export function absoluteUrl(path = '/') {
