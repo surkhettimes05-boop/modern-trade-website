@@ -173,7 +173,7 @@ export default function CheckoutPage() {
       const clearResponse = await resilientFetch(`/api/shopping-cart/${cart.id}/clear`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+        headers: { 'x-csrf-token': csrf },
       });
       if (!clearResponse.ok) {
         const clearBody = await clearResponse.json().catch(() => ({}));
