@@ -43,9 +43,9 @@ CREATE TABLE IF NOT EXISTS nepal_wards (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_nepal_districts_province ON nepal_districts(province_id);
-CREATE INDEX idx_nepal_municipalities_district ON nepal_municipalities(district_id);
-CREATE INDEX idx_nepal_wards_municipality ON nepal_wards(municipality_id);
+CREATE INDEX IF NOT EXISTS idx_nepal_districts_province ON nepal_districts(province_id);
+CREATE INDEX IF NOT EXISTS idx_nepal_municipalities_district ON nepal_municipalities(district_id);
+CREATE INDEX IF NOT EXISTS idx_nepal_wards_municipality ON nepal_wards(municipality_id);
 
 -- ============================================
 -- CUSTOMER ADDRESSES
@@ -95,9 +95,9 @@ CREATE TABLE IF NOT EXISTS customer_addresses (
     metadata JSONB
 );
 
-CREATE INDEX idx_customer_addresses_customer ON customer_addresses(customer_id);
-CREATE INDEX idx_customer_addresses_default ON customer_addresses(customer_id) WHERE is_default = TRUE;
-CREATE INDEX idx_customer_addresses_municipality ON customer_addresses(municipality_id);
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_default ON customer_addresses(customer_id) WHERE is_default = TRUE;
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_municipality ON customer_addresses(municipality_id);
 
 -- ============================================
 -- DELIVERY ZONES
@@ -136,8 +136,8 @@ CREATE TABLE IF NOT EXISTS delivery_zones (
     metadata JSONB
 );
 
-CREATE INDEX idx_delivery_zones_store ON delivery_zones(store_id);
-CREATE INDEX idx_delivery_zones_active ON delivery_zones(store_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_delivery_zones_store ON delivery_zones(store_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_zones_active ON delivery_zones(store_id) WHERE is_active = TRUE;
 
 -- ============================================
 -- STOCK RESERVATIONS
@@ -164,11 +164,11 @@ CREATE TABLE IF NOT EXISTS stock_reservations (
     metadata JSONB
 );
 
-CREATE INDEX idx_stock_reservations_cart ON stock_reservations(cart_id);
-CREATE INDEX idx_stock_reservations_order ON stock_reservations(order_id);
-CREATE INDEX idx_stock_reservations_product ON stock_reservations(product_id);
-CREATE INDEX idx_stock_reservations_store ON stock_reservations(store_id);
-CREATE INDEX idx_stock_reservations_expires ON stock_reservations(expires_at) WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS idx_stock_reservations_cart ON stock_reservations(cart_id);
+CREATE INDEX IF NOT EXISTS idx_stock_reservations_order ON stock_reservations(order_id);
+CREATE INDEX IF NOT EXISTS idx_stock_reservations_product ON stock_reservations(product_id);
+CREATE INDEX IF NOT EXISTS idx_stock_reservations_store ON stock_reservations(store_id);
+CREATE INDEX IF NOT EXISTS idx_stock_reservations_expires ON stock_reservations(expires_at) WHERE status = 'ACTIVE';
 
 -- ============================================
 -- COD POLICY RULES
@@ -218,8 +218,8 @@ CREATE TABLE IF NOT EXISTS cod_policies (
     metadata JSONB
 );
 
-CREATE INDEX idx_cod_policies_store ON cod_policies(store_id);
-CREATE INDEX idx_cod_policies_active ON cod_policies(store_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_cod_policies_store ON cod_policies(store_id);
+CREATE INDEX IF NOT EXISTS idx_cod_policies_active ON cod_policies(store_id) WHERE is_active = TRUE;
 
 -- ============================================
 -- PRODUCT SEARCH INDEXING
@@ -256,10 +256,10 @@ CREATE TABLE IF NOT EXISTS product_search_index (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_product_search_index_product ON product_search_index(product_id);
-CREATE INDEX idx_product_search_index_en ON product_search_index USING GIN(search_vector_en);
-CREATE INDEX idx_product_search_index_ne ON product_search_index USING GIN(search_vector_ne);
-CREATE INDEX idx_product_search_index_romanized ON product_search_index USING GIN(search_vector_romanized);
+CREATE INDEX IF NOT EXISTS idx_product_search_index_product ON product_search_index(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_search_index_en ON product_search_index USING GIN(search_vector_en);
+CREATE INDEX IF NOT EXISTS idx_product_search_index_ne ON product_search_index USING GIN(search_vector_ne);
+CREATE INDEX IF NOT EXISTS idx_product_search_index_romanized ON product_search_index USING GIN(search_vector_romanized);
 
 -- ============================================
 -- ORDER EVENTS (for order lifecycle tracking)
@@ -277,9 +277,9 @@ CREATE TABLE IF NOT EXISTS order_events (
     created_by VARCHAR(100)
 );
 
-CREATE INDEX idx_order_events_order ON order_events(order_id);
-CREATE INDEX idx_order_events_type ON order_events(event_type);
-CREATE INDEX idx_order_events_created ON order_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_order_events_order ON order_events(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_events_type ON order_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_order_events_created ON order_events(created_at);
 
 -- ============================================
 -- WEB ORDERS (Enhanced for full lifecycle)
