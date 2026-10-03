@@ -76,6 +76,10 @@ CREATE INDEX IF NOT EXISTS idx_delivery_zones_active
 ALTER TABLE web_orders
   ADD COLUMN IF NOT EXISTS shipping_municipality_id INTEGER REFERENCES nepal_municipalities(id),
   ADD COLUMN IF NOT EXISTS shipping_ward_id INTEGER REFERENCES nepal_wards(id),
+  ADD COLUMN IF NOT EXISTS delivery_zone_id UUID REFERENCES delivery_zones(id),
+  ADD COLUMN IF NOT EXISTS delivery_fee DECIMAL(12, 2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS delivery_quote JSONB,
+  ADD COLUMN IF NOT EXISTS fulfillment_store_id UUID REFERENCES stores(id),
   ADD COLUMN IF NOT EXISTS cod_collected_at TIMESTAMP WITH TIME ZONE,
   ADD COLUMN IF NOT EXISTS cod_collected_by VARCHAR(100);
 
@@ -83,6 +87,10 @@ CREATE INDEX IF NOT EXISTS idx_web_orders_shipping_municipality
   ON web_orders(shipping_municipality_id);
 CREATE INDEX IF NOT EXISTS idx_web_orders_shipping_ward
   ON web_orders(shipping_ward_id);
+CREATE INDEX IF NOT EXISTS idx_web_orders_delivery_zone
+  ON web_orders(delivery_zone_id);
+CREATE INDEX IF NOT EXISTS idx_web_orders_fulfillment_store
+  ON web_orders(fulfillment_store_id);
 
 -- The Nepal launch catalog is NPR. Migration 013 originally seeded demo price
 -- rows as INR; make existing Nepal data consistent without touching prices.
