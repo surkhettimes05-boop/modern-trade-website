@@ -49,6 +49,6 @@ export default function Footer() {
       </nav>
     </div>
     <div className="footer-grid shell">{Object.entries(cols).map(([heading, links]) => <div key={heading}><h3>{heading}</h3>{links.map(({ label, href }) => <Link href={href} key={label}>{label}</Link>)}</div>)}</div>
-    <div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Nepal Pvt. Ltd.</span><span>Nepal · English</span><span>Cash on delivery · Cash at POS</span></div>
+    <div className="footer-bottom shell"><span>© 2026 NOVA MART Retail Nepal Pvt. Ltd.</span><span>Nepal · English</span><span>Cash on delivery · Store pickup</span></div>
   </footer>;
 }
