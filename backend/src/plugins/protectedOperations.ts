@@ -15,6 +15,7 @@ import { supplierRoutes } from "../routes/suppliers.js";
 import { purchaseOrderRoutes } from "../routes/purchaseOrders.js";
 import { receivingRoutes } from "../routes/receiving.js";
 import { batchRoutes } from "../routes/batches.js";
+import { stockReservationRoutes } from "../routes/stockReservations.js";
 import { transferRoutes } from "../routes/transfers.js";
 import { shiftRoutes } from "../routes/shifts.js";
 import { tenderReconciliationRoutes } from "../routes/tenderReconciliation.js";
@@ -96,6 +97,7 @@ const capabilityAccess: Array<{
     write: ["devices.manage"],
   },
   { prefix: "/batches", read: ["inventory.read"], write: ["inventory.adjust"] },
+  { prefix: "/stock-reservations", read: ["inventory.read", "orders.read"], write: ["inventory.adjust", "orders.fulfil"] },
   {
     prefix: "/transfers",
     read: ["transfers.request", "transfers.approve"],
@@ -273,6 +275,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
   await fastify.register(purchaseOrderRoutes);
   await fastify.register(receivingRoutes);
   await fastify.register(batchRoutes);
+  await fastify.register(stockReservationRoutes);
   await fastify.register(transferRoutes);
   await fastify.register(shiftRoutes);
   await fastify.register(tenderReconciliationRoutes);
