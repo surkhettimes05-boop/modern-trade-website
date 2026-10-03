@@ -52,12 +52,6 @@ export function OperationsSidebar() {
       capability: 'dashboard.read',
     },
     {
-      title: 'POS',
-      href: '/operations/pos',
-      icon: <ShoppingCart className="h-5 w-5" />,
-      capability: 'pos.execute',
-    },
-    {
       title: 'Orders',
       href: '/operations/orders',
       icon: <ShoppingCart className="h-5 w-5" />,
@@ -144,7 +138,7 @@ export function OperationsSidebar() {
     <div className="hidden w-64 shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
       {/* Logo */}
       <div className="p-4 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-gray-900">NOVA MART Operations</h1>
+        <h1 className="text-xl font-bold text-gray-900">Pasalho Operations</h1>
       </div>
 
       {/* Navigation */}
