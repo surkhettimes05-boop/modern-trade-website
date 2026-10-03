@@ -1,4 +1,4 @@
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
 
 interface StockReservation {
   id: string;
@@ -110,22 +110,63 @@ export class StockReservationService {
   }
 
   /**
-   * Consume reservation (convert to actual sale)
+   * Consume reservation and deduct physical inventory atomically.
    */
   async consumeReservation(reservationId: string): Promise<StockReservation> {
-    const result = await query(
-      `UPDATE stock_reservations 
-       SET status = 'CONSUMED', updated_at = NOW()
-       WHERE reservation_id = $1 AND status = 'ACTIVE'
-       RETURNING *`,
-      [reservationId],
-    );
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const locked = await client.query(
+        `SELECT *
+           FROM stock_reservations
+          WHERE reservation_id = $1 AND status = 'ACTIVE'
+          FOR UPDATE`,
+        [reservationId],
+      );
+      const reservation = locked.rows[0] as StockReservation | undefined;
+      if (!reservation) {
+        throw new Error("Reservation not found or already consumed/expired");
+      }
 
-    if (result.rows.length === 0) {
-      throw new Error("Reservation not found or already consumed/expired");
+      let remaining = Number(reservation.quantity);
+      const batches = await client.query(
+        `SELECT id, quantity
+           FROM batch_inventory
+          WHERE product_id = $1 AND store_id = $2 AND quantity > 0
+          ORDER BY expiry_date ASC NULLS LAST, created_at ASC
+          FOR UPDATE`,
+        [reservation.product_id, reservation.store_id],
+      );
+      for (const batch of batches.rows) {
+        if (remaining <= 0) break;
+        const deduct = Math.min(Number(batch.quantity), remaining);
+        await client.query(
+          `UPDATE batch_inventory
+              SET quantity = quantity - $1, updated_at = NOW()
+            WHERE id = $2`,
+          [deduct, batch.id],
+        );
+        remaining -= deduct;
+      }
+      if (remaining > 0) {
+        throw new Error("Insufficient inventory to consume reservation");
+      }
+
+      const result = await client.query(
+        `UPDATE stock_reservations
+            SET status = 'CONSUMED', updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [reservation.id],
+      );
+      await client.query("COMMIT");
+      return result.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
-
-    return result.rows[0];
   }
 
   /**
