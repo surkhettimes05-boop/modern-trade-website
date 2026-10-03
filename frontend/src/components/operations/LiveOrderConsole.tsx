@@ -93,12 +93,13 @@ export function LiveOrderConsole() {
 
   useEffect(() => {
     const saved = window.localStorage.getItem('pasalho-order-sound-enabled');
-    setSoundEnabled(saved === 'true');
+    const restoreSound = window.setTimeout(() => setSoundEnabled(saved === 'true'), 0);
     void loadOrders();
     const interval = window.setInterval(() => void loadOrders(true), 2000);
     const onVisible = () => { if (document.visibilityState === 'visible') void loadOrders(true); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      window.clearTimeout(restoreSound);
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
