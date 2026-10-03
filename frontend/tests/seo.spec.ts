@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 const indexableRoutes = [
   '/', '/shop', '/offers', '/stores', '/about', '/services', '/faq', '/contact',
-  '/category/rice', '/product/premium-basmati-rice-5kg',
+  '/category/groceries', '/product/premium-basmati-rice-5kg',
 ];
 
 test.describe('SEO release gate', () => {
@@ -27,13 +27,13 @@ test.describe('SEO release gate', () => {
     await page.goto('/shop', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Shop all products' })).toBeVisible();
     await expect(page.locator('a[href="/product/premium-basmati-rice-5kg"]').first()).toBeVisible();
-    await page.goto('/category/rice', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Rice', exact: true })).toBeVisible();
+    await page.goto('/category/groceries', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Groceries', exact: true })).toBeVisible();
     await context.close();
   });
 
   test('structured data is valid JSON on entity pages', async ({ page }) => {
-    for (const route of ['/', '/shop', '/offers', '/stores', '/faq', '/category/rice', '/product/premium-basmati-rice-5kg']) {
+    for (const route of ['/', '/shop', '/offers', '/stores', '/faq', '/category/groceries', '/product/premium-basmati-rice-5kg']) {
       await page.goto(route, { waitUntil: 'domcontentloaded' });
       const blocks = await page.locator('script[type="application/ld+json"]').allTextContents();
       expect(blocks.length, `${route} JSON-LD blocks`).toBeGreaterThan(0);
@@ -60,7 +60,7 @@ test.describe('SEO release gate', () => {
     const response = await request.get('/sitemap.xml');
     expect(response.status()).toBe(200);
     const xml = await response.text();
-    expect(xml).toContain('/category/rice');
+    expect(xml).toContain('/category/groceries');
     expect(xml).toContain('/product/premium-basmati-rice-5kg');
     const sitemapPaths = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1]).pathname);
     for (const path of ['/account', '/admin', '/cart', '/checkout', '/privacy', '/terms']) expect(sitemapPaths).not.toContain(path);
