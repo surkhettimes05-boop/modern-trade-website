@@ -50,7 +50,7 @@ export async function storeOrderRoutes(fastify: FastifyInstance) {
       if (unsubscribe) void unsubscribe();
     };
 
-    request.raw.once("close", cleanup);
     response.once("close", cleanup);
+    request.raw.socket?.once("close", cleanup);
   });
 }
