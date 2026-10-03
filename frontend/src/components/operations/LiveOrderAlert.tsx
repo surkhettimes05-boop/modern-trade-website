@@ -91,7 +91,7 @@ export function LiveOrderAlert() {
 
   useEffect(() => {
     if (!storeId || !hasCapability("orders.read")) return;
-    void loadPending();
+    const initialLoad = window.setTimeout(() => void loadPending(), 0);
 
     const stream = new EventSource(
       `/api/store-orders/stream?store_id=${encodeURIComponent(storeId)}`,
@@ -123,6 +123,7 @@ export function LiveOrderAlert() {
 
     const fallback = window.setInterval(() => void loadPending(), 3_000);
     return () => {
+      window.clearTimeout(initialLoad);
       window.clearInterval(fallback);
       stream.removeEventListener("ready", onReady);
       stream.removeEventListener("order", onOrder as EventListener);
