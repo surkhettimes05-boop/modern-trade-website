@@ -104,10 +104,13 @@ test.describe("release browser gate", () => {
   test("product detail, navigation, protected-page redirect, and keyboard focus work", async ({ page }) => {
     await page.goto("/shop");
     await expect(page.getByText("Loading products...")).toHaveCount(0, { timeout: 12_000 });
-    const href = await page.locator(".product-card a").first().getAttribute("href");
+    const firstCard = page.locator(".product-card").first();
+    const href = await firstCard.locator("a").first().getAttribute("href");
+    const productName = (await firstCard.locator("h3").textContent())?.trim();
     expect(href).toMatch(/^\/product\//);
-    await page.goto("/product/premium-basmati-rice-5kg", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /premium basmati rice/i })).toBeVisible({ timeout: 12_000 });
+    expect(productName).toBeTruthy();
+    await page.goto(href!, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: productName!, exact: true })).toBeVisible({ timeout: 12_000 });
     await page.getByRole("button", { name: /zoom product image/i }).click();
     await expect(page.getByRole("button", { name: "Close" })).toBeVisible();
     await page.keyboard.press("Escape");
