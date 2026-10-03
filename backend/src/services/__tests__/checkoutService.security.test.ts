@@ -23,6 +23,17 @@ describe("checkout query batching", () => {
       if (sql.includes("FROM web_orders WHERE idempotency_key")) {
         return { rows: [] };
       }
+      if (sql.includes("FROM stores")) {
+        return {
+          rows: [
+            {
+              id: "00000000-0000-0000-0000-000000000010",
+              address_en: "Pasalho Store",
+              is_temporarily_closed: false,
+            },
+          ],
+        };
+      }
       if (sql.includes("FROM shopping_carts")) {
         return { rows: [{ id: "cart-1" }] };
       }
@@ -63,14 +74,9 @@ describe("checkout query batching", () => {
       storeId: "00000000-0000-0000-0000-000000000010",
       cartId: "00000000-0000-0000-0000-000000000020",
       idempotencyKey: "12345678-idempotency",
-      deliveryType: "DELIVERY",
+      deliveryType: "PICKUP",
       shippingName: "Test Customer",
       shippingPhone: "+9779812345678",
-      shippingAddress: "Test Street",
-      shippingCity: "Kathmandu",
-      shippingState: "Bagmati",
-      shippingPostalCode: "44600",
-      shippingCountry: "NP",
     });
 
     expect(order.id).toBe("order-1");
