@@ -222,10 +222,22 @@ export class StockReservationService {
    */
   async expireReservations(): Promise<number> {
     const result = await query(
-      `UPDATE stock_reservations 
-       SET status = 'EXPIRED'
-       WHERE status = 'ACTIVE' AND expires_at < NOW()
-       RETURNING id`,
+      `UPDATE stock_reservations AS reservation
+          SET status = 'EXPIRED', updated_at = NOW()
+        WHERE reservation.status = 'ACTIVE'
+          AND reservation.expires_at < NOW()
+          AND NOT EXISTS (
+            SELECT 1
+              FROM web_orders AS orders
+             WHERE orders.id = reservation.order_id
+               AND orders.status IN (
+                 'CONFIRMED',
+                 'PICKING',
+                 'PACKED',
+                 'OUT_FOR_DELIVERY'
+               )
+          )
+        RETURNING reservation.id`,
     );
     return result.rowCount || 0;
   }
