@@ -325,6 +325,58 @@ export class WebOrderService {
       if (!this.validStatusTransitions[order.status]?.includes(status)) {
         throw new Error(`Invalid transition from ${order.status} to ${status}`);
       }
+
+      // Keep reserved stock unavailable while staff fulfils the order. When the
+      // delivery is completed, deduct the physical batch inventory and consume
+      // the reservations in the same database transaction.
+      if (status === "DELIVERED") {
+        const orderItems = await client.query(
+          `SELECT product_id, quantity
+             FROM web_order_items
+            WHERE order_id = $1
+            ORDER BY id`,
+          [orderId],
+        );
+        if (!orderItems.rows.length) {
+          throw new Error("Order has no items and cannot be delivered");
+        }
+
+        for (const item of orderItems.rows) {
+          let remaining = Number(item.quantity);
+          const batches = await client.query(
+            `SELECT id, quantity
+               FROM batch_inventory
+              WHERE store_id = $1
+                AND product_id = $2
+                AND quantity > 0
+              ORDER BY expiry_date ASC, created_at ASC
+              FOR UPDATE`,
+            [order.store_id, item.product_id],
+          );
+
+          for (const batch of batches.rows) {
+            if (remaining <= 0) break;
+            const available = Number(batch.quantity);
+            const deduct = Math.min(available, remaining);
+            if (deduct <= 0) continue;
+            await client.query(
+              `UPDATE batch_inventory
+                  SET quantity = quantity - $1,
+                      updated_at = NOW()
+                WHERE id = $2`,
+              [deduct, batch.id],
+            );
+            remaining -= deduct;
+          }
+
+          if (remaining > 0) {
+            throw new Error(
+              `Insufficient inventory to complete delivery for product ${item.product_id}`,
+            );
+          }
+        }
+      }
+
       const result = await client.query(
         `UPDATE web_orders
          SET status = $1,
@@ -335,6 +387,25 @@ export class WebOrderService {
          WHERE id = $4 RETURNING *`,
         [status, reason || null, actorId, orderId],
       );
+      if (
+        ["CONFIRMED", "PICKING", "PACKED", "OUT_FOR_DELIVERY"].includes(status)
+      ) {
+        await client.query(
+          `UPDATE stock_reservations
+              SET expires_at = GREATEST(expires_at, NOW() + INTERVAL '24 hours'),
+                  updated_at = NOW()
+            WHERE order_id = $1 AND status = 'ACTIVE'`,
+          [orderId],
+        );
+      }
+      if (status === "DELIVERED") {
+        await client.query(
+          `UPDATE stock_reservations
+              SET status = 'CONSUMED', updated_at = NOW()
+            WHERE order_id = $1 AND status = 'ACTIVE'`,
+          [orderId],
+        );
+      }
       if (status === "CANCELLED") {
         await client.query(
           `UPDATE stock_reservations SET status = 'CANCELLED', updated_at = NOW()

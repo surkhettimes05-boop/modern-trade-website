@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useStaffSession } from '@/components/StaffSessionProvider';
 import { MARKET } from '@/lib/market';
 import { resilientFetch } from '@/lib/resilientFetch';
+import { LiveOrderConsole } from '@/components/operations/LiveOrderConsole';
 
 type Row = Record<string, unknown>;
 type Module = { title: string; endpoint?: string; capability: string; description: string; create?: { endpoint: string; label: string; fields: Array<{ name: string; label: string; type?: string; defaultValue?: string }> } };
@@ -56,6 +57,7 @@ export function OperationsWorkbench({ route }: { route: string }) {
 
   const summary = useMemo(() => ({ records: rows.length, store: session?.storeAssignment?.name || 'Assigned store', role: session?.role?.name || 'Staff' }), [rows.length, session]);
   if (!hasCapability(moduleConfig.capability)) return <section className="rounded-2xl bg-white p-8 shadow-sm"><h1 className="text-2xl font-bold text-slate-950">Access unavailable</h1><p className="mt-2 text-slate-600">This staff account does not have <code>{moduleConfig.capability}</code>.</p></section>;
+  if (route === 'orders') return <LiveOrderConsole />;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setNotice('');
