@@ -1,9 +1,13 @@
 import { getPool } from "../../database/connection.js";
 import { WebOrderService } from "../webOrderService.js";
+import { orderRealtimeService } from "../orderRealtimeService.js";
 
 jest.mock("../../database/connection.js", () => ({
   getPool: jest.fn(),
   query: jest.fn(),
+}));
+jest.mock("../orderRealtimeService.js", () => ({
+  orderRealtimeService: { safePublish: jest.fn() },
 }));
 
 describe("web order lifecycle integrity", () => {
@@ -13,6 +17,7 @@ describe("web order lifecycle integrity", () => {
   beforeEach(() => {
     release.mockReset();
     clientQuery.mockReset();
+    (orderRealtimeService.safePublish as jest.Mock).mockReset();
     (getPool as jest.Mock).mockReturnValue({
       connect: jest.fn().mockResolvedValue({ query: clientQuery, release }),
     });
@@ -56,6 +61,139 @@ describe("web order lifecycle integrity", () => {
     expect(eventCall?.[1]).toContain("staff-1");
     expect(clientQuery).toHaveBeenCalledWith("COMMIT");
     expect(release).toHaveBeenCalled();
+  });
+
+  it("finalizes reserved inventory atomically only when delivery completes", async () => {
+    const productId = "00000000-0000-0000-0000-000000000001";
+    const storeId = "00000000-0000-0000-0000-000000000010";
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.startsWith("SELECT * FROM web_orders")) {
+        return {
+          rows: [
+            {
+              id: "order-1",
+              order_number: "WO-1",
+              status: "OUT_FOR_DELIVERY",
+              store_id: storeId,
+              total_amount: "500.00",
+              currency: "NPR",
+              delivery_type: "DELIVERY",
+            },
+          ],
+        };
+      }
+      if (sql.includes("FROM stock_reservations")) {
+        return {
+          rows: [
+            {
+              id: "reservation-row-1",
+              product_id: productId,
+              store_id: storeId,
+              quantity: 3,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (sql.includes("FROM batch_inventory")) {
+        return {
+          rows: [
+            { id: "batch-1", quantity: 2 },
+            { id: "batch-2", quantity: 5 },
+          ],
+          rowCount: 2,
+        };
+      }
+      if (sql.includes("UPDATE web_orders")) {
+        return {
+          rows: [
+            {
+              id: "order-1",
+              order_number: "WO-1",
+              status: "DELIVERED",
+              store_id: storeId,
+              total_amount: "500.00",
+              currency: "NPR",
+              delivery_type: "DELIVERY",
+            },
+          ],
+        };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    const result = await new WebOrderService().updateWebOrderStatus(
+      "order-1",
+      "DELIVERED",
+      "staff-1",
+    );
+
+    expect(result.status).toBe("DELIVERED");
+    const calls = clientQuery.mock.calls.map(([sql]) => String(sql));
+    expect(
+      calls.filter((sql) => sql.includes("UPDATE batch_inventory")),
+    ).toHaveLength(2);
+    expect(
+      calls.some(
+        (sql) =>
+          sql.includes("UPDATE stock_reservations") &&
+          sql.includes("status = 'CONSUMED'"),
+      ),
+    ).toBe(true);
+    expect(clientQuery).toHaveBeenCalledWith("COMMIT");
+    expect(orderRealtimeService.safePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "ORDER_STATUS_CHANGED",
+        store_id: storeId,
+        order: expect.objectContaining({ status: "DELIVERED" }),
+      }),
+    );
+  });
+
+  it("keeps reservations active while an order is only being confirmed", async () => {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.startsWith("SELECT * FROM web_orders")) {
+        return {
+          rows: [
+            {
+              id: "order-1",
+              order_number: "WO-1",
+              status: "PENDING_PAYMENT",
+              store_id: "00000000-0000-0000-0000-000000000010",
+            },
+          ],
+        };
+      }
+      if (sql.includes("UPDATE web_orders")) {
+        return {
+          rows: [
+            {
+              id: "order-1",
+              order_number: "WO-1",
+              status: "CONFIRMED",
+              store_id: "00000000-0000-0000-0000-000000000010",
+            },
+          ],
+        };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    await new WebOrderService().updateWebOrderStatus(
+      "order-1",
+      "CONFIRMED",
+      "staff-1",
+    );
+
+    const calls = clientQuery.mock.calls.map(([sql]) => String(sql));
+    expect(calls.some((sql) => sql.includes("FROM batch_inventory"))).toBe(false);
+    expect(
+      calls.some(
+        (sql) =>
+          sql.includes("UPDATE stock_reservations") &&
+          sql.includes("CONSUMED"),
+      ),
+    ).toBe(false);
   });
 
   it("rejects an invalid status transition and rolls back", async () => {
