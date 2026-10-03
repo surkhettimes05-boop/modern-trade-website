@@ -339,8 +339,10 @@ export class WebOrderService {
     codReceived = false,
   ): Promise<WebOrder> {
     const client = await getPool().connect();
+    let stage = "begin";
     try {
       await client.query("BEGIN");
+      stage = "lock-order";
       const current = await client.query(
         "SELECT * FROM web_orders WHERE id = $1 FOR UPDATE",
         [orderId],
@@ -410,6 +412,7 @@ export class WebOrderService {
       }
 
       let result;
+      stage = "update-order";
       if (status === "CANCELLED") {
         result = await client.query(
           `UPDATE web_orders
@@ -444,6 +447,7 @@ export class WebOrderService {
           [status, orderId],
         );
       }
+      stage = "update-reservations";
       if (
         ["CONFIRMED", "PICKING", "PACKED", "OUT_FOR_DELIVERY"].includes(status)
       ) {
@@ -470,6 +474,7 @@ export class WebOrderService {
           [orderId, order.cart_id],
         );
       }
+      stage = "insert-order-event";
       await client.query(
         `INSERT INTO order_events
           (order_id, event_type, from_status, to_status, reason, metadata, created_by)
@@ -486,11 +491,15 @@ export class WebOrderService {
           actorId,
         ],
       );
+      stage = "commit";
       await client.query("COMMIT");
       return result.rows[0];
     } catch (error) {
       await client.query("ROLLBACK");
-      throw error;
+      const message = error instanceof Error ? error.message : "Unknown database error";
+      throw new Error(`Web order transition failed at ${stage}: ${message}`, {
+        cause: error,
+      });
     } finally {
       client.release();
     }
