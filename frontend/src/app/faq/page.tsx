@@ -26,7 +26,7 @@ export default function FAQPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h1>
         <p className="text-xl text-gray-600 mb-8">
-          Find answers to common questions about StoreSync
+          Find answers to common questions about Pasalho
         </p>
 
         <div className="space-y-4">
@@ -51,7 +51,7 @@ export default function FAQPage() {
 
         <div className="mt-12 p-6 bg-emerald-50 border border-emerald-200 rounded-lg">
           <h2 className="text-lg font-semibold text-emerald-900 mb-2">Still need help?</h2>
-          <p className="text-emerald-800">Contact NOVA MART support or ask the team at your selected store for information specific to your location.</p>
+          <p className="text-emerald-800">Contact Pasalho support or ask the team at your selected store for information specific to your location.</p>
         </div>
       </div>
     </div>
