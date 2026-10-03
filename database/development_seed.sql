@@ -7,7 +7,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO stores (name_en, address_en, phone, email, status, published_at, created_by, organization_id, country_code, currency_code, locale, timezone, tax_regime, payment_providers, feature_flags)
 SELECT seed.name, seed.address, seed.phone, seed.email, 'PUBLISHED', NOW(), 'development-seed', o.id, 'NP', 'NPR', 'en-NP', 'Asia/Kathmandu', 'IRD', '["cash"]'::jsonb, '{"ENABLE_VAT_TAX": true}'::jsonb
 FROM (VALUES
-  ('Pasalho Birendranagar', 'Birendranagar, Surkhet, Karnali Province, Nepal', NULL::text, NULL::text)
+  ('Pasalho Birendranagar', 'Birendranagar, Surkhet, Karnali Province, Nepal', '9800000000', 'qa-store@example.invalid')
 ) AS seed(name, address, phone, email)
 CROSS JOIN (SELECT id FROM organizations WHERE country_code = 'NP' ORDER BY created_at LIMIT 1) o
 WHERE NOT EXISTS (SELECT 1 FROM stores s WHERE s.name_en = seed.name);
