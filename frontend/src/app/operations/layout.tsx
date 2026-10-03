@@ -3,6 +3,7 @@
 
 import { OperationsSidebar } from '@/components/operations/OperationsSidebar';
 import { OperationsTopbar } from '@/components/operations/OperationsTopbar';
+import { LiveOrderAlert } from '@/components/operations/LiveOrderAlert';
 import { StaffSessionProvider } from '@/components/StaffSessionProvider';
 import { privateMetadata } from '@/lib/seo';
 
@@ -14,6 +15,7 @@ export default function OperationsLayout({
   children: React.ReactNode;
 }) {
   return (<StaffSessionProvider area="operations">
+    <LiveOrderAlert />
     <div className="min-h-screen bg-gray-50">
       <div className="flex h-screen overflow-hidden">
         {/* Sidebar */}
