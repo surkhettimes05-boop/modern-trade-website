@@ -95,7 +95,6 @@ export class OTPService {
   async createOTP(input: CreateOTPInput): Promise<string> {
     const phoneNormalized = normalizePhone(input.phone);
     const otpCode =
-      process.env.NODE_ENV === "production" &&
       process.env.SMS_PROVIDER === "demo"
         ? getDemoOtpCodeForPhone(phoneNormalized)
         : this.generateOTP();
