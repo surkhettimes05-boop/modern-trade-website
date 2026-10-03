@@ -7,11 +7,20 @@ import {
 import { CheckoutService } from "../services/checkoutService.js";
 import { CodCheckoutBodySchema } from "../contracts/checkout.js";
 import { DeliveryZoneService } from "../services/deliveryZoneService.js";
+import { csrfMatches } from "../utils/csrf.js";
 
 const checkout = new CheckoutService();
 const deliveryZones = new DeliveryZoneService();
 export async function checkoutRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", authenticateCustomer);
+  fastify.addHook("preHandler", async (request, reply) => {
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method) && !csrfMatches(request)) {
+      return reply.status(403).send({
+        error: "Customer CSRF validation failed",
+        code: "CSRF_INVALID",
+      });
+    }
+  });
   fastify.get("/customer/orders", async (request) => {
     const { limit, offset } = z
       .object({
