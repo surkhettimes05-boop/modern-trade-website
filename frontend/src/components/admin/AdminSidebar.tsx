@@ -218,7 +218,7 @@ export function AdminSidebar() {
         </span>
         {!collapsed && (
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-white">NOVA MART</p>
+            <p className="truncate text-sm font-bold text-white">Pasalho</p>
             <p className="text-[11px] text-slate-400">Retail administration</p>
           </div>
         )}
