@@ -2,7 +2,6 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useStaffSession } from '@/components/StaffSessionProvider';
-import { MARKET } from '@/lib/market';
 import { resilientFetch } from '@/lib/resilientFetch';
 import { LiveOrderConsole } from '@/components/operations/LiveOrderConsole';
 
@@ -11,7 +10,6 @@ type Module = { title: string; endpoint?: string; capability: string; descriptio
 
 const modules: Record<string, Module> = {
   dashboard: { title: 'Operations dashboard', capability: 'dashboard.read', description: 'Live store activity, open shifts, receiving, transfers, and reconciliation queues.', endpoint: '/api/shifts/summary' },
-  pos: { title: 'Point of sale', capability: 'pos.execute', description: 'Create cash sales and review recent receipts.', endpoint: '/api/pos/sales', create: { endpoint: '/api/pos/sale', label: 'Create cash sale', fields: [{ name: 'quantity', label: 'Quantity', type: 'number', defaultValue: '1' }, { name: 'price', label: 'Unit price', type: 'number', defaultValue: '250' }] } },
   orders: { title: 'Orders', capability: 'orders.read', description: 'Review orders available to the store operations team.', endpoint: '/api/web-orders' },
   inventory: { title: 'Inventory overview', capability: 'inventory.read', description: 'Review on-hand batches, expiry, and movement-ready inventory.', endpoint: '/api/batches/inventory' },
   'inventory/batches': { title: 'Inventory batches', capability: 'inventory.read', description: 'Track batch IDs, expiry dates, and quantities.', endpoint: '/api/batches/inventory' },
@@ -65,7 +63,6 @@ export function OperationsWorkbench({ route }: { route: string }) {
     try {
       const payload: Row = { store_id: session?.storeAssignment?.id, created_by: session?.user?.id, opened_by: session?.user?.id };
       data.forEach((value, key) => { payload[key] = value === '' ? undefined : Number.isNaN(Number(value)) ? value : Number(value); });
-      if (route === 'pos') { payload.sale_number = `OPS-${Date.now()}`; payload.total_amount = Number(payload.quantity) * Number(payload.price); payload.currency = session?.organization?.currencyCode || MARKET.currencyCode; payload.payment_method = 'CASH'; payload.items = [{ quantity: Number(payload.quantity), unit_price: Number(payload.price), line_total: Number(payload.total_amount) }]; }
       await request(moduleConfig.create!.endpoint, { method: 'POST', body: JSON.stringify(payload) });
       setNotice('Action completed successfully.'); event.currentTarget.reset(); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Action failed'); }
