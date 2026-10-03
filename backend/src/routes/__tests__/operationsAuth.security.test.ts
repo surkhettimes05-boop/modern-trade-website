@@ -4,6 +4,7 @@ import { query } from "../../database/connection.js";
 import { operationsAuthRoutes } from "../operationsAuth.js";
 
 jest.mock("../../database/connection.js", () => ({ query: jest.fn() }));
+jest.mock("bcrypt", () => ({ __esModule: true, default: { compare: jest.fn().mockResolvedValue(true) } }));
 
 describe("operations MFA security", () => {
   it("counts a missing or invalid MFA code toward the account lock", async () => {
