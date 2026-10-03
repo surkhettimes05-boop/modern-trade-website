@@ -92,14 +92,11 @@ export function LiveOrderConsole() {
   }, [storeId]);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('pasalho-order-sound-enabled');
-    const restoreSound = window.setTimeout(() => setSoundEnabled(saved === 'true'), 0);
     void loadOrders();
     const interval = window.setInterval(() => void loadOrders(true), 2000);
     const onVisible = () => { if (document.visibilityState === 'visible') void loadOrders(true); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
-      window.clearTimeout(restoreSound);
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
@@ -137,7 +134,6 @@ export function LiveOrderConsole() {
     try {
       await playAlarmTone();
       setSoundEnabled(true);
-      window.localStorage.setItem('pasalho-order-sound-enabled', 'true');
     } catch {
       setError('Browser blocked sound. Click the sound button again and allow audio.');
     }
@@ -145,7 +141,6 @@ export function LiveOrderConsole() {
 
   const disableSound = useCallback(() => {
     setSoundEnabled(false);
-    window.localStorage.setItem('pasalho-order-sound-enabled', 'false');
   }, []);
 
   const transition = useCallback(async (order: OrderRow, status: string) => {
