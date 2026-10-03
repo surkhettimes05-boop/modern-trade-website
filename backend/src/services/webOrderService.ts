@@ -409,28 +409,41 @@ export class WebOrderService {
         }
       }
 
-      const result = await client.query(
-        `UPDATE web_orders
-         SET status = $1,
-             cancellation_reason = CASE WHEN $1 = 'CANCELLED' THEN $2 ELSE cancellation_reason END,
-             cancelled_at = CASE WHEN $1 = 'CANCELLED' THEN NOW() ELSE cancelled_at END,
-             cancelled_by = CASE WHEN $1 = 'CANCELLED' THEN $3 ELSE cancelled_by END,
-             payment_status = CASE
-               WHEN $1 = 'DELIVERED' AND payment_method = 'COD' THEN 'PAID'
-               ELSE payment_status
-             END,
-             cod_collected_at = CASE
-               WHEN $1 = 'DELIVERED' AND payment_method = 'COD' THEN NOW()
-               ELSE cod_collected_at
-             END,
-             cod_collected_by = CASE
-               WHEN $1 = 'DELIVERED' AND payment_method = 'COD' THEN $3
-               ELSE cod_collected_by
-             END,
-             updated_at = NOW()
-         WHERE id = $4 RETURNING *`,
-        [status, reason || null, actorId, orderId],
-      );
+      let result;
+      if (status === "CANCELLED") {
+        result = await client.query(
+          `UPDATE web_orders
+              SET status = $1,
+                  cancellation_reason = $2,
+                  cancelled_at = NOW(),
+                  cancelled_by = $3,
+                  updated_at = NOW()
+            WHERE id = $4
+            RETURNING *`,
+          [status, reason || null, actorId, orderId],
+        );
+      } else if (status === "DELIVERED" && order.payment_method === "COD") {
+        result = await client.query(
+          `UPDATE web_orders
+              SET status = $1,
+                  payment_status = 'PAID',
+                  cod_collected_at = NOW(),
+                  cod_collected_by = $2,
+                  updated_at = NOW()
+            WHERE id = $3
+            RETURNING *`,
+          [status, actorId, orderId],
+        );
+      } else {
+        result = await client.query(
+          `UPDATE web_orders
+              SET status = $1,
+                  updated_at = NOW()
+            WHERE id = $2
+            RETURNING *`,
+          [status, orderId],
+        );
+      }
       if (
         ["CONFIRMED", "PICKING", "PACKED", "OUT_FOR_DELIVERY"].includes(status)
       ) {
@@ -460,22 +473,17 @@ export class WebOrderService {
       await client.query(
         `INSERT INTO order_events
           (order_id, event_type, from_status, to_status, reason, metadata, created_by)
-         VALUES (
-           $1, $2, $3, $4, $5,
-           jsonb_build_object(
-             'cod_received',
-             CASE WHEN $4 = 'DELIVERED' THEN $7::boolean ELSE FALSE END
-           ),
-           $6
-         )`,
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
         [
           orderId,
           status === "CANCELLED" ? "CANCELLED" : "STATUS_CHANGE",
           order.status,
           status,
           reason || null,
+          JSON.stringify({
+            cod_received: status === "DELIVERED" ? codReceived : false,
+          }),
           actorId,
-          codReceived,
         ],
       );
       await client.query("COMMIT");
