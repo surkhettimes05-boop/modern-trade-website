@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
   if (!category) return buildMetadata({ title: 'Category not found', description: 'The requested category could not be found.', path: `/category/${slug}`, noIndex: true });
-  return buildMetadata({ title: `${category.name} products`, description: `${category.description || `Shop ${category.name.toLowerCase()} products`} at NOVA MART Nepal with clear pricing and store-based availability.`, path: `/category/${category.slug}`, image: category.image });
+  return buildMetadata({ title: `${category.name} products`, description: `${category.description || `Shop ${category.name.toLowerCase()} products`} at Pasalho Nepal with clear pricing and store-based availability.`, path: `/category/${category.slug}`, image: category.image });
 }
 
 export default async function CategoryPage({ params }: Props) {
@@ -34,7 +34,7 @@ export default async function CategoryPage({ params }: Props) {
     <JsonLd data={[collectionSchema, crumbs]} />
     <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href="/">Home</Link><span>›</span><Link href="/shop">Shop</Link><span>›</span><span aria-current="page">{category.name}</span></nav>
     <div className="page-head"><div><p className="eyebrow">SHOP THE RANGE</p><h1>{category.name}</h1><p>{category.description || 'Dependable quality and everyday value.'}</p></div></div>
-    {list.length > 0 ? <CatalogGrid initial={list} /> : <section className="seo-copy"><h2>Products are being prepared</h2><p>This department is part of the NOVA MART opening range. Product availability will appear here as store inventory is confirmed.</p><Link className="primary-btn" href="/shop">Browse all products</Link></section>}
-    <section className="seo-copy"><h2>Shopping for {category.name.toLowerCase()}</h2><p>{category.description}. NOVA MART organizes this department as a {category.priority?.toLowerCase() || 'planned'} part of its Nepal assortment, with prices and fulfilment shown against current store information.</p><p><Link href="/guides/safer-grocery-storage">Read our source-backed grocery handling guide</Link></p></section>
+    {list.length > 0 ? <CatalogGrid initial={list} /> : <section className="seo-copy"><h2>Products are being prepared</h2><p>This department is part of the Pasalho opening range. Product availability will appear here as store inventory is confirmed.</p><Link className="primary-btn" href="/shop">Browse all products</Link></section>}
+    <section className="seo-copy"><h2>Shopping for {category.name.toLowerCase()}</h2><p>{category.description}. Pasalho organizes this department as a {category.priority?.toLowerCase() || 'planned'} part of its Nepal assortment, with prices and fulfilment shown against current store information.</p><p><Link href="/guides/safer-grocery-storage">Read our source-backed grocery handling guide</Link></p></section>
   </div>;
 }
