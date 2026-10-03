@@ -248,7 +248,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         message.includes("Insufficient inventory");
       if (!clientError) {
         request.log.error(
-          { error, orderId, requestedStatus: status },
+          { err: error, orderId, requestedStatus: status },
           "Web order status transition failed",
         );
       }
