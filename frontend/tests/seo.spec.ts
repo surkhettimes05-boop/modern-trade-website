@@ -11,7 +11,7 @@ test.describe('SEO release gate', () => {
       const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
       expect(response?.status()).toBe(200);
       await expect(page.locator('h1')).toHaveCount(1);
-      await expect(page).toHaveTitle(/NOVA MART/);
+      await expect(page).toHaveTitle(/Pasalho/);
       const description = await page.locator('meta[name="description"]').getAttribute('content');
       expect(description?.trim().length || 0).toBeGreaterThanOrEqual(40);
       const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
@@ -80,7 +80,7 @@ test.describe('SEO release gate', () => {
         expect(response.status(), path).toBe(200);
         const html = await response.text();
         for (const match of html.matchAll(/href=["']([^"'#?]+)["']/g)) {
-          const linkedPath = new URL(match[1], 'https://storesync.com').pathname;
+          const linkedPath = new URL(match[1], 'https://pasalho.com').pathname;
           if (indexable.has(linkedPath) && !visited.has(linkedPath)) next.add(linkedPath);
         }
       }
