@@ -74,6 +74,49 @@ export class WebOrderService {
     REFUNDED: [],
   };
 
+  private async assertActiveOrderReservations(
+    client: PoolClient,
+    orderId: string,
+  ): Promise<void> {
+    const [items, reservations] = await Promise.all([
+      client.query(
+        `SELECT product_id, quantity
+           FROM web_order_items
+          WHERE order_id = $1`,
+        [orderId],
+      ),
+      client.query(
+        `SELECT product_id, quantity
+           FROM stock_reservations
+          WHERE order_id = $1
+            AND status = 'ACTIVE'
+            AND expires_at > NOW()
+          FOR UPDATE`,
+        [orderId],
+      ),
+    ]);
+
+    const reservedByProduct = new Map<string, number>();
+    for (const reservation of reservations.rows) {
+      const productId = String(reservation.product_id);
+      reservedByProduct.set(
+        productId,
+        (reservedByProduct.get(productId) || 0) + Number(reservation.quantity),
+      );
+    }
+
+    const missing = items.rows.find(
+      (item) =>
+        (reservedByProduct.get(String(item.product_id)) || 0) <
+        Number(item.quantity),
+    );
+    if (missing) {
+      throw new Error(
+        "Order stock reservation expired; cancel the order or recreate it after stock revalidation",
+      );
+    }
+  }
+
   private async finalizeReservedInventory(
     client: PoolClient,
     orderId: string,
@@ -380,6 +423,9 @@ export class WebOrderService {
       if (!order) throw new Error("Order not found");
       if (!this.validStatusTransitions[order.status]?.includes(status)) {
         throw new Error(`Invalid transition from ${order.status} to ${status}`);
+      }
+      if (status === "CONFIRMED") {
+        await this.assertActiveOrderReservations(client, orderId);
       }
       if (status === "DELIVERED") {
         await this.finalizeReservedInventory(client, orderId);
