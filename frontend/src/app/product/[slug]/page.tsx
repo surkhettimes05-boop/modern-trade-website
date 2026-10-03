@@ -4,13 +4,13 @@ import { notFound } from 'next/navigation';
 import JsonLd from '@/components/JsonLd';
 import { ProductCard } from '@/components/CommerceClient';
 import { BuyBox, ProductGallery } from '@/components/ProductDetailClient';
-import { formatPrice, openingProducts } from '@/lib/catalog';
+import { formatPrice } from '@/lib/catalog';
 import { absoluteUrl, breadcrumbSchema, buildMetadata, SITE } from '@/lib/seo';
 import { getCatalog, getProductBySlug } from '@/lib/serverCatalog';
 
 type Props = { params: Promise<{ slug: string }> };
 export const dynamicParams = true;
-export function generateStaticParams() { return openingProducts.map(({ slug }) => ({ slug })); }
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
