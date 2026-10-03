@@ -27,7 +27,7 @@ export default function StaffLoginPage() {
       const contentType = response.headers.get("content-type") || "";
       const result = contentType.includes("application/json")
         ? await response.json()
-        : { error: "The StoreSync server is unavailable. Please try again." };
+        : { error: "The Pasalho server is unavailable. Please try again." };
       if (!response.ok) throw new Error(result.error || "Login failed");
       const requested = new URLSearchParams(window.location.search).get("next");
       const destination =
@@ -57,7 +57,7 @@ export default function StaffLoginPage() {
             Staff sign in
           </h1>
           <p className="mt-2 text-sm text-slate-600">
-            Authorized StoreSync staff only.
+            Authorized Pasalho staff only.
           </p>
         </div>
         <form onSubmit={login} className="space-y-5">
