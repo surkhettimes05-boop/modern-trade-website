@@ -249,3 +249,16 @@ Changes are committed locally on `fix/nepal-cod-readiness`. Automatic approval r
 blocked publishing the branch because explicit authorization to push this payload
 to GitHub was required. No merge or deployment is claimed. Approve pushing both
 repository branches and opening draft PRs to continue remote review/CI.
+
+## CI follow-up — 2026-10-07
+
+First draft CI ran the real PostgreSQL suite: 333 tests passed and the new COD
+journey failed before checkout at development seed setup. Multiple Nepal
+organizations produced multiple rows for the same NEPAL-PILOT-1 upsert.
+The development seed now binds that program to one deterministic pilot store and
+avoids adding another same-name Nepal organization on repeat runs. The journey
+executes the seed twice and verifies that organization count does not grow.
+This is development/test data only; production bootstrap remains separate.
+
+Additional changed file: database/development_seed.sql — repeatable organization
+and single-store loyalty seed. Replacement CI evidence is still required.

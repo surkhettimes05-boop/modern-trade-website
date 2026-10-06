@@ -14,6 +14,16 @@ import { errorHandler } from "../../middleware/errorHandler.js";
 test("OTP session → owned cart → parallel COD retry → tracking → cancellation", async () => {
   const seed = await readFile("../database/development_seed.sql", "utf8");
   await query(seed);
+  const organizationsBefore = await query(
+    "SELECT COUNT(*) AS count FROM organizations WHERE organization_name = 'Pasalho Nepal' AND country_code = 'NP'",
+  );
+  await query(seed);
+  const organizationsAfter = await query(
+    "SELECT COUNT(*) AS count FROM organizations WHERE organization_name = 'Pasalho Nepal' AND country_code = 'NP'",
+  );
+  expect(organizationsAfter.rows[0].count).toBe(
+    organizationsBefore.rows[0].count,
+  );
   const app = Fastify();
   app.setErrorHandler(errorHandler);
   await app.register(cookie);
