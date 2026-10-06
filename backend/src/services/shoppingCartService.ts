@@ -57,7 +57,7 @@ export class ShoppingCartService {
           throw new Error("Product price unavailable");
         await client.query(
           `INSERT INTO cart_items (cart_id, product_id, quantity, unit_price, discount_amount, line_total)
-           VALUES ($1, $2, $3, $4, 0, $3 * $4)`,
+           VALUES ($1, $2, $3::integer, $4::numeric, 0, $3::integer * $4::numeric)`,
           [cartId, item.product_id, item.quantity, amount],
         );
       }
