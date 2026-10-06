@@ -118,5 +118,9 @@
   [
     "031_loyalty_numeric_hardening",
     "../database/031_loyalty_numeric_hardening.sql"
+  ],
+  [
+    "032_cod_inventory_evidence",
+    "../database/032_cod_inventory_evidence.sql"
   ]
 ]

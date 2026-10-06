@@ -368,7 +368,7 @@ export class WebOrderService {
           `SELECT product_id, quantity
              FROM web_order_items
             WHERE order_id = $1
-            ORDER BY id`,
+            ORDER BY product_id`,
           [orderId],
         );
         if (!orderItems.rows.length) {
@@ -376,9 +376,12 @@ export class WebOrderService {
         }
 
         for (const item of orderItems.rows) {
+          await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+            `${item.product_id}:${order.store_id}`,
+          ]);
           let remaining = Number(item.quantity);
           const batches = await client.query(
-            `SELECT id, quantity
+            `SELECT id, batch_id, quantity
                FROM batch_inventory
               WHERE store_id = $1
                 AND product_id = $2
@@ -399,6 +402,20 @@ export class WebOrderService {
                       updated_at = NOW()
                 WHERE id = $2`,
               [deduct, batch.id],
+            );
+            await client.query(
+              `INSERT INTO inventory_transactions
+                (transaction_type, store_id, product_id, batch_id, quantity,
+                 reference_id, reference_type, reason, performed_by)
+               VALUES ('ISSUE', $1, $2, $3, $4, $5, 'COD_ORDER', 'COD delivery', $6)`,
+              [
+                order.store_id,
+                item.product_id,
+                batch.batch_id,
+                -deduct,
+                orderId,
+                actorId,
+              ],
             );
             remaining -= deduct;
           }
@@ -496,7 +513,8 @@ export class WebOrderService {
       return result.rows[0];
     } catch (error) {
       await client.query("ROLLBACK");
-      const message = error instanceof Error ? error.message : "Unknown database error";
+      const message =
+        error instanceof Error ? error.message : "Unknown database error";
       if (
         message.startsWith("Invalid transition") ||
         message.includes("COD cash receipt") ||

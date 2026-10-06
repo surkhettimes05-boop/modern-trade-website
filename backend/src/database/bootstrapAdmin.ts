@@ -5,6 +5,15 @@ import { getPool, closePool } from "./connection.js";
 const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 const username = process.env.BOOTSTRAP_ADMIN_USERNAME || "admin";
 const email = process.env.BOOTSTRAP_ADMIN_EMAIL || "admin@novamart.local";
+const storeId = process.env.BOOTSTRAP_STORE_ID;
+if (
+  process.env.NODE_ENV === "production" &&
+  (!storeId || !process.env.BOOTSTRAP_ADMIN_EMAIL)
+) {
+  throw new Error(
+    "BOOTSTRAP_STORE_ID and BOOTSTRAP_ADMIN_EMAIL are required in production",
+  );
+}
 
 if (
   process.env.NODE_ENV === "production" &&
@@ -32,17 +41,20 @@ const client = await getPool().connect();
 try {
   await client.query("BEGIN");
   const organization = await client.query(
-    `SELECT id FROM organizations WHERE country_code = 'NP' ORDER BY created_at LIMIT 1`,
+    `SELECT o.id FROM organizations o WHERE o.country_code = 'NP'
+       AND ($1::uuid IS NULL OR EXISTS (SELECT 1 FROM stores s WHERE s.id = $1 AND s.organization_id = o.id))
+       ORDER BY o.created_at LIMIT 1`,
+    [storeId || null],
   );
   if (!organization.rowCount)
     throw new Error("No Nepal organization exists; run migrations first");
   const store = await client.query(
-    `SELECT id FROM stores WHERE organization_id = $1 ORDER BY created_at LIMIT 1`,
-    [organization.rows[0].id],
+    `SELECT id FROM stores WHERE organization_id = $1 AND ($2::uuid IS NULL OR id = $2) ORDER BY created_at LIMIT 1`,
+    [organization.rows[0].id, storeId || null],
   );
   if (!store.rowCount)
     throw new Error(
-      "No store exists; run the development seed or create a store first",
+      "No matching store exists; run the reviewed production bootstrap first",
     );
   const role = await client.query(
     `SELECT id, capabilities FROM roles WHERE role_key = 'platform_admin' AND is_active = TRUE LIMIT 1`,

@@ -104,6 +104,8 @@ services:
         generateValue: true
       - key: SIGNATURE_SECRET
         generateValue: true
+      - key: PROXY_AUTH_SECRET
+        sync: false
       - key: OTP_HASH_SECRET
         generateValue: true
       - key: PAYMENT_ENCRYPTION_KEY
@@ -115,7 +117,7 @@ services:
       - key: ENABLE_ELECTRONIC_PAYMENTS
         value: "false"
       - key: SMS_PROVIDER
-        sync: false
+        value: twilio_verify
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN

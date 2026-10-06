@@ -1,5 +1,9 @@
 # Release blocker state
 
+**2026-10-06: NOT READY.** Current blocker/evidence list is
+[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Entries below are historical.
+Electronic-payment certification is excluded from the COD-only launch scope.
+
 This file is updated during release remediation.
 
 | Blocker | Status | Attempted remediation | Result | Remaining dependency | Exact next action |

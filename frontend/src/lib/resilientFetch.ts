@@ -14,7 +14,7 @@ export class RequestTimeoutError extends Error {
 
 function configuredTimeoutMs(): number {
   const raw = process.env.NEXT_PUBLIC_REQUEST_TIMEOUT_MS;
-  if (!raw) return 10_000;
+  if (!raw) return 25_000;
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < 1_000 || value > 60_000) {
     throw new Error(

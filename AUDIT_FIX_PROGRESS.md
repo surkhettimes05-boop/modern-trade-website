@@ -59,3 +59,9 @@ Run the Compose-backed authenticated checkout/order flow and Docker smoke checks
 - Changed both Render Blueprint services from the paid `starter` plan to `free` in `render.yaml` so the backend can be created without payment information.
 - The free path is suitable for testing/preview only: the backend may spin down after inactivity, and free Render Key Value is in-memory and may lose Redis data after restarts.
 - Render documentation confirms that free Web Services and Key Value instances are available without payment details.
+
+## 2026-10-06 — COD remediation
+
+See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for changed-file inventory,
+verification, remaining launch gates and exact deployment/demo/real-OTP instructions.
+No production approval or deployment is claimed.

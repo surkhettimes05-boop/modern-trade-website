@@ -130,6 +130,9 @@ export function validateProductionIntegrations(
       "EMAIL_PROVIDER and EMAIL_PROVIDER_API_KEY must be configured together",
     );
   }
+  if (!present(env, "SMS_PROVIDER")) {
+    throw new Error("SMS_PROVIDER is required in production for customer OTP");
+  }
   if (env.SMS_PROVIDER) {
     if (!["twilio", "twilio_verify", "demo"].includes(env.SMS_PROVIDER)) {
       throw new Error("SMS_PROVIDER must be twilio, twilio_verify, or demo");

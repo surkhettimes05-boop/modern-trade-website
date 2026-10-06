@@ -27,6 +27,10 @@ export class CheckoutService {
     try {
       await client.query("BEGIN");
 
+      // Serialize retries before looking up the result or locking a converted cart.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `checkout:${input.customerId}:${input.idempotencyKey}`,
+      ]);
       const existing = await client.query(
         "SELECT * FROM web_orders WHERE idempotency_key = $1 AND customer_id = $2",
         [input.idempotencyKey, input.customerId],
@@ -57,10 +61,10 @@ export class CheckoutService {
       }
 
       const items = await client.query(
-        `SELECT ci.*, p.name_en,
+        `SELECT ci.*, p.name_en, p.status AS product_status,
                 COALESCE(store_price.price, organization_price.price, 0) AS authoritative_price
            FROM cart_items ci
-           JOIN products p ON p.id = ci.product_id AND p.status = 'PUBLISHED'
+           JOIN products p ON p.id = ci.product_id
            LEFT JOIN LATERAL (
              SELECT price
                FROM product_prices
@@ -113,7 +117,7 @@ export class CheckoutService {
               WHERE product_id = requested.product_id
                 AND store_id = $2
                 AND status = 'ACTIVE'
-                AND expires_at > NOW()
+                AND (order_id IS NOT NULL OR expires_at > NOW())
            ) reservations ON TRUE`,
         [productIds, input.storeId],
       );
@@ -126,6 +130,16 @@ export class CheckoutService {
       // a blanket 13% VAT on top because FMCG tax treatment varies by SKU.
       let subtotalPaisa = 0;
       const pricedItems = items.rows.map((item) => {
+        if (
+          item.product_status !== "PUBLISHED" ||
+          !Number.isInteger(Number(item.quantity)) ||
+          Number(item.quantity) < 1 ||
+          Number(item.quantity) > 999
+        ) {
+          throw new Error(
+            "Cart contains an unavailable product or invalid quantity",
+          );
+        }
         const stock = stockByProduct.get(String(item.product_id));
         const authoritativePrice = Number(item.authoritative_price);
         if (!Number.isFinite(authoritativePrice) || authoritativePrice <= 0) {
@@ -138,8 +152,7 @@ export class CheckoutService {
           throw new Error(`Insufficient stock for ${item.name_en}`);
         }
         const linePaisa =
-          Math.round(authoritativePrice * 100) *
-          Number(item.quantity);
+          Math.round(authoritativePrice * 100) * Number(item.quantity);
         subtotalPaisa += linePaisa;
         return {
           ...item,

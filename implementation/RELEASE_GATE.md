@@ -2,7 +2,13 @@
 
 Decision: **NOT READY**
 
-Reviewed: 2026-08-19
+Reviewed: 2026-10-06
+
+Current evidence and deployment instructions: [PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md).
+Historical evidence below is retained for audit; it does not certify this revision.
+Electronic-provider certification is outside the COD-only gate and is not required
+while electronic payments remain disabled. Loyalty MVP is allowed, but still requires
+its own lifecycle and reconciliation evidence.
 
 Scope: Nepal (`NP`) / NPR / `en-NP` / `Asia/Kathmandu`; customer COD and staff cash POS only.
 

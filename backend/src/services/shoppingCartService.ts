@@ -1,4 +1,4 @@
-import { query } from "../database/connection.js";
+import { query, getPool } from "../database/connection.js";
 
 interface ShoppingCart {
   id: string;
@@ -25,6 +25,51 @@ interface CartItem {
 }
 
 export class ShoppingCartService {
+  // Replace a checkout snapshot atomically; retries never increment quantities.
+  async replaceItems(
+    cartId: string,
+    customerId: string,
+    items: { product_id: string; quantity: number }[],
+  ): Promise<void> {
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const cart = await client.query(
+        "SELECT store_id FROM shopping_carts WHERE id = $1 AND customer_id = $2 AND status = 'ACTIVE' FOR UPDATE",
+        [cartId, customerId],
+      );
+      if (!cart.rowCount) throw new Error("Cart not found");
+      await client.query("DELETE FROM cart_items WHERE cart_id = $1", [cartId]);
+      for (const item of items) {
+        const price = await client.query(
+          `SELECT COALESCE(
+             (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = $2
+              AND active = TRUE AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
+              ORDER BY valid_from DESC LIMIT 1),
+             (SELECT price FROM product_prices WHERE product_id = p.id AND store_id IS NULL
+              AND active = TRUE AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
+              ORDER BY valid_from DESC LIMIT 1)) AS price
+           FROM products p WHERE p.id = $1 AND p.status = 'PUBLISHED'`,
+          [item.product_id, cart.rows[0].store_id],
+        );
+        const amount = Number(price.rows[0]?.price);
+        if (!Number.isFinite(amount) || amount <= 0)
+          throw new Error("Product price unavailable");
+        await client.query(
+          `INSERT INTO cart_items (cart_id, product_id, quantity, unit_price, discount_amount, line_total)
+           VALUES ($1, $2, $3, $4, 0, $3 * $4)`,
+          [cartId, item.product_id, item.quantity, amount],
+        );
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   /**
    * Create or get shopping cart
    */
@@ -102,7 +147,7 @@ export class ShoppingCartService {
    */
   async getCartItems(cartId: string): Promise<CartItem[]> {
     const result = await query(
-      `SELECT ci.*, p.name as product_name, p.sku 
+      `SELECT ci.*, p.name_en as product_name, p.sku
        FROM cart_items ci
        LEFT JOIN products p ON ci.product_id = p.id
        WHERE ci.cart_id = $1
@@ -128,8 +173,8 @@ export class ShoppingCartService {
               COALESCE(spa.availability_status, CASE WHEN EXISTS (SELECT 1 FROM batch_inventory bi WHERE bi.product_id = p.id AND bi.store_id = sc.store_id AND bi.quantity > 0) THEN 'AVAILABLE' ELSE 'OUT_OF_STOCK' END) AS availability_status
        FROM shopping_carts sc
        JOIN products p ON p.id = $2 AND p.status = 'PUBLISHED'
-       LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = sc.store_id AND active = TRUE ORDER BY valid_from DESC LIMIT 1) store_price ON TRUE
-       LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id IS NULL AND active = TRUE ORDER BY valid_from DESC LIMIT 1) organization_price ON TRUE
+       LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = sc.store_id AND active = TRUE AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW()) ORDER BY valid_from DESC LIMIT 1) store_price ON TRUE
+       LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id IS NULL AND active = TRUE AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW()) ORDER BY valid_from DESC LIMIT 1) organization_price ON TRUE
        LEFT JOIN store_product_availability spa ON spa.product_id = p.id AND spa.store_id = sc.store_id
        WHERE sc.id = $1 AND sc.status = 'ACTIVE'`,
       [itemData.cart_id, itemData.product_id],
@@ -203,7 +248,7 @@ export class ShoppingCartService {
     );
     if (!current.rows[0]) throw new Error("Cart item not found");
     const price = await query(
-      `SELECT COALESCE(store_price.price, organization_price.price) AS price FROM products p LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = $2 AND active = TRUE ORDER BY valid_from DESC LIMIT 1) store_price ON TRUE LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id IS NULL AND active = TRUE ORDER BY valid_from DESC LIMIT 1) organization_price ON TRUE WHERE p.id = $1 AND p.status = 'PUBLISHED'`,
+      `SELECT COALESCE(store_price.price, organization_price.price) AS price FROM products p LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = $2 AND active = TRUE AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW()) ORDER BY valid_from DESC LIMIT 1) store_price ON TRUE LEFT JOIN LATERAL (SELECT price FROM product_prices WHERE product_id = p.id AND store_id IS NULL AND active = TRUE AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW()) ORDER BY valid_from DESC LIMIT 1) organization_price ON TRUE WHERE p.id = $1 AND p.status = 'PUBLISHED'`,
       [current.rows[0].product_id, current.rows[0].store_id],
     );
     if (!price.rows[0] || price.rows[0].price === null)
@@ -222,7 +267,10 @@ export class ShoppingCartService {
       throw new Error("No fields to update");
     }
 
-    fields.push(`line_total = quantity * unit_price - discount_amount`);
+    fields.push(`discount_amount = 0`);
+    fields.push(
+      `line_total = ${updates.quantity !== undefined ? "$2" : "quantity"} * $1`,
+    );
     fields.push(`updated_at = NOW()`);
     values.push(itemId);
 

@@ -117,6 +117,7 @@ export function validateProductionEnvironment(
     "SIGNATURE_SECRET",
     "PAYMENT_ENCRYPTION_KEY",
     "OTP_HASH_SECRET",
+    "PROXY_AUTH_SECRET",
     "JWT_ISSUER",
     "JWT_AUDIENCE",
     "DATABASE_RUNTIME_ROLE",
@@ -196,6 +197,7 @@ export function validateProductionEnvironment(
     "ENCRYPTION_KEY",
     "SIGNATURE_SECRET",
     "OTP_HASH_SECRET",
+    "PROXY_AUTH_SECRET",
     "PAYMENT_ENCRYPTION_KEY",
   ] as const;
   const normalizedSecrets = secretNames.map((name) => env[name]!.trim());
@@ -258,6 +260,7 @@ export function validateProductionEnvironment(
     throw new Error("TRUST_PROXY_HOPS must be an integer from 1 to 3");
   }
   if (
+    Buffer.byteLength(env.PROXY_AUTH_SECRET!, "utf8") < 32 ||
     Buffer.byteLength(env.JWT_SECRET!, "utf8") < 32 ||
     Buffer.byteLength(env.COOKIE_SECRET!, "utf8") < 32 ||
     Buffer.byteLength(env.ENCRYPTION_KEY!, "utf8") < 32 ||

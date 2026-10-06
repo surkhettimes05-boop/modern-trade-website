@@ -1,3 +1,4 @@
+import { rateLimitClientKey } from "./utils/proxyClientIdentity.js";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -127,6 +128,7 @@ export async function buildApp(
       timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS || "900000"),
       redis: redisService.getClient(),
       skipOnError: false,
+      keyGenerator: rateLimitClientKey,
     });
   }
 
