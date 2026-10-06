@@ -245,10 +245,9 @@ Vercel edge IP contract: https://vercel.com/docs/headers/request-headers .
 
 ## Delivery status
 
-Changes are committed locally on `fix/nepal-cod-readiness`. Automatic approval review
-blocked publishing the branch because explicit authorization to push this payload
-to GitHub was required. No merge or deployment is claimed. Approve pushing both
-repository branches and opening draft PRs to continue remote review/CI.
+Both readiness branches are published as website PR #53 and app PR #3.
+The user authorized CI remediation, review, merge and Render/Vercel configuration
+on 2026-10-07. Live readiness still requires the remaining verification gates.
 
 ## CI follow-up — 2026-10-07
 
@@ -262,3 +261,10 @@ This is development/test data only; production bootstrap remains separate.
 
 Additional changed file: database/development_seed.sql — repeatable organization
 and single-store loyalty seed. Replacement CI evidence is still required.
+
+The next CI attempt passed seed setup but exposed Jest VM-module support needed
+by the current Fastify cookie dependency. Full-suite Jest now preserves the existing
+CommonJS mock behavior while enabling Node VM modules for dependency dynamic imports.
+Focused auth/COD security tests pass locally (15 tests). Added changed files:
+backend/jest.config.js and backend/package.json — test loader compatibility only;
+production compilation/runtime configuration is unchanged.
