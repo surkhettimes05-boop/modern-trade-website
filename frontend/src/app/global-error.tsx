@@ -12,7 +12,7 @@ export default function GlobalError({
   return (
     <html lang="en-NP">
       <body style={{ margin: 0 }}>
-        <title>NOVA MART — Service unavailable</title>
+        <title>Pasalho — Service unavailable</title>
         <ErrorRecovery error={error} retry={reset} />
       </body>
     </html>

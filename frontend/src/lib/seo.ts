@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const SITE = {
   name: 'Pasalho',
   legalName: 'Pasalho',
-  description: 'Shop everyday groceries and household essentials from Pasalho with store-based availability and clear NPR pricing.',
+  description: 'Shop groceries and everyday essentials with Pasalho in Birendranagar, Surkhet. Check live store availability, NPR pricing, delivery and pickup options.',
   locale: 'en_NP',
   language: 'en-NP',
   country: 'NP',
@@ -37,7 +37,7 @@ export function buildMetadata({ title, description, path, image, noIndex = false
 }
 
 export function privateMetadata(title: string, path = '/'): Metadata {
-  return buildMetadata({ title, description: `${title} for NOVA MART customers and staff.`, path, noIndex: true });
+  return buildMetadata({ title, description: `${title} for Pasalho customers and staff in Birendranagar, Surkhet.`, path, noIndex: true });
 }
 
 export function breadcrumbSchema(items: Array<{ name: string; path: string }>) {

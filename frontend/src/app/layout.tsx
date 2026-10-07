@@ -19,14 +19,14 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: {
-    default: "Pasalho — Everyday Shopping, Solved.",
+    default: "Pasalho | Groceries in Birendranagar, Surkhet",
     template: "%s | Pasalho",
   },
   description: SITE.description,
   metadataBase: new URL(SITE.url),
   alternates: { canonical: absoluteUrl("/") },
   openGraph: {
-    title: "Pasalho — Everyday Shopping, Solved.",
+    title: "Pasalho | Groceries in Birendranagar, Surkhet",
     description: SITE.description,
     url: absoluteUrl("/"),
     siteName: SITE.name,
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Pasalho — Everyday Shopping, Solved.",
+    title: "Pasalho | Groceries in Birendranagar, Surkhet",
     description: SITE.description,
   },
   robots: { index: true, follow: true },
@@ -54,6 +54,14 @@ export default async function RootLayout({
     name: SITE.name,
     legalName: SITE.legalName,
     url: SITE.url,
+    areaServed: {
+      "@type": "City",
+      name: "Birendranagar",
+      containedInPlace: {
+        "@type": "AdministrativeArea",
+        name: "Surkhet, Karnali Province, Nepal",
+      },
+    },
   };
   const website = {
     "@context": "https://schema.org",
