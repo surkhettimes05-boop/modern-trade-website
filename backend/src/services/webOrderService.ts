@@ -57,9 +57,12 @@ export class WebOrderService {
     PICKING: ["PACKED", "CANCELLED"],
     PACKED: ["OUT_FOR_DELIVERY", "CANCELLED"],
     OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED"],
-    DELIVERED: ["RETURN_REQUESTED"],
-    RETURN_REQUESTED: ["RETURNED"],
-    RETURNED: ["REFUNDED"],
+    // Returns and refunds are deliberately unavailable for the COD pilot.
+    // Historical rows remain readable, but no service transition can create
+    // new return/refund lifecycle state while that feature is deferred.
+    DELIVERED: [],
+    RETURN_REQUESTED: [],
+    RETURNED: [],
     CANCELLED: [],
     REFUNDED: [],
   };
@@ -67,7 +70,7 @@ export class WebOrderService {
   private readonly validPaymentTransitions: Record<string, string[]> = {
     PENDING: ["PAID", "FAILED"],
     FAILED: ["PENDING", "PAID"],
-    PAID: ["REFUNDED"],
+    PAID: [],
     REFUNDED: [],
   };
   /**

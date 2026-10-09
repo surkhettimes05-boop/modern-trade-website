@@ -643,8 +643,6 @@ const nextOrderStatus: Record<string, { status: string; label: string }> = {
   PICKING: { status: "PACKED", label: "Mark packed" },
   PACKED: { status: "OUT_FOR_DELIVERY", label: "Send for delivery" },
   OUT_FOR_DELIVERY: { status: "DELIVERED", label: "Mark delivered" },
-  DELIVERED: { status: "RETURN_REQUESTED", label: "Request return" },
-  RETURN_REQUESTED: { status: "RETURNED", label: "Mark returned" },
 };
 
 function OrderActions({

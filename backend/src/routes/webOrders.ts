@@ -216,10 +216,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         "PACKED",
         "OUT_FOR_DELIVERY",
         "DELIVERED",
-        "RETURN_REQUESTED",
-        "RETURNED",
         "CANCELLED",
-        "REFUNDED",
       ]),
       reason: z.string().trim().min(1).max(500).optional(),
       cod_received: z.boolean().optional().default(false),
@@ -263,7 +260,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
     });
 
     const bodySchema = z.object({
-      payment_status: z.enum(["PENDING", "PAID", "FAILED", "REFUNDED"]),
+      payment_status: z.enum(["PENDING", "PAID", "FAILED"]),
       payment_intent_id: z.string().optional(),
     });
 

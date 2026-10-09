@@ -243,6 +243,40 @@ project framework/root selection is documented above. No deferred feature was en
 
 Vercel edge IP contract: https://vercel.com/docs/headers/request-headers .
 
+## Verification update — 2026-10-09
+
+This update supersedes the local-result summaries above for the current PR
+revision. The release decision remains **NOT READY**.
+
+- The isolated PR worktree passed the full backend Node 22 PostgreSQL Jest gate:
+  51 suites and 334 tests. Backend type-check, lint, production build, frontend
+  type-check, lint, production build, and the root static security check also
+  passed. The final returns/refunds route-gating change passed its focused
+  lifecycle and production-route-security tests (8 tests).
+- `npm audit --omit=dev --audit-level=high` is clean for both backend and
+  frontend. Backend full audit is free of high/critical findings after the
+  non-breaking lockfile remediation. Frontend full audit remains blocked by the
+  high-severity `braces` advisory pulled through `eslint-config-next`; the
+  advisory has no official fixed release, and the suggested downgrade is a
+  breaking Next.js toolchain change. No unofficial fork or audit suppression was
+  introduced.
+- Returns and refunds are now fail-closed throughout the pilot surface: web
+  order transitions, POS returns, and privileged legacy lifecycle endpoints are
+  not registered/enabled while `ENABLE_RETURNS` is false. Historical rows remain
+  readable for audit purposes.
+- Vercel access was confirmed for `modern-trade-website` (frontend root, Node 22).
+  Its production environment currently has `API_URL`, timeout settings, and no
+  server-only `PROXY_AUTH_SECRET`. The configured Render health URL did not
+  return within the verification timeout. No deployment or environment change
+  was made.
+- Docker is not installed on this host. No production database, migration 032
+  application, real Twilio delivery, authenticated order, inventory deduction,
+  cash reconciliation, backup/restore, or rollback evidence was available.
+
+Until the unresolved dependency audit is handled by an approved upstream/tooling
+change and the real deployment/OTP/order evidence is captured, do not promote or
+merge this pilot.
+
 ## Delivery status
 
 Both readiness branches are published as website PR #53 and app PR #3.
