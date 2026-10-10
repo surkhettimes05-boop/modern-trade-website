@@ -38,6 +38,10 @@ import {
 import { useAdminShell } from "@/components/admin/AdminShellContext";
 import { useStaffSession } from "@/components/StaffSessionProvider";
 import { resilientFetch } from "@/lib/resilientFetch";
+import {
+  ProductEditButton,
+  ProductImportButton,
+} from "@/components/admin/ProductCatalogTools";
 
 type FormField = {
   name: string;
@@ -643,8 +647,6 @@ const nextOrderStatus: Record<string, { status: string; label: string }> = {
   PICKING: { status: "PACKED", label: "Mark packed" },
   PACKED: { status: "OUT_FOR_DELIVERY", label: "Send for delivery" },
   OUT_FOR_DELIVERY: { status: "DELIVERED", label: "Mark delivered" },
-  DELIVERED: { status: "RETURN_REQUESTED", label: "Request return" },
-  RETURN_REQUESTED: { status: "RETURNED", label: "Mark returned" },
 };
 
 function OrderActions({
@@ -794,10 +796,20 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
         description={config.description}
         actions={
           canCreate ? (
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="h-4 w-4" />
-              {config.createLabel}
-            </Button>
+            <>
+              {config.title === "Products" && (
+                <ProductImportButton
+                  onImported={(message) => {
+                    setNotice(message);
+                    setRefreshKey((key) => key + 1);
+                  }}
+                />
+              )}
+              <Button onClick={() => setFormOpen(true)}>
+                <Plus className="h-4 w-4" />
+                {config.createLabel}
+              </Button>
+            </>
           ) : undefined
         }
       />
@@ -1176,6 +1188,7 @@ function Dashboard() {
 }
 
 function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
+  const { selectedStoreId } = useAdminShell();
   const [record, setRecord] = useState<AdminRecord | null>(null);
   const [related, setRelated] = useState<AdminRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1185,8 +1198,12 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
     async function load() {
       setLoading(true);
       try {
-        const endpoint =
+        const baseEndpoint =
           config.detailEndpoint?.(id) || `${config.endpoint}/${id}`;
+        const endpoint =
+          config.title === "Products" && selectedStoreId !== "all"
+            ? `${baseEndpoint}?store_id=${encodeURIComponent(selectedStoreId)}`
+            : baseEndpoint;
         const [response, relatedResponse] = await Promise.all([
           resilientFetch(endpoint, {
             credentials: "include",
@@ -1227,7 +1244,7 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
     }
     void load();
     return () => controller.abort();
-  }, [config, id]);
+  }, [config, id, selectedStoreId]);
   if (loading) return <LoadingSkeleton rows={8} />;
   if (error || !record)
     return (
@@ -1265,14 +1282,23 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
         title={heading}
         description={`Record ${asText(record.id)}`}
         actions={
-          Boolean(record.status || record.payment_status) ? (
-            <div className="flex gap-2">
-              {Boolean(record.payment_status) && (
-                <StatusBadge value={record.payment_status} />
-              )}
-              <StatusBadge value={record.status} />
-            </div>
-          ) : undefined
+          <>
+            {config.title === "Products" && (
+              <ProductEditButton
+                id={id}
+                record={record}
+                onUpdated={(updated) => setRecord(updated)}
+              />
+            )}
+            {Boolean(record.status || record.payment_status) && (
+              <div className="flex gap-2">
+                {Boolean(record.payment_status) && (
+                  <StatusBadge value={record.payment_status} />
+                )}
+                <StatusBadge value={record.status} />
+              </div>
+            )}
+          </>
         }
       />
       {config.title === "Orders" && (

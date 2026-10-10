@@ -168,29 +168,15 @@ export default function CheckoutPage() {
       const cart = await cartResponse.json();
       if (!cartResponse.ok) throw new Error(cart.error || 'Could not create cart');
 
-      // Rebuild the server cart from the browser snapshot on every retry. This
-      // makes a partially failed previous sync safe instead of doubling items.
-      const clearResponse = await resilientFetch(`/api/shopping-cart/${cart.id}/clear`, {
-        method: 'POST',
+      const syncResponse = await resilientFetch(`/api/shopping-cart/${cart.id}/items`, {
+        method: 'PUT',
         credentials: 'include',
-        headers: { 'x-csrf-token': csrf },
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+        body: JSON.stringify({ items: items.map(item => ({ product_id: item.product.id, quantity: item.qty })) }),
       });
-      if (!clearResponse.ok) {
-        const clearBody = await clearResponse.json().catch(() => ({}));
-        throw new Error(clearBody.error || 'Could not synchronize cart');
-      }
-
-      for (const item of items) {
-        const itemResponse = await resilientFetch(`/api/shopping-cart/${cart.id}/items`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
-          body: JSON.stringify({ product_id: item.product.id, quantity: item.qty }),
-        });
-        const itemResult = await itemResponse.json();
-        if (!itemResponse.ok) {
-          throw new Error(itemResult.error || 'Could not synchronize every cart item');
-        }
+      if (!syncResponse.ok) {
+        const syncBody = await syncResponse.json().catch(() => ({}));
+        throw new Error(syncBody.error || 'Could not synchronize cart');
       }
 
       const payload =

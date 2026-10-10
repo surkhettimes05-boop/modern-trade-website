@@ -1,6 +1,32 @@
 # Release blocker state
 
+**2026-10-06: NOT READY.** Current blocker/evidence list is
+[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Entries below are historical.
+Electronic-payment certification is excluded from the COD-only launch scope.
+
 This file is updated during release remediation.
+
+## Current blocker update — 2026-10-09
+
+The PR worktree is locally validated, but the release remains **NOT READY**.
+The active blockers are:
+
+- Real Twilio Verify delivery and all OTP failure/reuse/rate-limit journeys are
+  unverified; no production SMS credentials were supplied.
+- No reachable Render readiness response, production migration-032 evidence,
+  least-privilege role proof, authenticated COD order, inventory deduction, or
+  cash reconciliation evidence is available.
+- Vercel project access exists, but production has no server-only
+  `PROXY_AUTH_SECRET`; no deployment/configuration mutation was made.
+- Docker is unavailable for the clean/upgraded database, backup/restore,
+  rollback, and dependency-failure drills.
+- Frontend full `npm audit` remains red on the high-severity `braces` advisory
+  inherited through `eslint-config-next`; there is no official fixed release,
+  and no safe non-breaking remediation was available.
+
+The returns/refunds feature is now explicitly disabled at web-order, POS, and
+legacy privileged lifecycle route entry points. This closes a code-level blocker
+but does not replace the missing production evidence above.
 
 | Blocker | Status | Attempted remediation | Result | Remaining dependency | Exact next action |
 |---|---|---|---|---|---|

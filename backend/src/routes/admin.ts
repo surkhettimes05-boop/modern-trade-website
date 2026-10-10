@@ -2,7 +2,12 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { preHandler } from "../middleware/authentication.js";
 import { MARKET } from "../config/market.js";
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
+import {
+  commitProductImport,
+  previewProductImport,
+  type ProductImportPreview,
+} from "../services/productCatalogAdminService.js";
 
 type AdminActor = {
   id: string;
@@ -774,11 +779,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     try {
       const body = productSchema.parse(request.body);
-      const { query } = await import("../database/connection.js");
-
       const result = await query(
-        `INSERT INTO products (sku, name_en, name_ne, description_en, description_ne, category_id, pack_size_en, pack_size_ne, unit_en, unit_ne, image_url, images, status, scheduled_for, expires_at, is_featured, meta_title_en, meta_title_ne, meta_description_en, meta_description_ne, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        `INSERT INTO products (sku, name_en, name_ne, description_en, description_ne, category_id, pack_size_en, pack_size_ne, unit_en, unit_ne, image_url, images, status, published_at, scheduled_for, expires_at, is_featured, meta_title_en, meta_title_ne, meta_description_en, meta_description_ne, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
          RETURNING *`,
         [
           body.sku,
@@ -794,6 +797,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           body.image_url || null,
           body.images ? JSON.stringify(body.images) : null,
           body.status,
+          body.status === "PUBLISHED" ? new Date() : null,
           body.scheduled_for ? new Date(body.scheduled_for) : null,
           body.expires_at ? new Date(body.expires_at) : null,
           body.is_featured,
@@ -816,15 +820,89 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
+  const productImportBodySchema = z.object({
+    rows: z.array(z.record(z.string(), z.unknown())).min(1).max(2500),
+    store_id: z.string().uuid().optional(),
+  });
+
+  fastify.post(
+    "/products/import/preview",
+    { bodyLimit: 5 * 1024 * 1024 },
+    async (request, reply) => {
+      const body = productImportBodySchema.parse(request.body);
+      const storeIds = await allowedStoreIds(actor(request), body.store_id);
+      if (body.store_id && storeIds?.length === 0)
+        return reply
+          .status(403)
+          .send({ error: "Store is outside your authorized scope" });
+      const preview = await previewProductImport(body.rows, body.store_id);
+      return reply.send(preview);
+    },
+  );
+
+  fastify.post(
+    "/products/import/commit",
+    { bodyLimit: 5 * 1024 * 1024 },
+    async (request, reply) => {
+      const body = productImportBodySchema.parse(request.body);
+      const storeIds = await allowedStoreIds(actor(request), body.store_id);
+      if (body.store_id && storeIds?.length === 0)
+        return reply
+          .status(403)
+          .send({ error: "Store is outside your authorized scope" });
+      try {
+        const result = await commitProductImport(
+          body.rows,
+          actor(request).id,
+          body.store_id,
+        );
+        return reply.send(result);
+      } catch (error) {
+        const validation = error as Error & { preview?: ProductImportPreview };
+        if (validation.preview) {
+          return reply.status(400).send({
+            error: validation.message,
+            ...validation.preview,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
   fastify.get("/products/:id", async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = z
+      .object({ store_id: z.string().uuid().optional() })
+      .parse(request.query);
+    const storeIds = await allowedStoreIds(actor(request), input.store_id);
+    if (input.store_id && storeIds?.length === 0)
+      return reply
+        .status(403)
+        .send({ error: "Store is outside your authorized scope" });
     const result = await query(
       `SELECT p.*, c.name_en AS category_name,
-      COALESCE((SELECT SUM(quantity) FROM batch_inventory WHERE product_id = p.id), 0) AS stock,
-      (SELECT price FROM product_prices WHERE product_id = p.id AND active = TRUE ORDER BY valid_from DESC LIMIT 1) AS price,
-      (SELECT currency_code FROM product_prices WHERE product_id = p.id AND active = TRUE ORDER BY valid_from DESC LIMIT 1) AS currency_code
+      COALESCE((SELECT SUM(quantity) FROM batch_inventory WHERE product_id = p.id AND ($2::uuid IS NULL OR store_id = $2)), 0) AS stock,
+      (SELECT price FROM product_prices
+        WHERE product_id = p.id AND active = TRUE
+          AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
+          AND (
+            ($2::uuid IS NULL AND store_id IS NULL)
+            OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL))
+          )
+        ORDER BY CASE WHEN $2::uuid IS NOT NULL AND store_id = $2 THEN 0 ELSE 1 END, valid_from DESC
+        LIMIT 1) AS price,
+      (SELECT currency_code FROM product_prices
+        WHERE product_id = p.id AND active = TRUE
+          AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
+          AND (
+            ($2::uuid IS NULL AND store_id IS NULL)
+            OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL))
+          )
+        ORDER BY CASE WHEN $2::uuid IS NOT NULL AND store_id = $2 THEN 0 ELSE 1 END, valid_from DESC
+        LIMIT 1) AS currency_code
       FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE p.id = $1`,
-      [id],
+      [id, input.store_id || null],
     );
     if (!result.rowCount)
       return reply.status(404).send({ error: "Product not found" });
@@ -841,29 +919,133 @@ export async function adminRoutes(fastify: FastifyInstance) {
         description_en: z.string().nullable().optional(),
         description_ne: z.string().nullable().optional(),
         category_id: z.string().uuid().nullable().optional(),
+        pack_size_en: z.string().max(100).nullable().optional(),
+        unit_en: z.string().max(50).nullable().optional(),
         image_url: httpsUrlSchema.nullable().optional(),
         status: publicationStatusSchema.optional(),
         is_featured: z.boolean().optional(),
+        price: z.coerce.number().positive().max(99_999_999.99).optional(),
+        store_id: z.string().uuid().optional(),
       })
       .strict()
       .parse(request.body);
-    if (!Object.keys(body).length)
+
+    const productFields = Object.fromEntries(
+      Object.entries(body).filter(([key]) => !["price", "store_id"].includes(key)),
+    );
+    if (!Object.keys(productFields).length && body.price === undefined)
       return reply
         .status(400)
-        .send({ error: "No product fields were provided" });
-    const fields = Object.keys(body);
-    const values = fields.map((field) => body[field as keyof typeof body]);
-    const assignments = fields.map(
-      (field, index) => `${field} = $${index + 1}`,
-    );
-    values.push(id as never);
-    const result = await query(
-      `UPDATE products SET ${assignments.join(", ")}, updated_at = NOW(), updated_by = $${values.length + 1} WHERE id = $${values.length} RETURNING *`,
-      [...values, actor(request).id],
-    );
-    if (!result.rowCount)
+        .send({ error: "No product fields or selling price were provided" });
+
+    const storeIds = await allowedStoreIds(actor(request), body.store_id);
+    if (body.store_id && storeIds?.length === 0)
+      return reply
+        .status(403)
+        .send({ error: "Store is outside your authorized scope" });
+
+    const productExists = await query("SELECT id FROM products WHERE id = $1", [id]);
+    if (!productExists.rowCount)
       return reply.status(404).send({ error: "Product not found" });
-    return result.rows[0];
+
+    if (body.status === "PUBLISHED" && body.price === undefined) {
+      const activePrice = await query(
+        `SELECT 1 FROM product_prices
+         WHERE product_id = $1
+           AND active = TRUE
+           AND valid_from <= NOW()
+           AND (valid_to IS NULL OR valid_to > NOW())
+           AND (
+             ($2::uuid IS NULL AND store_id IS NULL)
+             OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL))
+           )
+         LIMIT 1`,
+        [id, body.store_id || null],
+      );
+      if (!activePrice.rowCount)
+        return reply
+          .status(400)
+          .send({ error: "Published products require an active selling price" });
+    }
+
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const fields = Object.keys(productFields);
+      if (fields.length) {
+        const values = fields.map(
+          (field) => productFields[field as keyof typeof productFields],
+        );
+        const assignments = fields.map(
+          (field, index) => `${field} = $${index + 1}`,
+        );
+        if (body.status === "PUBLISHED") {
+          assignments.push("published_at = COALESCE(published_at, NOW())");
+        }
+        values.push(id as never);
+        values.push(actor(request).id as never);
+        await client.query(
+          `UPDATE products
+           SET ${assignments.join(", ")},
+               updated_at = NOW(),
+               updated_by = $${values.length}
+           WHERE id = $${values.length - 1}`,
+          values,
+        );
+      }
+
+      if (body.price !== undefined) {
+        await client.query(
+          `UPDATE product_prices
+           SET active = FALSE, valid_to = NOW()
+           WHERE product_id = $1
+             AND active = TRUE
+             AND (
+               ($2::uuid IS NULL AND store_id IS NULL)
+               OR ($2::uuid IS NOT NULL AND store_id = $2)
+             )`,
+          [id, body.store_id || null],
+        );
+        await client.query(
+          `INSERT INTO product_prices
+            (product_id, store_id, price, currency_code, active, valid_from)
+           VALUES ($1, $2, $3, $4, TRUE, NOW())`,
+          [id, body.store_id || null, body.price, MARKET.currencyCode],
+        );
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const refreshed = await query(
+      `SELECT p.*, c.name_en AS category_name,
+      COALESCE((SELECT SUM(quantity) FROM batch_inventory WHERE product_id = p.id AND ($2::uuid IS NULL OR store_id = $2)), 0) AS stock,
+      (SELECT price FROM product_prices
+        WHERE product_id = p.id AND active = TRUE
+          AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
+          AND (
+            ($2::uuid IS NULL AND store_id IS NULL)
+            OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL))
+          )
+        ORDER BY CASE WHEN $2::uuid IS NOT NULL AND store_id = $2 THEN 0 ELSE 1 END, valid_from DESC
+        LIMIT 1) AS price,
+      (SELECT currency_code FROM product_prices
+        WHERE product_id = p.id AND active = TRUE
+          AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
+          AND (
+            ($2::uuid IS NULL AND store_id IS NULL)
+            OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL))
+          )
+        ORDER BY CASE WHEN $2::uuid IS NOT NULL AND store_id = $2 THEN 0 ELSE 1 END, valid_from DESC
+        LIMIT 1) AS currency_code
+      FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE p.id = $1`,
+      [id, body.store_id || null],
+    );
+    return refreshed.rows[0];
   });
 
   fastify.get("/categories", async (request, _reply) => {

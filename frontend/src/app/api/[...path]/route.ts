@@ -1,3 +1,4 @@
+import { addProxyClientIdentity } from "@/lib/proxyClientIdentity";
 import { NextRequest, NextResponse } from "next/server";
 import { requireServerApiUrl, upstreamTimeoutMs } from "@/lib/serverApiUrl";
 import {
@@ -9,15 +10,7 @@ import {
   proxyResponseHeaders,
 } from "@/lib/proxyHeaders";
 
-function unavailableResponse(path: string, method: string) {
-  if (method === "GET" && /^public\/(products|categories|stores|offers)(\/|$)/.test(path)) {
-    return NextResponse.json([]);
-  }
-
-  if (/^(auth|customer|ledger|consent)(\/|$)/.test(path)) {
-    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
-  }
-
+function unavailableResponse() {
   return NextResponse.json({ error: "Backend service is temporarily unavailable" }, { status: 503 });
 }
 
@@ -33,10 +26,18 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   }
 
   const requestHeaders = proxyRequestHeaders(request.headers);
+  try { addProxyClientIdentity(request.headers, requestHeaders); } catch {
+    return NextResponse.json({ error: "Proxy identity is not configured" }, { status: 503 });
+  }
 
   let requestBody: ArrayBuffer | undefined;
   try {
-    requestBody = await readBoundedProxyBody(request);
+    const importBodyLimit =
+      path === "admin/products/import/preview" ||
+      path === "admin/products/import/commit"
+        ? 5 * 1024 * 1024
+        : undefined;
+    requestBody = await readBoundedProxyBody(request, importBodyLimit);
   } catch (error) {
     if (error instanceof ProxyPayloadTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
@@ -84,7 +85,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
         { status: 504 },
       );
     }
-    return unavailableResponse(path, request.method);
+    return unavailableResponse();
   }
 }
 

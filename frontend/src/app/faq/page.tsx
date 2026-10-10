@@ -3,20 +3,20 @@ import JsonLd from '@/components/JsonLd';
 export default function FAQPage() {
   const faqs = [
     {
-      question: "What are your store hours?",
-      answer: "Our stores are typically open Sunday through Friday from 9:00 AM to 9:00 PM, and Saturday from 10:00 AM to 8:00 PM. Hours may vary by location."
+      question: "Where can I shop with Pasalho?",
+      answer: "Pasalho's online shopping pilot focuses on Birendranagar, Surkhet. Delivery and pickup availability are confirmed for the selected store and address at checkout."
     },
     {
       question: "Do you offer home delivery?",
-      answer: "Pickup and eligible Kathmandu delivery are available based on the selected store and delivery address."
+      answer: "Delivery or pickup may be available in Birendranagar, Surkhet, depending on the selected store and address. Confirm serviceability at checkout before placing your order."
     },
     {
       question: "What payment methods do you accept?",
-      answer: "The Nepal pilot accepts cash on delivery and cash at the POS. Electronic providers are not enabled."
+      answer: "The Birendranagar pilot accepts cash on delivery and cash at store pickup. Electronic payment methods are not enabled."
     },
     {
       question: "How can I contact customer support?",
-      answer: "You can reach us through our contact form on this website, call our customer service line, or visit any of our store locations during business hours."
+      answer: "Use the Pasalho contact page or the phone number shown for a published store in the store directory. Store hours and contact details are shown there when available."
     }
   ];
 
@@ -24,7 +24,7 @@ export default function FAQPage() {
     <div className="min-h-screen bg-gray-50">
       <JsonLd data={{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map((faq) => ({ '@type': 'Question', name: faq.question, acceptedAnswer: { '@type': 'Answer', text: faq.answer } })) }} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">Pasalho FAQs for Birendranagar, Surkhet</h1>
         <p className="text-xl text-gray-600 mb-8">
           Find answers to common questions about Pasalho
         </p>

@@ -96,7 +96,8 @@ export async function authRoutes(fastify: FastifyInstance) {
         // For development, return OTP (remove in production)
         if (
           process.env.NODE_ENV === "development" &&
-          process.env.EXPOSE_DEVELOPMENT_OTP === "true"
+          process.env.EXPOSE_DEVELOPMENT_OTP === "true" &&
+          !process.env.SMS_PROVIDER
         ) {
           return { success: true, message: "OTP sent", otp }; // Remove otp in production
         }

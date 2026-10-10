@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { POSService } from "../services/posService.js";
 import { query } from "../database/connection.js";
+import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
 
 const posService = new POSService();
 
@@ -157,7 +158,7 @@ export async function posRoutes(fastify: FastifyInstance) {
   fastify.patch("/sale/:id/status", async (request, reply) => {
     const { id } = request.params as { id: string };
     const schema = z.object({
-      status: z.enum(["DRAFT", "PENDING", "COMPLETED", "VOIDED", "RETURNED"]),
+      status: z.enum(["DRAFT", "PENDING", "COMPLETED", "VOIDED"]),
       updated_by: z.string(),
     });
 
@@ -358,39 +359,40 @@ export async function posRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POS: Process return
-  fastify.post("/return", async (request, reply) => {
-    const schema = z.object({
-      return_number: z.string(),
-      sale_id: z.string().uuid(),
-      customer_id: z.string().uuid(),
-      store_id: z.string().uuid(),
-      total_amount: z.number(),
-      items: z.array(
-        z.object({
-          sale_item_id: z.string().uuid(),
-          quantity: z.number(),
-          return_amount: z.number(),
-        }),
-      ),
-      processed_by: z.string(),
-    });
+  // POS returns remain unregistered for the COD/cash-only pilot.
+  if (deferredFeatureEnabled("ENABLE_RETURNS"))
+    fastify.post("/return", async (request, reply) => {
+      const schema = z.object({
+        return_number: z.string(),
+        sale_id: z.string().uuid(),
+        customer_id: z.string().uuid(),
+        store_id: z.string().uuid(),
+        total_amount: z.number(),
+        items: z.array(
+          z.object({
+            sale_item_id: z.string().uuid(),
+            quantity: z.number(),
+            return_amount: z.number(),
+          }),
+        ),
+        processed_by: z.string(),
+      });
 
-    try {
-      const body = schema.parse(request.body);
-      const result = await posService.processReturn(body);
-      return result;
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        reply.status(400);
-        return { error: "Validation failed", details: error.issues };
+      try {
+        const body = schema.parse(request.body);
+        const result = await posService.processReturn(body);
+        return result;
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          reply.status(400);
+          return { error: "Validation failed", details: error.issues };
+        }
+        if (error instanceof Error) {
+          reply.status(400);
+          return { error: error.message };
+        }
+        reply.status(500);
+        return { error: "Failed to process return" };
       }
-      if (error instanceof Error) {
-        reply.status(400);
-        return { error: error.message };
-      }
-      reply.status(500);
-      return { error: "Failed to process return" };
-    }
-  });
+    });
 }

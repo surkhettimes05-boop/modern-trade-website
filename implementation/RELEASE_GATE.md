@@ -2,7 +2,32 @@
 
 Decision: **NOT READY**
 
-Reviewed: 2026-08-19
+Reviewed: 2026-10-06
+
+Current evidence and deployment instructions: [PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md).
+Historical evidence below is retained for audit; it does not certify this revision.
+Electronic-provider certification is outside the COD-only gate and is not required
+while electronic payments remain disabled. Loyalty MVP is allowed, but still requires
+its own lifecycle and reconciliation evidence.
+
+## Current verification update — 2026-10-09
+
+The decision remains **NOT READY**. The current PR worktree passed the full
+backend Node 22 suite (51 suites / 334 tests), backend type-check/lint/build,
+frontend type-check/lint/build, and static security checks. Returns and refunds
+are now disabled at all pilot route entry points, with focused regression tests.
+
+The following launch evidence is still absent: a clean and upgraded production
+database run with migration 032 and least-privilege roles; real Twilio Verify
+delivery to Nepal numbers; a reachable Render backend returning readiness 200;
+Vercel server-only `PROXY_AUTH_SECRET` configuration; an authenticated COD order
+through fulfillment and inventory deduction; and backup/restore/rollback and
+operator reconciliation drills. Docker is unavailable on the certification host.
+
+Frontend production dependency auditing also remains blocked by the unresolved
+high-severity `braces` advisory in the Next.js lint toolchain. It is not being
+silenced or “fixed” with an unsafe framework downgrade. No merge or deployment
+is approved on this evidence.
 
 Scope: Nepal (`NP`) / NPR / `en-NP` / `Asia/Kathmandu`; customer COD and staff cash POS only.
 

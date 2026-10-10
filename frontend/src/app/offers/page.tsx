@@ -5,7 +5,7 @@ import JsonLd from '@/components/JsonLd';
 import { buildMetadata, absoluteUrl } from '@/lib/seo';
 import { getCatalog } from '@/lib/serverCatalog';
 
-export const metadata: Metadata = buildMetadata({ title: 'Current offers', description: 'See current Pasalho grocery and household offers, campaign dates and terms for shoppers in Nepal.', path: '/offers' });
+export const metadata: Metadata = buildMetadata({ title: 'Current offers', description: 'See current Pasalho grocery and household offers for Birendranagar, Surkhet, with applicable dates and terms.', path: '/offers' });
 
 export default async function OffersPage() {
   const { offers, products } = await getCatalog();

@@ -39,7 +39,7 @@ export function upstreamTimeoutMs(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const raw = env.API_UPSTREAM_TIMEOUT_MS;
-  if (!raw) return 8_000;
+  if (!raw) return 20_000;
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < 1_000 || value > 30_000) {
     throw new Error(
