@@ -32,7 +32,12 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
 
   let requestBody: ArrayBuffer | undefined;
   try {
-    requestBody = await readBoundedProxyBody(request);
+    const importBodyLimit =
+      path === "admin/products/import/preview" ||
+      path === "admin/products/import/commit"
+        ? 5 * 1024 * 1024
+        : undefined;
+    requestBody = await readBoundedProxyBody(request, importBodyLimit);
   } catch (error) {
     if (error instanceof ProxyPayloadTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
