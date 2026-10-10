@@ -41,7 +41,14 @@ type ImportPreview = {
   error?: string;
 };
 
-const importFields = [
+type ImportFieldDefinition = {
+  key: string;
+  label: string;
+  required?: boolean;
+  aliases: readonly string[];
+};
+
+const importFields: readonly ImportFieldDefinition[] = [
   { key: "sku", label: "SKU", required: true, aliases: ["sku", "product_sku", "item_code", "code"] },
   { key: "name", label: "Product name", required: true, aliases: ["name", "product_name", "name_en", "item_name"] },
   { key: "description", label: "Description", aliases: ["description", "description_en"] },
@@ -51,7 +58,7 @@ const importFields = [
   { key: "selling_price", label: "Selling price (NPR)", aliases: ["selling_price", "price", "mrp", "retail_price"] },
   { key: "status", label: "Status", aliases: ["status", "publication_status"] },
   { key: "image_url", label: "Image URL", aliases: ["image_url", "image", "photo_url"] },
-] as const;
+];
 
 function normalizeHeader(value: string) {
   return value
