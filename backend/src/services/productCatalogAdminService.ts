@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getPool, query } from "../database/connection.js";
 
 const ALLOWED_STATUSES = new Set([
@@ -27,6 +28,12 @@ export type ProductImportPreparedRow = {
   action: "CREATE" | "UPDATE" | "ERROR";
   errors: string[];
   existingId: string | null;
+  openingQuantity: number | null;
+  unitCost: number | null;
+  batchCode: string | null;
+  stockDate: string | null;
+  expiryDate: string | null;
+  openingReason: string | null;
 };
 
 export type ProductImportPreview = {
@@ -35,6 +42,7 @@ export type ProductImportPreview = {
     create: number;
     update: number;
     error: number;
+    openingStock: number;
   };
   rows: ProductImportPreparedRow[];
 };
@@ -62,6 +70,32 @@ function parsePrice(value: unknown, errors: string[]): number | null {
     return null;
   }
   return Math.round(parsed * 100) / 100;
+}
+
+function parseOptionalNumber(value: unknown, label: string, errors: string[], allowZero = true): number | null {
+  const valueText = textValue(value);
+  if (!valueText) return null;
+  const parsed = Number(valueText);
+  if (!Number.isFinite(parsed) || parsed < 0 || (!allowZero && parsed === 0) || parsed > 99_999_999.99) {
+    errors.push(`${label} must be a valid non-negative number`);
+    return null;
+  }
+  return Math.round(parsed * 100) / 100;
+}
+
+function parseDate(value: unknown, label: string, errors: string[]): string | null {
+  const valueText = textValue(value);
+  if (!valueText) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valueText) || Number.isNaN(Date.parse(`${valueText}T00:00:00Z`))) {
+    errors.push(`${label} must use YYYY-MM-DD`);
+    return null;
+  }
+  return valueText;
+}
+
+function deterministicOperationId(importId: string, sku: string): string {
+  const hex = createHash("sha256").update(`${importId}:${normalizeKey(sku)}`).digest("hex").slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 function parseHttpsUrl(value: unknown, errors: string[]): string | null {
@@ -100,6 +134,21 @@ export async function previewProductImport(
     const unit = optionalText(raw.unit, 50, "unit", errors);
     const sellingPrice = parsePrice(raw.selling_price, errors);
     const imageUrl = parseHttpsUrl(raw.image_url, errors);
+    const openingQuantity = parseOptionalNumber(raw.opening_quantity, "opening_quantity", errors);
+    const unitCost = parseOptionalNumber(raw.unit_cost, "unit_cost", errors);
+    const batchCode = optionalText(raw.batch_code, 100, "batch_code", errors);
+    const stockDate = parseDate(raw.stock_date, "stock_date", errors);
+    const expiryDate = parseDate(raw.expiry_date, "expiry_date", errors);
+    const openingReason = optionalText(raw.opening_reason, 500, "opening_reason", errors);
+    if (openingQuantity != null && openingQuantity > 0) {
+      if (!storeId) errors.push("choose a store before importing opening stock");
+      if (unitCost == null) errors.push("unit_cost is required when opening_quantity is greater than 0");
+      if (!batchCode) errors.push("batch_code is required when opening_quantity is greater than 0");
+      if (!stockDate) errors.push("stock_date is required when opening_quantity is greater than 0");
+      const today = new Date().toISOString().slice(0, 10);
+      if (stockDate && stockDate > today) errors.push("stock_date cannot be in the future");
+      if (expiryDate && stockDate && expiryDate < stockDate) errors.push("expiry_date cannot be before stock_date");
+    }
     const rawStatus = textValue(raw.status).toUpperCase();
     if (rawStatus && !ALLOWED_STATUSES.has(rawStatus)) {
       errors.push("status is invalid");
@@ -116,6 +165,12 @@ export async function previewProductImport(
       sellingPrice,
       requestedStatus: rawStatus || null,
       imageUrl,
+      openingQuantity,
+      unitCost,
+      batchCode,
+      stockDate,
+      expiryDate,
+      openingReason,
       errors,
     };
   });
@@ -185,6 +240,26 @@ export async function previewProductImport(
     for (const row of activePrices.rows) pricedIds.add(String(row.product_id));
   }
 
+  const openingRows = baseRows.filter((row) => row.openingQuantity != null && row.openingQuantity > 0 && row.batchCode);
+  if (storeId && openingRows.length) {
+    const productSkus = openingRows.map((row) => normalizeKey(row.sku)).filter(Boolean);
+    const duplicateBatches = await query(
+      `SELECT lower(p.sku) AS sku_key, bi.batch_id
+       FROM batch_inventory bi
+       JOIN products p ON p.id = bi.product_id
+       WHERE bi.store_id = $1
+         AND lower(p.sku) = ANY($2::text[])
+         AND bi.batch_id = ANY($3::text[])`,
+      [storeId, productSkus, openingRows.map((row) => row.batchCode)],
+    );
+    const existingBatchKeys = new Set(duplicateBatches.rows.map((row) => `${row.sku_key}::${row.batch_id}`));
+    for (const row of openingRows) {
+      if (existingBatchKeys.has(`${normalizeKey(row.sku)}::${row.batchCode}`)) {
+        row.errors.push("batch_code already exists for this product/store");
+      }
+    }
+  }
+
   const rows: ProductImportPreparedRow[] = baseRows.map((row) => {
     const existing = row.sku ? existingBySku.get(normalizeKey(row.sku)) : undefined;
     let categoryId: string | null = null;
@@ -218,6 +293,12 @@ export async function previewProductImport(
       action: row.errors.length ? "ERROR" : existing ? "UPDATE" : "CREATE",
       errors: row.errors,
       existingId: existing?.id || null,
+      openingQuantity: row.openingQuantity,
+      unitCost: row.unitCost,
+      batchCode: row.batchCode,
+      stockDate: row.stockDate,
+      expiryDate: row.expiryDate,
+      openingReason: row.openingReason,
     };
   });
 
@@ -227,6 +308,7 @@ export async function previewProductImport(
       create: rows.filter((row) => row.action === "CREATE").length,
       update: rows.filter((row) => row.action === "UPDATE").length,
       error: rows.filter((row) => row.action === "ERROR").length,
+      openingStock: rows.filter((row) => (row.openingQuantity || 0) > 0).length,
     },
     rows,
   };
@@ -244,7 +326,8 @@ export async function commitProductImport(
   rawRows: ProductImportSourceRow[],
   actorId: string,
   storeId?: string,
-): Promise<ProductImportPreview & { priced: number }> {
+  importId?: string,
+): Promise<ProductImportPreview & { priced: number; openingPosted: number }> {
   const preview = await previewProductImport(rawRows, storeId);
   if (preview.summary.error > 0) {
     const error = new Error("Product import contains validation errors") as Error & {
@@ -342,8 +425,46 @@ export async function commitProductImport(
       }
     }
 
+    const openingRows = preview.rows.filter((row) => (row.openingQuantity || 0) > 0);
+    if (openingRows.length && (!storeId || !importId)) {
+      throw new Error("Store and import ID are required for opening stock");
+    }
+    for (const row of openingRows) {
+      const productId = idBySku.get(normalizeKey(row.persistedSku));
+      if (!productId || !storeId || !importId || !row.batchCode || row.unitCost == null || !row.stockDate) {
+        throw new Error(`Opening stock could not be resolved for SKU ${row.persistedSku}`);
+      }
+      const referenceId = deterministicOperationId(importId, row.persistedSku);
+      const prior = await client.query(
+        `SELECT id FROM inventory_transactions WHERE reference_type='OPENING_STOCK_IMPORT' AND reference_id=$1 LIMIT 1`,
+        [referenceId],
+      );
+      if (prior.rowCount) continue;
+      const totalCost = Math.round((row.openingQuantity || 0) * row.unitCost * 100) / 100;
+      await client.query(
+        `INSERT INTO batch_inventory
+          (store_id, product_id, batch_id, batch_number, expiry_date, quantity, cost, unit_cost, total_cost, received_date)
+         VALUES ($1,$2,$3,$3,$4,$5,$6,$6,$7,$8)`,
+        [storeId, productId, row.batchCode, row.expiryDate, row.openingQuantity, row.unitCost, totalCost, row.stockDate],
+      );
+      await client.query(
+        `INSERT INTO inventory_transactions
+          (transaction_type, store_id, product_id, batch_id, quantity, unit_cost, total_cost,
+           reference_id, reference_type, reason, performed_by)
+         VALUES ('ADJUSTMENT',$1,$2,$3,$4,$5,$6,$7,'OPENING_STOCK_IMPORT',$8,$9)`,
+        [storeId, productId, row.batchCode, row.openingQuantity, row.unitCost, totalCost, referenceId,
+         row.openingReason || `Opening inventory import ${importId}`, actorId],
+      );
+      await client.query(
+        `INSERT INTO store_product_availability (store_id, product_id, availability_status, last_updated)
+         VALUES ($1,$2,$3,NOW())
+         ON CONFLICT (store_id, product_id) DO UPDATE SET availability_status=EXCLUDED.availability_status,last_updated=NOW()`,
+        [storeId, productId, (row.openingQuantity || 0) <= 5 ? "LOW_STOCK" : "AVAILABLE"],
+      );
+    }
+
     await client.query("COMMIT");
-    return { ...preview, priced: pricedRows.length };
+    return { ...preview, priced: pricedRows.length, openingPosted: openingRows.length };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
