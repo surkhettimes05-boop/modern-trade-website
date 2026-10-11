@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/admin/AdminPrimitives";
-import { AdminRecord, asText } from "@/components/admin/AdminDataTable";
+import { AdminRecord, apiErrorMessage, asText } from "@/components/admin/AdminDataTable";
 import { useAdminShell } from "@/components/admin/AdminShellContext";
 import { useStaffSession } from "@/components/StaffSessionProvider";
 import { resilientFetch } from "@/lib/resilientFetch";
@@ -65,7 +65,7 @@ export function OpeningStockButton({
           error?: string;
         };
         if (!response.ok) {
-          throw new Error(body.error || "Unable to load products");
+          throw new Error(apiErrorMessage(body, "Unable to load products"));
         }
         setProducts(body.items || []);
       } catch (loadError) {
@@ -137,7 +137,7 @@ export function OpeningStockButton({
         batch?: AdminRecord;
       };
       if (!response.ok) {
-        throw new Error(body.error || "Unable to add opening stock");
+        throw new Error(apiErrorMessage(body, "Unable to add opening stock"));
       }
 
       const product = products.find(
