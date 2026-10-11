@@ -761,10 +761,17 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(
       config
-        .fields!.map((field) => [
-          field.name,
-          String(form.get(field.name) || ""),
-        ])
+        .fields!.map((field) => {
+          const rawValue = String(form.get(field.name) || "").trim();
+          const value =
+            field.name === "slug"
+              ? rawValue
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")
+                  .replace(/^-+|-+$/g, "")
+              : rawValue;
+          return [field.name, value];
+        })
         .filter(([, value]) => value !== ""),
     );
     try {
@@ -779,19 +786,30 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
       });
       const body = (await response.json()) as AdminRecord;
       if (!response.ok) {
-        const details = Array.isArray(body.details)
-          ? body.details
-              .map((issue) =>
-                typeof issue === "object" && issue && "message" in issue
-                  ? String((issue as { message: unknown }).message)
-                  : "",
-              )
-              .filter(Boolean)
-              .join("; ")
-          : "";
-        throw new Error(
-          details || asText(body.error, "Unable to create record"),
-        );
+        const issues = Array.isArray(body.validation)
+          ? body.validation
+          : Array.isArray(body.details)
+            ? body.details
+            : [];
+        const details = issues
+          .map((issue) => {
+            if (!(typeof issue === "object" && issue && "message" in issue))
+              return "";
+            const path =
+              "path" in issue && Array.isArray((issue as { path?: unknown }).path)
+                ? (issue as { path: unknown[] }).path.join(".")
+                : "";
+            const message = String((issue as { message: unknown }).message);
+            return path ? `${path}: ${message}` : message;
+          })
+          .filter(Boolean)
+          .join("; ");
+        const message =
+          details ||
+          (typeof body.message === "string" && body.message) ||
+          (typeof body.error === "string" && body.error) ||
+          "Unable to create record";
+        throw new Error(message);
       }
       setFormOpen(false);
       setNotice(`${config.createLabel || "Record"} created successfully.`);

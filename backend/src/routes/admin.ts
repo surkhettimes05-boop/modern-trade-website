@@ -1091,7 +1091,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
         name_ne: z.string().max(255).optional(),
         slug: z
           .string()
-          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+          .trim()
+          .toLowerCase()
+          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+            message: "Slug may contain lowercase letters, numbers, and hyphens only",
+          })
           .max(255),
         description_en: z.string().optional(),
         description_ne: z.string().optional(),
@@ -1139,7 +1143,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
         name_ne: z.string().max(255).nullable().optional(),
         slug: z
           .string()
-          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+          .trim()
+          .toLowerCase()
+          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+            message: "Slug may contain lowercase letters, numbers, and hyphens only",
+          })
           .max(255)
           .optional(),
         description_en: z.string().nullable().optional(),
