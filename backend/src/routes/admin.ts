@@ -834,6 +834,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const body = productImportBodySchema.parse(request.body);
       const storeIds = await allowedStoreIds(actor(request), body.store_id);
+      const includesOpeningStock = body.rows.some((row) => Number(row.opening_quantity || 0) > 0);
+      if (includesOpeningStock && !isPrivileged(actor(request)) && !actor(request).capabilities?.includes("inventory.adjust")) {
+        return reply.status(403).send({ error: "Opening stock import requires inventory.adjust capability" });
+      }
       if (body.store_id && storeIds?.length === 0)
         return reply
           .status(403)
@@ -849,6 +853,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const body = productImportBodySchema.parse(request.body);
       const storeIds = await allowedStoreIds(actor(request), body.store_id);
+      const includesOpeningStock = body.rows.some((row) => Number(row.opening_quantity || 0) > 0);
+      if (includesOpeningStock && !isPrivileged(actor(request)) && !actor(request).capabilities?.includes("inventory.adjust")) {
+        return reply.status(403).send({ error: "Opening stock import requires inventory.adjust capability" });
+      }
       if (body.store_id && storeIds?.length === 0)
         return reply
           .status(403)
