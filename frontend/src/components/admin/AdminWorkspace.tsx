@@ -21,6 +21,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   AdminDataTable,
   AdminRecord,
+  apiErrorMessage,
   Column,
   TableFilter,
   asText,
@@ -681,7 +682,7 @@ function OrderActions({
       );
       const body = (await response.json()) as AdminRecord;
       if (!response.ok)
-        throw new Error(asText(body.error, "Order update failed"));
+        throw new Error(apiErrorMessage(body, "Order update failed"));
       onUpdated(body);
     } catch (updateError) {
       setError(
@@ -1001,7 +1002,7 @@ function Dashboard() {
       });
       const body = (await response.json()) as AdminRecord;
       if (!response.ok)
-        throw new Error(asText(body.error, "Unable to load dashboard"));
+        throw new Error(apiErrorMessage(body, "Unable to load dashboard"));
       setData(body);
     } catch (loadError) {
       setError(
@@ -1265,7 +1266,7 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
         ]);
         const body = (await response.json()) as AdminRecord;
         if (!response.ok)
-          throw new Error(asText(body.error, "Unable to load record"));
+          throw new Error(apiErrorMessage(body, "Unable to load record"));
         setRecord(body);
         if (relatedResponse?.ok) {
           const relatedBody = (await relatedResponse.json()) as
