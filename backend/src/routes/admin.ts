@@ -825,6 +825,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   const productImportBodySchema = z.object({
     rows: z.array(z.record(z.string(), z.unknown())).min(1).max(2500),
     store_id: z.string().uuid().optional(),
+    import_id: z.string().uuid().optional(),
   });
 
   fastify.post(
@@ -857,6 +858,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           body.rows,
           actor(request).id,
           body.store_id,
+          body.import_id,
         );
         return reply.send(result);
       } catch (error) {
