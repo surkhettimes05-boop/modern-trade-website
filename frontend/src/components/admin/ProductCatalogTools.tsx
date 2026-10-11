@@ -342,6 +342,7 @@ export function ProductImportButton({
         body: JSON.stringify({
           rows,
           ...(selectedStoreId !== "all" ? { store_id: selectedStoreId } : {}),
+          import_id: importId,
         }),
       });
       const body = (await response.json()) as ImportPreview;

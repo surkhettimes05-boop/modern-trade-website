@@ -447,7 +447,7 @@ export async function commitProductImport(
       }
       const referenceId = deterministicOperationId(importId, row.persistedSku);
       const prior = await client.query(
-        `SELECT id FROM inventory_transactions WHERE reference_type='OPENING_STOCK_IMPORT' AND reference_id=$1 LIMIT 1`,
+        `SELECT id FROM inventory_transactions WHERE reference_type='OPENING_STOCK' AND reference_id=$1 LIMIT 1`,
         [referenceId],
       );
       if (prior.rowCount) continue;
@@ -462,7 +462,7 @@ export async function commitProductImport(
         `INSERT INTO inventory_transactions
           (transaction_type, store_id, product_id, batch_id, quantity, unit_cost, total_cost,
            reference_id, reference_type, reason, performed_by)
-         VALUES ('ADJUSTMENT',$1,$2,$3,$4,$5,$6,$7,'OPENING_STOCK_IMPORT',$8,$9)`,
+         VALUES ('ADJUSTMENT',$1,$2,$3,$4,$5,$6,$7,'OPENING_STOCK',$8,$9)`,
         [storeId, productId, row.batchCode, row.openingQuantity, row.unitCost, totalCost, referenceId,
          row.openingReason || `Opening inventory import ${importId}`, actorId],
       );
