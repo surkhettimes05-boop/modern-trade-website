@@ -122,5 +122,9 @@
   [
     "032_cod_inventory_evidence",
     "../database/032_cod_inventory_evidence.sql"
+  ],
+  [
+    "033_opening_stock_guard",
+    "../database/033_opening_stock_guard.sql"
   ]
 ]

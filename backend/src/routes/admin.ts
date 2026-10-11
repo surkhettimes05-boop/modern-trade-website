@@ -107,9 +107,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
         ? "roles.manage"
         : resource === "stores"
           ? `stores.${request.method === "GET" ? "read" : "manage"}`
-          : aliases[resource]
-            ? `${aliases[resource]}.${request.method === "GET" || readOnlyUtility ? "read" : "write"}`
-            : required;
+          : resource === "inventory" && request.method !== "GET"
+            ? "inventory.adjust"
+            : aliases[resource]
+              ? `${aliases[resource]}.${request.method === "GET" || readOnlyUtility ? "read" : "write"}`
+              : required;
     if (
       !isPrivileged(user) &&
       !capabilities.includes(capability) &&
@@ -1227,6 +1229,234 @@ export async function adminRoutes(fastify: FastifyInstance) {
       limit: input.limit,
       offset: input.offset,
     };
+  });
+
+
+  fastify.post("/inventory/opening-stock", async (request, reply) => {
+    const body = z
+      .object({
+        operation_id: z.string().uuid(),
+        store_id: z.string().uuid(),
+        product_id: z.string().uuid(),
+        batch_code: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, {
+            message:
+              "Batch code may contain letters, numbers, dot, underscore, slash, and hyphen",
+          }),
+        quantity: z.coerce.number().positive().max(1_000_000),
+        unit_cost: z.coerce.number().min(0).max(99_999_999.99),
+        expiry_date: z
+          .string()
+          .regex(/^\\d{4}-\\d{2}-\\d{2}$/)
+          .nullable()
+          .optional(),
+        stock_date: z
+          .string()
+          .regex(/^\\d{4}-\\d{2}-\\d{2}$/)
+          .optional(),
+        reason: z.string().trim().min(5).max(500),
+      })
+      .strict()
+      .parse(request.body);
+
+    const storeIds = await allowedStoreIds(actor(request), body.store_id);
+    if (storeIds?.length === 0) {
+      return reply
+        .status(403)
+        .send({ error: "Store is outside your authorized scope" });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const stockDate = body.stock_date || today;
+    if (stockDate > today) {
+      return reply.status(400).send({ error: "Stock date cannot be in the future" });
+    }
+    if (body.expiry_date && body.expiry_date < today) {
+      return reply.status(400).send({ error: "Expiry date cannot be in the past" });
+    }
+
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+
+      const prior = await client.query(
+        `SELECT id::text, store_id::text, product_id::text, batch_id, quantity, unit_cost, total_cost
+         FROM inventory_transactions
+         WHERE reference_type = 'OPENING_STOCK' AND reference_id = $1
+         LIMIT 1`,
+        [body.operation_id],
+      );
+      if (prior.rowCount) {
+        const batch = await client.query(
+          `SELECT bi.*, p.name_en AS product_name, p.sku, s.name_en AS store_name
+           FROM batch_inventory bi
+           JOIN products p ON p.id = bi.product_id
+           JOIN stores s ON s.id = bi.store_id
+           WHERE bi.store_id = $1 AND bi.product_id = $2 AND bi.batch_id = $3
+           LIMIT 1`,
+          [prior.rows[0].store_id, prior.rows[0].product_id, prior.rows[0].batch_id],
+        );
+        await client.query("COMMIT");
+        return reply.send({
+          success: true,
+          idempotent: true,
+          transaction_id: prior.rows[0].id,
+          batch: batch.rows[0] || null,
+        });
+      }
+
+      const [storeResult, productResult] = await Promise.all([
+        client.query(
+          "SELECT id::text, name_en FROM stores WHERE id = $1 FOR SHARE",
+          [body.store_id],
+        ),
+        client.query(
+          "SELECT id::text, sku, name_en FROM products WHERE id = $1 FOR SHARE",
+          [body.product_id],
+        ),
+      ]);
+      if (!storeResult.rowCount) {
+        await client.query("ROLLBACK");
+        return reply.status(404).send({ error: "Store not found" });
+      }
+      if (!productResult.rowCount) {
+        await client.query("ROLLBACK");
+        return reply.status(404).send({ error: "Product not found" });
+      }
+
+      const duplicateBatch = await client.query(
+        `SELECT id FROM batch_inventory
+         WHERE store_id = $1 AND product_id = $2 AND batch_id = $3
+         FOR UPDATE`,
+        [body.store_id, body.product_id, body.batch_code],
+      );
+      if (duplicateBatch.rowCount) {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({
+          error:
+            "This batch code already exists for the selected product and store. Use a new batch code or an inventory adjustment.",
+        });
+      }
+
+      const totalCost = Math.round(body.quantity * body.unit_cost * 100) / 100;
+      const batchResult = await client.query(
+        `INSERT INTO batch_inventory
+          (store_id, product_id, batch_id, batch_number, expiry_date, quantity,
+           cost, unit_cost, total_cost, received_date)
+         VALUES ($1, $2, $3, $3, $4, $5, $6, $6, $7, $8)
+         RETURNING *`,
+        [
+          body.store_id,
+          body.product_id,
+          body.batch_code,
+          body.expiry_date || null,
+          body.quantity,
+          body.unit_cost,
+          totalCost,
+          stockDate,
+        ],
+      );
+
+      const transactionResult = await client.query(
+        `INSERT INTO inventory_transactions
+          (transaction_type, store_id, product_id, batch_id, quantity, unit_cost,
+           total_cost, reference_id, reference_type, reason, performed_by)
+         VALUES ('ADJUSTMENT', $1, $2, $3, $4, $5, $6, $7, 'OPENING_STOCK', $8, $9)
+         RETURNING id::text`,
+        [
+          body.store_id,
+          body.product_id,
+          body.batch_code,
+          body.quantity,
+          body.unit_cost,
+          totalCost,
+          body.operation_id,
+          body.reason,
+          actor(request).id,
+        ],
+      );
+
+      await client.query(
+        `INSERT INTO store_product_availability
+          (store_id, product_id, availability_status, last_updated)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (store_id, product_id) DO UPDATE SET
+           availability_status = EXCLUDED.availability_status,
+           last_updated = NOW()`,
+        [
+          body.store_id,
+          body.product_id,
+          body.quantity <= 5 ? "LOW_STOCK" : "AVAILABLE",
+        ],
+      );
+
+      await client.query(
+        `INSERT INTO audit_events
+          (event_type, entity_type, entity_id, actor_id, actor_role,
+           actor_capabilities, actor_scope_type, actor_scope_store_ids, changes,
+           ip_address, user_agent, correlation_id)
+         VALUES ('ADJUSTMENT', 'inventory_opening_stock', $1, $2, $3, $4::jsonb,
+                 $5, $6::uuid[], $7::jsonb, $8, $9, $10)`,
+        [
+          body.product_id,
+          actor(request).id,
+          actor(request).roleKey || null,
+          JSON.stringify(actor(request).capabilities || []),
+          actor(request).scopeType || null,
+          [body.store_id],
+          JSON.stringify({
+            quantity_change: body.quantity,
+            reason: body.reason,
+            after: {
+              store_id: body.store_id,
+              product_id: body.product_id,
+              batch_code: body.batch_code,
+              quantity: body.quantity,
+              unit_cost: body.unit_cost,
+              total_cost: totalCost,
+              expiry_date: body.expiry_date || null,
+              stock_date: stockDate,
+              reference_type: "OPENING_STOCK",
+              reference_id: body.operation_id,
+            },
+          }),
+          request.ip,
+          request.headers["user-agent"] || null,
+          request.id,
+        ],
+      );
+
+      await client.query("COMMIT");
+      return reply.status(201).send({
+        success: true,
+        idempotent: false,
+        transaction_id: transactionResult.rows[0].id,
+        batch: {
+          ...batchResult.rows[0],
+          product_name: productResult.rows[0].name_en,
+          sku: productResult.rows[0].sku,
+          store_name: storeResult.rows[0].name_en,
+        },
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (
+        error instanceof Error &&
+        error.message.includes("uq_inventory_transactions_opening_stock_reference")
+      ) {
+        return reply.status(409).send({
+          error: "Opening-stock operation was already recorded. Refresh inventory before retrying.",
+        });
+      }
+      request.log.error({ error }, "Failed to add opening stock");
+      return reply.status(500).send({ error: "Failed to add opening stock" });
+    } finally {
+      client.release();
+    }
   });
 
   fastify.get("/inventory-adjustments", async (request) => {

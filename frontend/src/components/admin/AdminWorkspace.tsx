@@ -42,6 +42,7 @@ import {
   ProductEditButton,
   ProductImportButton,
 } from "@/components/admin/ProductCatalogTools";
+import { OpeningStockButton } from "@/components/admin/OpeningStockTools";
 
 type FormField = {
   name: string;
@@ -748,6 +749,9 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
     config.fields &&
     hasCapability(config.createCapability),
   );
+  const canAddOpeningStock =
+    (config.title === "Inventory" || config.title === "Inventory batches") &&
+    hasCapability("inventory.adjust");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -795,9 +799,17 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
         title={config.title}
         description={config.description}
         actions={
-          canCreate ? (
+          canCreate || canAddOpeningStock ? (
             <>
-              {config.title === "Products" && (
+              {canAddOpeningStock && (
+                <OpeningStockButton
+                  onCreated={(message) => {
+                    setNotice(message);
+                    setRefreshKey((key) => key + 1);
+                  }}
+                />
+              )}
+              {canCreate && config.title === "Products" && (
                 <ProductImportButton
                   onImported={(message) => {
                     setNotice(message);
@@ -805,10 +817,12 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
                   }}
                 />
               )}
-              <Button onClick={() => setFormOpen(true)}>
-                <Plus className="h-4 w-4" />
-                {config.createLabel}
-              </Button>
+              {canCreate && (
+                <Button onClick={() => setFormOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  {config.createLabel}
+                </Button>
+              )}
             </>
           ) : undefined
         }
