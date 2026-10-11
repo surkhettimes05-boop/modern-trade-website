@@ -209,7 +209,7 @@ export function OpeningStockButton({
               </div>
               <button
                 type="button"
-                onClick={close}
+                onClick={() => close()}
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="Close opening stock form"
               >
@@ -355,7 +355,7 @@ export function OpeningStockButton({
                   type="button"
                   variant="secondary"
                   disabled={busy}
-                  onClick={close}
+                  onClick={() => close()}
                 >
                   Cancel
                 </Button>
