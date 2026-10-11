@@ -277,7 +277,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     "/logout",
     { onRequest: authenticateCustomer },
     async (request, reply) => {
-      const sessionToken = request.cookies?.[CUSTOMER_SESSION_COOKIE];
+      const sessionToken = customerSessionToken(request);
 
       if (!sessionToken) {
         reply.status(401);
@@ -311,17 +311,12 @@ export async function authRoutes(fastify: FastifyInstance) {
     "/logout-all",
     { onRequest: authenticateCustomer },
     async (request, reply) => {
-      const sessionToken = request.cookies?.[CUSTOMER_SESSION_COOKIE];
+      const sessionToken = customerSessionToken(request);
 
       if (!sessionToken) {
         reply.status(401);
         return { error: "No session token provided" };
       }
-      if (
-        request.headers["x-csrf-token"] !==
-        request.cookies?.[CUSTOMER_CSRF_COOKIE]
-      )
-        return reply.status(403).send({ error: "CSRF validation failed" });
 
       try {
         const session = await sessionService.validateSession(sessionToken);
@@ -345,7 +340,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // Public: Get active sessions
   fastify.get("/sessions", async (request, reply) => {
-    const sessionToken = request.cookies?.[CUSTOMER_SESSION_COOKIE];
+    const sessionToken = customerSessionToken(request);
 
     if (!sessionToken) {
       reply.status(401);
