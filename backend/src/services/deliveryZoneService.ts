@@ -157,28 +157,49 @@ export class DeliveryZoneService {
       };
     }
 
-    // Calculate delivery fee
-    let deliveryFee = matchedZone.base_fee + (matchedZone.surcharge || 0);
+    // PostgreSQL NUMERIC values are returned by pg as strings. Normalize all
+    // monetary fields before arithmetic so values like "50.00" + "0.00" do
+    // not become the invalid string "50.000.00".
+    const baseFee = Number(matchedZone.base_fee ?? 0);
+    const surcharge = Number(matchedZone.surcharge ?? 0);
+    const freeDeliveryThreshold =
+      matchedZone.free_delivery_threshold == null
+        ? null
+        : Number(matchedZone.free_delivery_threshold);
+    const minimumOrderValue = Number(matchedZone.minimum_order_value ?? 0);
 
-    // Check for free delivery
+    if (
+      !Number.isFinite(baseFee) ||
+      !Number.isFinite(surcharge) ||
+      (freeDeliveryThreshold !== null &&
+        !Number.isFinite(freeDeliveryThreshold)) ||
+      !Number.isFinite(minimumOrderValue)
+    ) {
+      throw new Error("Delivery zone contains invalid monetary values");
+    }
+
+    // Calculate delivery fee.
+    let deliveryFee = baseFee + surcharge;
+
+    // Check for free delivery.
     if (
       addressData.order_value &&
-      matchedZone.free_delivery_threshold &&
-      addressData.order_value >= matchedZone.free_delivery_threshold
+      freeDeliveryThreshold &&
+      addressData.order_value >= freeDeliveryThreshold
     ) {
       deliveryFee = 0;
     }
 
-    // Check minimum order
+    // Check minimum order.
     if (
       addressData.order_value &&
-      matchedZone.minimum_order_value &&
-      addressData.order_value < matchedZone.minimum_order_value
+      minimumOrderValue &&
+      addressData.order_value < minimumOrderValue
     ) {
       return {
         serviceable: false,
-        reason: `Minimum order value is ${matchedZone.minimum_order_value}`,
-        minimum_order_value: matchedZone.minimum_order_value,
+        reason: `Minimum order value is ${minimumOrderValue}`,
+        minimum_order_value: minimumOrderValue,
       };
     }
 
@@ -187,10 +208,10 @@ export class DeliveryZoneService {
       zone_id: matchedZone.id,
       zone_name: matchedZone.zone_name,
       delivery_fee: deliveryFee,
-      base_fee: matchedZone.base_fee,
-      surcharge: matchedZone.surcharge || 0,
-      free_delivery_threshold: matchedZone.free_delivery_threshold,
-      minimum_order_value: matchedZone.minimum_order_value,
+      base_fee: baseFee,
+      surcharge,
+      free_delivery_threshold: freeDeliveryThreshold,
+      minimum_order_value: minimumOrderValue,
       estimated_delivery_hours: matchedZone.estimated_delivery_hours,
       delivery_time_slots: matchedZone.delivery_time_slots,
     };
