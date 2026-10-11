@@ -25,6 +25,11 @@ type PreviewRow = {
   category: string | null;
   sellingPrice: number | null;
   status: string;
+  openingQuantity: number | null;
+  unitCost: number | null;
+  batchCode: string | null;
+  stockDate: string | null;
+  expiryDate: string | null;
   action: "CREATE" | "UPDATE" | "ERROR";
   errors: string[];
 };
@@ -35,9 +40,11 @@ type ImportPreview = {
     create: number;
     update: number;
     error: number;
+    openingStock: number;
   };
   rows: PreviewRow[];
   priced?: number;
+  openingPosted?: number;
   error?: string;
 };
 
@@ -57,6 +64,12 @@ const importFields: readonly ImportFieldDefinition[] = [
   { key: "unit", label: "Unit", aliases: ["unit", "uom", "unit_en"] },
   { key: "selling_price", label: "Selling price (NPR)", aliases: ["selling_price", "price", "mrp", "retail_price"] },
   { key: "status", label: "Status", aliases: ["status", "publication_status"] },
+  { key: "opening_quantity", label: "Opening quantity", aliases: ["opening_quantity", "opening_qty", "quantity", "opening_stock"] },
+  { key: "unit_cost", label: "Unit cost (NPR)", aliases: ["unit_cost", "unit_cost_npr", "cost_price", "cost"] },
+  { key: "batch_code", label: "Batch code", aliases: ["batch_code", "batch", "batch_number"] },
+  { key: "stock_date", label: "Stock as of", aliases: ["stock_date", "stock_as_of", "opening_date"] },
+  { key: "expiry_date", label: "Expiry date", aliases: ["expiry_date", "expiry", "best_before"] },
+  { key: "opening_reason", label: "Opening reason", aliases: ["opening_reason", "reason"] },
   { key: "image_url", label: "Image URL", aliases: ["image_url", "image", "photo_url"] },
 ];
 
@@ -111,6 +124,81 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
+
+async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function unzipXlsx(buffer: ArrayBuffer): Promise<Map<string, Uint8Array>> {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i -= 1) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("Invalid Excel file");
+  const entries = view.getUint16(eocd + 10, true);
+  let offset = view.getUint32(eocd + 16, true);
+  const output = new Map<string, Uint8Array>();
+  const decoder = new TextDecoder();
+  for (let n = 0; n < entries; n += 1) {
+    if (view.getUint32(offset, true) !== 0x02014b50) throw new Error("Invalid Excel ZIP directory");
+    const method = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + nameLength));
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.slice(dataStart, dataStart + compressedSize);
+    if (method === 0) output.set(name, compressed);
+    else if (method === 8) output.set(name, await inflateRaw(compressed));
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  return output;
+}
+
+function excelSerialToDate(value: string): string {
+  const serial = Number(value);
+  if (!Number.isFinite(serial)) return value;
+  const utc = Date.UTC(1899, 11, 30) + Math.round(serial * 86400000);
+  return new Date(utc).toISOString().slice(0, 10);
+}
+
+async function parseXlsx(buffer: ArrayBuffer): Promise<string[][]> {
+  const files = await unzipXlsx(buffer);
+  const decoder = new TextDecoder();
+  const sharedXml = files.get("xl/sharedStrings.xml");
+  const shared: string[] = [];
+  if (sharedXml) {
+    const doc = new DOMParser().parseFromString(decoder.decode(sharedXml), "application/xml");
+    doc.querySelectorAll("si").forEach((node) => shared.push(node.textContent || ""));
+  }
+  const sheetBytes = files.get("xl/worksheets/sheet1.xml");
+  if (!sheetBytes) throw new Error("Excel workbook does not contain a first worksheet");
+  const sheet = new DOMParser().parseFromString(decoder.decode(sheetBytes), "application/xml");
+  const output: string[][] = [];
+  sheet.querySelectorAll("row").forEach((rowNode) => {
+    const row: string[] = [];
+    rowNode.querySelectorAll("c").forEach((cell) => {
+      const ref = cell.getAttribute("r") || "A1";
+      const letters = ref.match(/[A-Z]+/)?.[0] || "A";
+      let col = 0;
+      for (const ch of letters) col = col * 26 + ch.charCodeAt(0) - 64;
+      const type = cell.getAttribute("t");
+      const raw = cell.querySelector("v")?.textContent || cell.querySelector("is")?.textContent || "";
+      row[col - 1] = type === "s" ? (shared[Number(raw)] || "") : raw;
+    });
+    while (row.length && !String(row[row.length - 1] || "").trim()) row.pop();
+    if (row.some((value) => String(value || "").trim())) output.push(row.map((value) => String(value || "")));
+  });
+  return output;
+}
+
 function automaticMapping(headers: string[]) {
   const normalized = new Map(headers.map((header) => [normalizeHeader(header), header]));
   const result: Record<string, string> = {};
@@ -147,6 +235,7 @@ export function ProductImportButton({
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [importId, setImportId] = useState(() => crypto.randomUUID());
 
   function reset() {
     setFileName("");
@@ -155,6 +244,7 @@ export function ProductImportButton({
     setMapping({});
     setPreview(null);
     setError("");
+    setImportId(crypto.randomUUID());
   }
 
   async function chooseFile(event: ChangeEvent<HTMLInputElement>) {
@@ -164,14 +254,15 @@ export function ProductImportButton({
     setPreview(null);
     try {
       if (file.size > 4 * 1024 * 1024) {
-        throw new Error("CSV must be smaller than 4 MB");
+        throw new Error("Import file must be smaller than 4 MB");
       }
-      const parsed = parseCsv(await file.text());
-      if (parsed.length < 2) throw new Error("CSV must contain a header row and at least one product");
-      if (parsed.length - 1 > 2500) throw new Error("CSV import supports up to 2,500 products at a time");
+      const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
+      const parsed = isXlsx ? await parseXlsx(await file.arrayBuffer()) : parseCsv(await file.text());
+      if (parsed.length < 2) throw new Error("File must contain a header row and at least one product");
+      if (parsed.length - 1 > 2500) throw new Error("Import supports up to 2,500 products at a time");
       const nextHeaders = parsed[0].map((header) => header.replace(/^\uFEFF/, "").trim());
       if (new Set(nextHeaders.map(normalizeHeader)).size !== nextHeaders.length) {
-        throw new Error("CSV contains duplicate column names");
+        throw new Error("File contains duplicate column names");
       }
       setFileName(file.name);
       setHeaders(nextHeaders);
@@ -179,7 +270,7 @@ export function ProductImportButton({
       setMapping(automaticMapping(nextHeaders));
     } catch (fileError) {
       reset();
-      setError(fileError instanceof Error ? fileError.message : "Unable to read CSV");
+      setError(fileError instanceof Error ? fileError.message : "Unable to read import file");
     } finally {
       event.target.value = "";
     }
@@ -197,7 +288,10 @@ export function ProductImportButton({
       for (const field of importFields) {
         const header = mapping[field.key];
         if (!header) continue;
-        const value = (source.get(header) || "").trim();
+        let value = (source.get(header) || "").trim();
+        if ((field.key === "stock_date" || field.key === "expiry_date") && /^\d+(?:\.\d+)?$/.test(value)) {
+          value = excelSerialToDate(value);
+        }
         if (value) output[field.key] = value;
       }
       return output;
@@ -219,6 +313,7 @@ export function ProductImportButton({
         body: JSON.stringify({
           rows,
           ...(selectedStoreId !== "all" ? { store_id: selectedStoreId } : {}),
+          import_id: importId,
         }),
       });
       const body = (await response.json()) as ImportPreview;
@@ -254,7 +349,7 @@ export function ProductImportButton({
         throw new Error(body.error || "Product import failed");
       }
       onImported(
-        `Import complete: ${body.summary.create} created, ${body.summary.update} updated, ${body.priced || 0} prices applied.`,
+        `Import complete: ${body.summary.create} created, ${body.summary.update} updated, ${body.priced || 0} prices applied, ${body.openingPosted || 0} opening-stock rows posted.`,
       );
       setOpen(false);
       reset();
@@ -268,7 +363,7 @@ export function ProductImportButton({
   return (
     <>
       <Button variant="secondary" onClick={() => setOpen(true)}>
-        Import CSV
+        Import Excel
       </Button>
       {open && (
         <div
@@ -287,10 +382,10 @@ export function ProductImportButton({
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">Catalog</p>
                 <h2 id="product-import-title" className="mt-1 text-xl font-semibold text-slate-950">
-                  Import products from CSV
+                  Import Pasalho master sheet
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Preview every change before commit. SKU is the unique product key; stock is never changed by this import.
+                  Excel/CSV → validation → preview → confirmed import. Catalog, prices, and optional opening stock are posted together.
                 </p>
               </div>
               <button
@@ -305,8 +400,8 @@ export function ProductImportButton({
 
             <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <label className="inline-flex cursor-pointer items-center rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800">
-                Choose CSV
-                <input type="file" accept=".csv,text/csv" className="sr-only" onChange={chooseFile} />
+                Choose Excel / CSV
+                <input type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" className="sr-only" onChange={chooseFile} />
               </label>
               <Button type="button" variant="secondary" onClick={downloadTemplate}>
                 Download template
@@ -316,7 +411,7 @@ export function ProductImportButton({
 
             {headers.length > 0 && (
               <div className="mt-6">
-                <h3 className="font-semibold text-slate-950">Map CSV columns</h3>
+                <h3 className="font-semibold text-slate-950">Map spreadsheet columns</h3>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {importFields.map((field) => (
                     <label key={field.key} className="text-sm font-medium text-slate-700">
@@ -353,11 +448,12 @@ export function ProductImportButton({
 
             {preview && (
               <div className="mt-6 space-y-4">
-                <div className="grid gap-3 sm:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-5">
                   {[
                     ["Rows", preview.summary.total],
                     ["Create", preview.summary.create],
                     ["Update", preview.summary.update],
+                    ["Opening stock", preview.summary.openingStock],
                     ["Errors", preview.summary.error],
                   ].map(([label, value]) => (
                     <div key={String(label)} className="rounded-xl border border-slate-200 p-4">
@@ -374,6 +470,7 @@ export function ProductImportButton({
                         <th className="px-3 py-2">SKU</th>
                         <th className="px-3 py-2">Product</th>
                         <th className="px-3 py-2">Price</th>
+                        <th className="px-3 py-2">Opening qty</th>
                         <th className="px-3 py-2">Action</th>
                         <th className="px-3 py-2">Validation</th>
                       </tr>
@@ -385,6 +482,7 @@ export function ProductImportButton({
                           <td className="px-3 py-2 font-medium">{row.sku || "—"}</td>
                           <td className="px-3 py-2">{row.name || "—"}</td>
                           <td className="px-3 py-2">{row.sellingPrice == null ? "—" : `NPR ${row.sellingPrice.toFixed(2)}`}</td>
+                          <td className="px-3 py-2">{row.openingQuantity == null ? "—" : row.openingQuantity}</td>
                           <td className="px-3 py-2">{row.action}</td>
                           <td className="max-w-md px-3 py-2 text-red-700">{row.errors.join("; ") || "Ready"}</td>
                         </tr>
