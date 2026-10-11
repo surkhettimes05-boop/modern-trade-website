@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, useState } from "react";
 import { Button } from "@/components/admin/AdminPrimitives";
-import { AdminRecord, asText } from "@/components/admin/AdminDataTable";
+import { AdminRecord, apiErrorMessage, asText } from "@/components/admin/AdminDataTable";
 import { useAdminShell } from "@/components/admin/AdminShellContext";
 import { useStaffSession } from "@/components/StaffSessionProvider";
 import { resilientFetch } from "@/lib/resilientFetch";
@@ -318,7 +318,7 @@ export function ProductImportButton({
         }),
       });
       const body = (await response.json()) as ImportPreview;
-      if (!response.ok) throw new Error(body.error || "Unable to preview import");
+      if (!response.ok) throw new Error(apiErrorMessage(body, "Unable to preview import"));
       setPreview(body);
     } catch (previewError) {
       setError(previewError instanceof Error ? previewError.message : "Unable to preview import");
@@ -348,7 +348,7 @@ export function ProductImportButton({
       const body = (await response.json()) as ImportPreview;
       if (!response.ok) {
         setPreview(body.rows ? body : preview);
-        throw new Error(body.error || "Product import failed");
+        throw new Error(apiErrorMessage(body, "Product import failed"));
       }
       onImported(
         `Import complete: ${body.summary.create} created, ${body.summary.update} updated, ${body.priced || 0} prices applied, ${body.openingPosted || 0} opening-stock rows posted.`,
@@ -549,7 +549,7 @@ export function ProductEditButton({
         cache: "no-store",
       });
       const body = (await response.json()) as { items?: AdminRecord[]; error?: string };
-      if (!response.ok) throw new Error(body.error || "Unable to load categories");
+      if (!response.ok) throw new Error(apiErrorMessage(body, "Unable to load categories"));
       setCategories(body.items || []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load categories");
@@ -588,7 +588,7 @@ export function ProductEditButton({
         body: JSON.stringify(payload),
       });
       const body = (await response.json()) as AdminRecord;
-      if (!response.ok) throw new Error(asText(body.error, "Unable to update product"));
+      if (!response.ok) throw new Error(apiErrorMessage(body, "Unable to update product"));
       onUpdated(body);
       setOpen(false);
     } catch (saveError) {
