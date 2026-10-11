@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/admin/AdminPrimitives";
 import { AdminRecord, asText } from "@/components/admin/AdminDataTable";
 import { useAdminShell } from "@/components/admin/AdminShellContext";
@@ -45,58 +45,53 @@ export function OpeningStockButton({
   const canAdjust = hasCapability("inventory.adjust");
   const hasStore = selectedStoreId !== "all";
 
-  async function loadProducts(search = "") {
-    if (!hasStore) return;
-    setLoadingProducts(true);
-    setError("");
-    try {
-      const params = new URLSearchParams({
-        store_id: selectedStoreId,
-        limit: "100",
-      });
-      if (search.trim()) params.set("search", search.trim());
-      const response = await resilientFetch(
-        `/api/admin/products?${params.toString()}`,
-        { credentials: "include", cache: "no-store" },
-      );
-      const body = (await response.json()) as {
-        items?: AdminRecord[];
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(body.error || "Unable to load products");
+  const loadProducts = useCallback(
+    async (search = "") => {
+      if (!hasStore) return;
+      setLoadingProducts(true);
+      setError("");
+      try {
+        const params = new URLSearchParams({
+          store_id: selectedStoreId,
+          limit: "100",
+        });
+        if (search.trim()) params.set("search", search.trim());
+        const response = await resilientFetch(
+          `/api/admin/products?${params.toString()}`,
+          { credentials: "include", cache: "no-store" },
+        );
+        const body = (await response.json()) as {
+          items?: AdminRecord[];
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(body.error || "Unable to load products");
+        }
+        setProducts(body.items || []);
+      } catch (loadError) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load products",
+        );
+      } finally {
+        setLoadingProducts(false);
       }
-      setProducts(body.items || []);
-      if (
-        selectedProductId &&
-        !(body.items || []).some(
-          (product) => asText(product.id) === selectedProductId,
-        )
-      ) {
-        setSelectedProductId("");
-      }
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Unable to load products",
-      );
-    } finally {
-      setLoadingProducts(false);
-    }
-  }
+    },
+    [hasStore, selectedStoreId],
+  );
 
   useEffect(() => {
     if (!open || !hasStore) return;
     setOperationId((current) => current || crypto.randomUUID());
     const timer = window.setTimeout(() => void loadProducts(), 0);
     return () => window.clearTimeout(timer);
-  }, [open, hasStore, selectedStoreId]);
+  }, [open, hasStore, loadProducts]);
 
   if (!canAdjust) return null;
 
-  function close() {
-    if (busy) return;
+  function close(force = false) {
+    if (busy && !force) return;
     setOpen(false);
     setError("");
     setProductSearch("");
@@ -149,11 +144,11 @@ export function OpeningStockButton({
       const product = products.find(
         (item) => asText(item.id) === selectedProductId,
       );
-      const quantity = asText(body.batch?.quantity, payload.quantity);
+      const quantity = asText(body.batch?.quantity, String(payload.quantity));
       onCreated(
         `${asText(product?.name_en, "Product")} opening stock recorded: ${quantity} units.`,
       );
-      close();
+      close(true);
     } catch (submitError) {
       setError(
         submitError instanceof Error

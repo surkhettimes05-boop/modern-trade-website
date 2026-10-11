@@ -1251,12 +1251,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
         unit_cost: z.coerce.number().min(0).max(99_999_999.99),
         expiry_date: z
           .string()
-          .regex(/^\\d{4}-\\d{2}-\\d{2}$/)
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
           .nullable()
           .optional(),
         stock_date: z
           .string()
-          .regex(/^\\d{4}-\\d{2}-\\d{2}$/)
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
           .optional(),
         reason: z.string().trim().min(5).max(500),
       })
