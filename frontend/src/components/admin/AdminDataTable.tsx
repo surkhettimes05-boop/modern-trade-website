@@ -38,6 +38,19 @@ export function asText(value: unknown, fallback = "—") {
     ? fallback
     : String(value);
 }
+
+export function apiErrorMessage(body: unknown, fallback: string) {
+  if (body && typeof body === "object") {
+    const record = body as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim()) {
+      return record.message;
+    }
+    if (typeof record.error === "string" && record.error.trim()) {
+      return record.error;
+    }
+  }
+  return fallback;
+}
 export function money(value: unknown, currency = "NPR") {
   const amount = Number(value);
   return Number.isFinite(amount)
@@ -139,8 +152,8 @@ export function AdminDataTable({
           | { items?: AdminRecord[]; total?: number; error?: unknown };
         if (!response.ok)
           throw new Error(
-            asText(
-              !Array.isArray(body) ? body.error : undefined,
+            apiErrorMessage(
+              Array.isArray(body) ? undefined : body,
               "Unable to load records",
             ),
           );
