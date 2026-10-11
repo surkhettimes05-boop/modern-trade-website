@@ -115,6 +115,17 @@ function normalizeKey(value: string): string {
   return value.trim().toLocaleLowerCase("en-US");
 }
 
+function businessDateInNepal(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kathmandu",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  return `${byType.get("year")}-${byType.get("month")}-${byType.get("day")}`;
+}
+
 export async function previewProductImport(
   rawRows: ProductImportSourceRow[],
   storeId?: string,
@@ -145,7 +156,7 @@ export async function previewProductImport(
       if (unitCost == null) errors.push("unit_cost is required when opening_quantity is greater than 0");
       if (!batchCode) errors.push("batch_code is required when opening_quantity is greater than 0");
       if (!stockDate) errors.push("stock_date is required when opening_quantity is greater than 0");
-      const today = new Date().toISOString().slice(0, 10);
+      const today = businessDateInNepal();
       if (stockDate && stockDate > today) errors.push("stock_date cannot be in the future");
       if (expiryDate && stockDate && expiryDate < stockDate) errors.push("expiry_date cannot be before stock_date");
     }
