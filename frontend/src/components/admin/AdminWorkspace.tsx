@@ -778,8 +778,21 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
         body: JSON.stringify(payload),
       });
       const body = (await response.json()) as AdminRecord;
-      if (!response.ok)
-        throw new Error(asText(body.error, "Unable to create record"));
+      if (!response.ok) {
+        const details = Array.isArray(body.details)
+          ? body.details
+              .map((issue) =>
+                typeof issue === "object" && issue && "message" in issue
+                  ? String((issue as { message: unknown }).message)
+                  : "",
+              )
+              .filter(Boolean)
+              .join("; ")
+          : "";
+        throw new Error(
+          details || asText(body.error, "Unable to create record"),
+        );
+      }
       setFormOpen(false);
       setNotice(`${config.createLabel || "Record"} created successfully.`);
       setRefreshKey((key) => key + 1);
