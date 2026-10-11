@@ -83,7 +83,6 @@ export function OpeningStockButton({
 
   useEffect(() => {
     if (!open || !hasStore) return;
-    setOperationId((current) => current || crypto.randomUUID());
     const timer = window.setTimeout(() => void loadProducts(), 0);
     return () => window.clearTimeout(timer);
   }, [open, hasStore, loadProducts]);
