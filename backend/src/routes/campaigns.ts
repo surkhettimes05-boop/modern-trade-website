@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { FastifyInstance, FastifyRequest } from "fastify";
+import type { PoolClient } from "pg";
 import { z } from "zod";
 import { getPool } from "../database/connection.js";
 
@@ -35,11 +36,16 @@ const promotionTypeSchema = z.enum([
   "FREE_SHIPPING",
 ]);
 
+function usesHttps(value: string): boolean {
+  if (!URL.canParse(value)) return false;
+  return new URL(value).protocol === "https:";
+}
+
 const imageUrlSchema = z
   .string()
   .trim()
   .max(2048)
-  .refine((value) => value === "" || new URL(value).protocol === "https:", {
+  .refine((value) => value === "" || usesHttps(value), {
     message: "Image URL must use HTTPS",
   });
 
@@ -48,10 +54,7 @@ const ctaUrlSchema = z
   .trim()
   .max(2048)
   .refine(
-    (value) =>
-      value === "" ||
-      value.startsWith("/") ||
-      new URL(value).protocol === "https:",
+    (value) => value === "" || value.startsWith("/") || usesHttps(value),
     { message: "CTA URL must be a relative path or HTTPS URL" },
   );
 
@@ -219,7 +222,7 @@ function clean(value: string | null | undefined): string | null {
 }
 
 async function syncLinks(
-  client: import("pg").PoolClient,
+  client: PoolClient,
   offerId: string,
   productIds: string[],
   categoryIds: string[],
@@ -243,7 +246,7 @@ async function syncLinks(
 }
 
 async function syncPromotion(
-  client: import("pg").PoolClient,
+  client: PoolClient,
   existingPromotionId: string | null,
   input: z.infer<typeof campaignSchema>,
   userId: string,
@@ -387,7 +390,7 @@ export async function campaignAdminRoutes(fastify: FastifyInstance) {
       allowed !== null &&
       !allowed.includes(input.store_id)
     ) {
-      return [];
+      return { items: [], limit: input.limit, offset: input.offset };
     }
     const result = await getPool().query(
       `${campaignSelect}
