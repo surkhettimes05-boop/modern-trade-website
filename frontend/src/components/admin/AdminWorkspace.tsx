@@ -43,6 +43,7 @@ import {
   ProductEditButton,
   ProductImportButton,
 } from "@/components/admin/ProductCatalogTools";
+import { CategoryEditButton } from "@/components/admin/CategoryCatalogTools";
 import { OpeningStockButton } from "@/components/admin/OpeningStockTools";
 
 type FormField = {
@@ -288,6 +289,7 @@ const resources: Record<string, ResourceConfig> = {
       { name: "name_en", label: "Category name", required: true },
       { name: "slug", label: "Slug", required: true },
       { name: "description_en", label: "Description", type: "textarea" },
+      { name: "image_url", label: "Image URL", type: "url" },
       {
         name: "status",
         label: "Status",
@@ -296,7 +298,31 @@ const resources: Record<string, ResourceConfig> = {
       },
     ],
     columns: [
-      { key: "name_en", label: "Category" },
+      {
+        key: "name_en",
+        label: "Category",
+        render: (row) => (
+          <div className="flex items-center gap-3">
+            {row.image_url ? (
+              <span className="relative h-10 w-12 overflow-hidden rounded-lg bg-slate-100">
+                <Image
+                  src={String(row.image_url)}
+                  alt=""
+                  fill
+                  sizes="48px"
+                  unoptimized
+                  className="object-cover"
+                />
+              </span>
+            ) : (
+              <span className="grid h-10 w-12 place-items-center rounded-lg bg-slate-100 text-xs font-bold text-slate-500">
+                {asText(row.name_en).slice(0, 1)}
+              </span>
+            )}
+            <span>{asText(row.name_en)}</span>
+          </div>
+        ),
+      },
       { key: "slug", label: "Slug" },
       { key: "parent_name", label: "Parent" },
       { key: "product_count", label: "Products" },
@@ -1406,6 +1432,13 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
           <>
             {config.title === "Products" && (
               <ProductEditButton
+                id={id}
+                record={record}
+                onUpdated={(updated) => setRecord(updated)}
+              />
+            )}
+            {config.title === "Categories" && (
+              <CategoryEditButton
                 id={id}
                 record={record}
                 onUpdated={(updated) => setRecord(updated)}

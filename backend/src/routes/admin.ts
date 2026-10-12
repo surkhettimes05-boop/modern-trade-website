@@ -1285,6 +1285,114 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return refreshed.rows[0];
   });
 
+  fastify.post(
+    "/categories/image-upload",
+    { bodyLimit: 5 * 1024 * 1024 },
+    async (request, reply) => {
+      const body = z
+        .object({
+          filename: z.string().trim().min(1).max(180),
+          mime_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+          data_base64: z.string().min(16).max(4_500_000),
+        })
+        .strict()
+        .parse(request.body);
+
+      const imageBytes = Buffer.from(body.data_base64, "base64");
+      if (!imageBytes.length || imageBytes.length > 3 * 1024 * 1024) {
+        return reply
+          .status(413)
+          .send({ error: "Category image must be 3 MB or smaller" });
+      }
+
+      const validMagic =
+        body.mime_type === "image/jpeg"
+          ? imageBytes.length >= 3 &&
+            imageBytes[0] === 0xff &&
+            imageBytes[1] === 0xd8 &&
+            imageBytes[2] === 0xff
+          : body.mime_type === "image/png"
+            ? imageBytes.length >= 8 &&
+              imageBytes.subarray(0, 8).equals(
+                Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+              )
+            : imageBytes.length >= 12 &&
+              imageBytes.toString("ascii", 0, 4) === "RIFF" &&
+              imageBytes.toString("ascii", 8, 12) === "WEBP";
+      if (!validMagic) {
+        return reply
+          .status(400)
+          .send({ error: "Image file contents do not match the selected file type" });
+      }
+
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+      const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+      const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+      if (!cloudName || !apiKey || !apiSecret) {
+        return reply.status(503).send({
+          error:
+            "Category image upload is not configured. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET on Render.",
+        });
+      }
+
+      const timestamp = Math.floor(Date.now() / 1000);
+      const folder = "pasalho/categories";
+      const publicId = `category-${timestamp}-${randomUUID()}`;
+      const signature = createHash("sha1")
+        .update(
+          `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`,
+        )
+        .digest("hex");
+
+      const upload = new FormData();
+      upload.set(
+        "file",
+        `data:${body.mime_type};base64,${body.data_base64}`,
+      );
+      upload.set("api_key", apiKey);
+      upload.set("timestamp", String(timestamp));
+      upload.set("folder", folder);
+      upload.set("public_id", publicId);
+      upload.set("signature", signature);
+
+      try {
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
+          {
+            method: "POST",
+            body: upload,
+            signal: AbortSignal.timeout(15_000),
+          },
+        );
+        const result = (await response.json()) as {
+          secure_url?: string;
+          width?: number;
+          height?: number;
+          error?: { message?: string };
+        };
+        if (!response.ok || !result.secure_url) {
+          request.log.warn(
+            { status: response.status, cloudinaryError: result.error?.message },
+            "Category image upload failed",
+          );
+          return reply
+            .status(502)
+            .send({ error: "Image storage rejected the category upload" });
+        }
+        return reply.send({
+          image_url: result.secure_url,
+          width: result.width,
+          height: result.height,
+        });
+      } catch (error) {
+        request.log.error({ error }, "Category image upload failed");
+        return reply
+          .status(502)
+          .send({ error: "Image storage is temporarily unavailable" });
+      }
+    },
+  );
+
   fastify.get("/categories", async (request, _reply) => {
     const input = z
       .object({
