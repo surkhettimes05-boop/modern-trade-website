@@ -21,6 +21,30 @@ export type Product = {
 };
 
 export type StorefrontCategory = { id: string; name: string; slug: string; image?: string; description?: string; skuCount?: number; priority?: 'Core' | 'Standard' | 'Test' };
+
+export function mapCategory(row: Record<string, unknown>): StorefrontCategory {
+  return {
+    id: String(row.id),
+    name: String(row.name || row.name_en || "Category"),
+    slug: String(row.slug || slugify(String(row.name || row.name_en || "category"))),
+    image: row.image ? String(row.image) : row.image_url ? String(row.image_url) : undefined,
+    description: row.description
+      ? String(row.description)
+      : row.description_en
+        ? String(row.description_en)
+        : undefined,
+    skuCount:
+      row.skuCount != null
+        ? Number(row.skuCount)
+        : row.sku_count != null
+          ? Number(row.sku_count)
+          : undefined,
+    priority:
+      row.priority === "Core" || row.priority === "Standard" || row.priority === "Test"
+        ? row.priority
+        : undefined,
+  };
+}
 export type Store = { id: string; name: string; address?: string; phone?: string; hours?: string; services?: string[] | Record<string, unknown>; latitude?: number; longitude?: number; map_url?: string; is_temporarily_closed?: boolean };
 export type Offer = { id: string; title: string; description: string; image_url?: string; banner_image_url?: string; start_date: string; end_date: string; terms?: string; is_featured: boolean; sort_order: number };
 
