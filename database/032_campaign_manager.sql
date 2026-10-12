@@ -30,6 +30,13 @@ SET placements = CASE
 END
 WHERE placements IS NULL OR cardinality(placements) = 0;
 
+-- ADD COLUMN with a default fills existing rows, so explicitly promote legacy
+-- featured offers into the homepage hero placement during this one-time migration.
+UPDATE offers
+SET placements = ARRAY['HOME_HERO','OFFERS_PAGE']::TEXT[]
+WHERE COALESCE(is_featured, FALSE)
+  AND placements = ARRAY['OFFERS_PAGE']::TEXT[];
+
 ALTER TABLE offers DROP CONSTRAINT IF EXISTS offers_channels_allowed;
 ALTER TABLE offers ADD CONSTRAINT offers_channels_allowed CHECK (
   channels <@ ARRAY['WEB','APP']::TEXT[]
