@@ -1,0 +1,40 @@
+name: Verify campaign production endpoints
+
+on:
+  push:
+    branches:
+      - feat/unified-campaign-manager
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check Render campaign API
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://storesync-backend-dg8z.onrender.com/api/public/campaigns?channel=WEB'
+          echo "GET $url"
+          status="$(curl -sS -L --max-time 30 -o /tmp/render-body.txt -w '%{http_code}' "$url")"
+          echo "status=$status"
+          head -c 2000 /tmp/render-body.txt || true
+          echo
+          test "$status" -ge 200
+          test "$status" -lt 300
+
+      - name: Check Vercel campaign route
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://modern-trade-website-vwqm-nine.vercel.app/api/public/campaigns?channel=WEB'
+          echo "GET $url"
+          status="$(curl -sS -L --max-time 30 -o /tmp/vercel-body.txt -w '%{http_code}' "$url")"
+          echo "status=$status"
+          head -c 2000 /tmp/vercel-body.txt || true
+          echo
+          test "$status" -ge 200
+          test "$status" -lt 300
