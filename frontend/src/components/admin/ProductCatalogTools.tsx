@@ -627,10 +627,14 @@ export function ProductEditButton({
       image_url: imageUrl.trim() || null,
       status: String(form.get("status") || "DRAFT"),
       is_featured: form.get("is_featured") === "on",
-      ...(priceText ? { price: Number(priceText) } : {}),
-      ...(String(form.get("original_price") || "").trim()
-        ? { original_price: Number(form.get("original_price")) }
-        : { original_price: null }),
+      ...(priceText
+        ? {
+            price: Number(priceText),
+            original_price: String(form.get("original_price") || "").trim()
+              ? Number(form.get("original_price"))
+              : null,
+          }
+        : {}),
       ...(selectedStoreId !== "all" ? { store_id: selectedStoreId } : {}),
     };
     try {

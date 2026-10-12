@@ -46,7 +46,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { products, categories, stores } = await getCatalog();
+  const { products, categories, stores, offers } = await getCatalog();
   const organization = {
     "@context": "https://schema.org",
     "@type": "Organization",
@@ -81,6 +81,7 @@ export default async function RootLayout({
           initialProducts={products}
           initialCategories={categories}
           initialStores={stores}
+          initialOffers={offers}
         >
           <RouteChrome>{children}</RouteChrome>
         </CommerceProvider>

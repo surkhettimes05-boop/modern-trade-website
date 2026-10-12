@@ -35,7 +35,7 @@ async function fetchPublic<T>(path: string): Promise<T[]> {
 
 export const getCatalog = cache(async (): Promise<CatalogData> => {
   const [productRows, categoryRows, stores, offers] = await Promise.all([
-    fetchPublic<Record<string, unknown>>('products'),
+    fetchPublic<Record<string, unknown>>('products?limit=2500'),
     fetchPublic<StorefrontCategory>('categories'),
     fetchPublic<Store>('stores'),
     fetchPublic<Offer>('offers'),
