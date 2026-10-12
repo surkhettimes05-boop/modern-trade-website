@@ -272,7 +272,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
   });
 
   await fastify.register(adminRoutes, { prefix: "/admin" });
-  await fastify.register(campaignAdminRoutes, { prefix: "/admin/campaigns" });
+  await fastify.register(campaignAdminRoutes, { prefix: "/admin" });
   await fastify.register(customerRoutes, { prefix: "/customers" });
   await fastify.register(consentRoutes, { prefix: "/consent" });
   await fastify.register(posRoutes, { prefix: "/pos" });
