@@ -126,5 +126,9 @@
   [
     "033_opening_stock_guard",
     "../database/033_opening_stock_guard.sql"
+  ],
+  [
+    "034_campaign_manager",
+    "../database/034_campaign_manager.sql"
   ]
 ]

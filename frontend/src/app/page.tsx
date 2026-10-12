@@ -13,7 +13,7 @@ function SectionTitle({ eyebrow, title, link = 'View all' }: { eyebrow?: string;
 }
 
 export default function Home() {
-  const { products, categories, offers, loading } = useShop();
+  const { products, categories, offers, campaigns, loading } = useShop();
   const deals = useMemo(
     () => products.filter((product) => product.originalPrice && product.originalPrice > product.price).slice(0, 8),
     [products],
@@ -27,29 +27,58 @@ export default function Home() {
     const available = products.filter((product) => !product.availability.toLowerCase().includes('out of'));
     return (featured.length ? featured : available).slice(0, 8);
   }, [products]);
+  const featuredCampaign =
+    campaigns.find((campaign) => campaign.placements?.includes('HOME_HERO')) ||
+    campaigns.find((campaign) => campaign.is_featured);
+  const offerCampaign =
+    campaigns.find((campaign) => campaign.placements?.includes('OFFERS_PAGE')) ||
+    featuredCampaign;
   const promotion = offers.find((offer) => offer.is_featured) || offers[0];
-  const promotionImage = promotion?.banner_image_url || promotion?.image_url || hero;
+  const heroImage = featuredCampaign?.banner_image_url || featuredCampaign?.image_url || hero;
+  const heroTitle = featuredCampaign?.title_en || 'Everyday shopping, closer to home.';
+  const heroDescription =
+    featuredCampaign?.description_en ||
+    'Groceries and household essentials in Birendranagar. Live NPR prices, delivery and pickup confirmed at checkout.';
+  const heroEyebrow =
+    featuredCampaign?.subtitle_en || 'PASALHO · BIRENDRANAGAR, SURKHET';
+  const heroCta = featuredCampaign?.cta_text_en || 'Shop now';
+  const heroHref = featuredCampaign?.cta_url || '/shop';
+  const promotionImage =
+    offerCampaign?.banner_image_url ||
+    offerCampaign?.mobile_banner_image_url ||
+    offerCampaign?.image_url ||
+    promotion?.banner_image_url ||
+    promotion?.image_url ||
+    hero;
+  const promotionTitle =
+    offerCampaign?.title_en || promotion?.title || 'Shop local. Pay cash on delivery.';
+  const promotionDescription =
+    offerCampaign?.description_en ||
+    promotion?.description ||
+    'Real store pricing, confirmed stock, and convenient delivery or pickup in Birendranagar.';
+  const promotionCta = offerCampaign?.cta_text_en || 'Shop promotion';
+  const promotionHref = offerCampaign?.cta_url || '/offers';
 
   return <>
-    <section className="hero shell"><div className="hero-main"><Image src={hero} alt="Fresh groceries arranged for a weekly shop" fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">PASALHO · BIRENDRANAGAR, SURKHET</span><h1>Everyday shopping,<br />closer to home.</h1><p>Groceries and household essentials in Birendranagar. Live NPR prices, delivery and pickup confirmed at checkout.</p><div><Link className="primary-btn" href="/shop">Shop now <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href="/offers" className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>LIVE OFFERS</span><h2>Smart shopping.<br />Better value.</h2><b>See today&apos;s offers -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>Shop what&apos;s<br />near you.</h2><b>Find a store -&gt;</b></Link></div></section>
+    <section className="hero shell"><div className="hero-main"><Image src={heroImage} alt={featuredCampaign?.title_en || "Fresh groceries arranged for a weekly shop"} fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">{heroEyebrow}</span><h1>{heroTitle}</h1><p>{heroDescription}</p><div><Link className="primary-btn" href={heroHref}>{heroCta} <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href="/offers" className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>LIVE OFFERS</span><h2>Smart shopping.<br />Better value.</h2><b>See today&apos;s offers -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>Shop what&apos;s<br />near you.</h2><b>Find a store -&gt;</b></Link></div></section>
 
     <div className="service-strip shell"><span><Truck />Delivery fee based on your service area</span><span><PackageCheck />Store pickup available</span><span><ShieldCheck />Cash on delivery</span><span><Tags />Live store pricing and availability</span></div>
 
     <section className="shell mt-6">
-      <Link href="/offers" className="home-promotion relative block min-h-[220px] overflow-hidden rounded-3xl bg-slate-950 shadow-sm">
+      <Link href={promotionHref} className="home-promotion relative block min-h-[220px] overflow-hidden rounded-3xl bg-slate-950 shadow-sm">
         <Image src={promotionImage} alt="" fill unoptimized sizes="100vw" className="home-promotion-image object-cover" />
         <div className="home-promotion-content relative z-10 max-w-2xl p-7 sm:p-10">
           <p className="home-promotion-eyebrow text-xs font-black uppercase tracking-[0.18em]">
-            {promotion ? 'Pasalho promotion' : 'Pasalho launch'}
+            {offerCampaign ? 'Pasalho campaign' : promotion ? 'Pasalho promotion' : 'Pasalho launch'}
           </p>
           <h2 className="home-promotion-title mt-3 text-3xl font-black tracking-tight sm:text-4xl">
-            {promotion?.title || 'Shop local. Pay cash on delivery.'}
+            {promotionTitle}
           </h2>
           <p className="home-promotion-description mt-3 max-w-xl text-sm leading-6 sm:text-base">
-            {promotion?.description || 'Real store pricing, confirmed stock, and convenient delivery or pickup in Birendranagar.'}
+            {promotionDescription}
           </p>
           <span className="home-promotion-cta mt-6 inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold">
-            Shop promotion <ArrowRight size={17} />
+            {promotionCta} <ArrowRight size={17} />
           </span>
         </div>
       </Link>

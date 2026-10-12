@@ -1,10 +1,10 @@
 import 'server-only';
 
 import { cache } from 'react';
-import { mapCategory, mapProduct, type Offer, type Product, type Store, type StorefrontCategory } from '@/lib/catalog';
+import { mapCategory, mapProduct, type Campaign, type Offer, type Product, type Store, type StorefrontCategory } from '@/lib/catalog';
 import { configuredServerApiUrl } from '@/lib/serverApiUrl';
 
-type CatalogData = { products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[] };
+type CatalogData = { products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[]; campaigns: Campaign[] };
 
 function apiBaseUrl() {
   try {
@@ -34,15 +34,16 @@ async function fetchPublic<T>(path: string): Promise<T[]> {
 }
 
 export const getCatalog = cache(async (): Promise<CatalogData> => {
-  const [productRows, categoryRows, stores, offers] = await Promise.all([
+  const [productRows, categoryRows, stores, offers, campaigns] = await Promise.all([
     fetchPublic<Record<string, unknown>>('products?limit=2500'),
     fetchPublic<Record<string, unknown>>('categories'),
     fetchPublic<Store>('stores'),
     fetchPublic<Offer>('offers'),
+    fetchPublic<Campaign>('campaigns?channel=WEB'),
   ]);
   const products = productRows.map(mapProduct).filter((product) => product.price > 0);
   const categories = categoryRows.map(mapCategory);
-  return { products, categories, stores, offers };
+  return { products, categories, stores, offers, campaigns };
 });
 
 export const getProductBySlug = cache(async (slug: string) => {
