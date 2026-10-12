@@ -86,6 +86,20 @@ const navigation: NavItem[] = [
     href: "/admin/content/pages",
     icon: FileText,
     capability: "content.read",
+    children: [
+      {
+        title: "Pages",
+        href: "/admin/content/pages",
+        icon: FileText,
+        capability: "content.read",
+      },
+      {
+        title: "Promotions",
+        href: "/admin/content/offers",
+        icon: Tags,
+        capability: "content.read",
+      },
+    ],
   },
   {
     title: "Stores",

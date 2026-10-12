@@ -34,7 +34,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   try {
     const importBodyLimit =
       path === "admin/products/import/preview" ||
-      path === "admin/products/import/commit"
+      path === "admin/products/import/commit" ||
+      path === "admin/products/image-upload"
         ? 5 * 1024 * 1024
         : undefined;
     requestBody = await readBoundedProxyBody(request, importBodyLimit);

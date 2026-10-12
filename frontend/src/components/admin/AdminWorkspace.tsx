@@ -48,7 +48,7 @@ import { OpeningStockButton } from "@/components/admin/OpeningStockTools";
 type FormField = {
   name: string;
   label: string;
-  type?: "text" | "email" | "url" | "textarea" | "select";
+  type?: "text" | "email" | "url" | "textarea" | "select" | "datetime-local" | "checkbox";
   required?: boolean;
   options?: Array<{ label: string; value: string }>;
 };
@@ -125,6 +125,71 @@ const resources: Record<string, ResourceConfig> = {
         key: "published_at",
         label: "Published",
         render: (row) => dateTime(row.published_at),
+      },
+      {
+        key: "updated_at",
+        label: "Updated",
+        render: (row) => dateTime(row.updated_at),
+      },
+    ],
+    filters: [{ key: "status", label: "Status", options: statusOptions }],
+  },
+  "content/offers": {
+    title: "Promotions",
+    description:
+      "Schedule the homepage promotional banner and customer-facing offer messaging.",
+    eyebrow: "Content",
+    capability: "content.read",
+    endpoint: "/api/admin/offers",
+    createCapability: "content.write",
+    createLabel: "Create promotion",
+    fields: [
+      { name: "title_en", label: "Promotion title", required: true },
+      {
+        name: "description_en",
+        label: "Description",
+        type: "textarea",
+        required: true,
+      },
+      { name: "banner_image_url", label: "Banner image URL", type: "url" },
+      { name: "image_url", label: "Fallback image URL", type: "url" },
+      {
+        name: "start_date",
+        label: "Starts",
+        type: "datetime-local",
+        required: true,
+      },
+      {
+        name: "end_date",
+        label: "Ends",
+        type: "datetime-local",
+        required: true,
+      },
+      {
+        name: "status",
+        label: "Status",
+        type: "select",
+        options: statusOptions,
+      },
+      { name: "is_featured", label: "Use as homepage banner", type: "checkbox" },
+    ],
+    columns: [
+      { key: "title_en", label: "Promotion" },
+      { key: "status", label: "Status" },
+      {
+        key: "start_date",
+        label: "Starts",
+        render: (row) => dateTime(row.start_date),
+      },
+      {
+        key: "end_date",
+        label: "Ends",
+        render: (row) => dateTime(row.end_date),
+      },
+      {
+        key: "is_featured",
+        label: "Homepage",
+        render: (row) => (row.is_featured ? "Featured" : "Standard"),
       },
       {
         key: "updated_at",
@@ -763,6 +828,8 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
     const payload = Object.fromEntries(
       config
         .fields!.map((field) => {
+          if (field.type === "checkbox")
+            return [field.name, form.get(field.name) === "on"];
           const rawValue = String(form.get(field.name) || "").trim();
           const value =
             field.name === "slug"
@@ -770,7 +837,9 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
                   .toLowerCase()
                   .replace(/[^a-z0-9]+/g, "-")
                   .replace(/^-+|-+$/g, "")
-              : rawValue;
+              : field.type === "datetime-local" && rawValue
+                ? new Date(rawValue).toISOString()
+                : rawValue;
           return [field.name, value];
         })
         .filter(([, value]) => value !== ""),
@@ -945,6 +1014,12 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
                         </option>
                       ))}
                     </select>
+                  ) : field.type === "checkbox" ? (
+                    <input
+                      name={field.name}
+                      type="checkbox"
+                      className="ml-3 h-4 w-4 rounded border-slate-300"
+                    />
                   ) : (
                     <input
                       name={field.name}

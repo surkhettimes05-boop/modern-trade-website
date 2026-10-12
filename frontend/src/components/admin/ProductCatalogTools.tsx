@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ChangeEvent, FormEvent, useState } from "react";
 import { Button } from "@/components/admin/AdminPrimitives";
 import { AdminRecord, apiErrorMessage, asText } from "@/components/admin/AdminDataTable";
@@ -534,6 +535,8 @@ export function ProductEditButton({
   const [categories, setCategories] = useState<AdminRecord[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUrl, setImageUrl] = useState(asText(record.image_url, ""));
   const [error, setError] = useState("");
 
   if (!hasCapability("catalog.write")) return null;
@@ -541,6 +544,7 @@ export function ProductEditButton({
   async function openEditor() {
     setOpen(true);
     setError("");
+    setImageUrl(asText(record.image_url, ""));
     if (categories.length) return;
     setLoadingCategories(true);
     try {
@@ -558,6 +562,54 @@ export function ProductEditButton({
     }
   }
 
+  async function uploadProductImage(file: File) {
+    setError("");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Use a JPG, PNG, or WebP product image.");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setError("Product image must be 3 MB or smaller.");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Unable to read image file"));
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.readAsDataURL(file);
+      });
+      const encoded = dataUrl.split(",", 2)[1];
+      if (!encoded) throw new Error("Unable to read image file");
+      const response = await resilientFetch("/api/admin/products/image-upload", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": csrfToken(),
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          mime_type: file.type,
+          data_base64: encoded,
+        }),
+      });
+      const body = (await response.json()) as { image_url?: string; error?: string };
+      if (!response.ok || !body.image_url)
+        throw new Error(apiErrorMessage(body, "Unable to upload product image"));
+      setImageUrl(body.image_url);
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Unable to upload product image",
+      );
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -572,9 +624,13 @@ export function ProductEditButton({
       category_id: String(form.get("category_id") || "").trim() || null,
       pack_size_en: String(form.get("pack_size_en") || "").trim() || null,
       unit_en: String(form.get("unit_en") || "").trim() || null,
-      image_url: String(form.get("image_url") || "").trim() || null,
+      image_url: imageUrl.trim() || null,
       status: String(form.get("status") || "DRAFT"),
+      is_featured: form.get("is_featured") === "on",
       ...(priceText ? { price: Number(priceText) } : {}),
+      ...(String(form.get("original_price") || "").trim()
+        ? { original_price: Number(form.get("original_price")) }
+        : { original_price: null }),
       ...(selectedStoreId !== "all" ? { store_id: selectedStoreId } : {}),
     };
     try {
@@ -700,16 +756,67 @@ export function ProductEditButton({
                   />
                 </label>
               </div>
-              <label className="block text-sm font-medium text-slate-800">
-                Image URL
-                <input
-                  name="image_url"
-                  type="url"
-                  defaultValue={asText(record.image_url, "")}
-                  placeholder="https://..."
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </label>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-800">Product image</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Use a clear front-of-pack photo so customers can recognize the exact brand and pack size.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="relative h-28 w-28 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    {imageUrl ? (
+                      <Image
+                        src={imageUrl}
+                        alt={asText(record.name_en, "Product image")}
+                        fill
+                        sizes="112px"
+                        unoptimized
+                        className="object-contain p-2"
+                      />
+                    ) : (
+                      <div className="grid h-full place-items-center px-3 text-center text-xs text-slate-400">
+                        No product image
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <label className="inline-flex cursor-pointer items-center rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800">
+                      {uploadingImage ? "Uploading…" : imageUrl ? "Replace image" : "Upload image"}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        disabled={uploadingImage || busy}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadProductImage(file);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {imageUrl && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={uploadingImage || busy}
+                        onClick={() => setImageUrl("")}
+                      >
+                        Remove image
+                      </Button>
+                    )}
+                    <input
+                      name="image_url"
+                      type="url"
+                      value={imageUrl}
+                      onChange={(event) => setImageUrl(event.target.value)}
+                      placeholder="Or paste an HTTPS image URL"
+                      className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <p className="text-xs text-slate-500">JPG, PNG, or WebP · max 3 MB.</p>
+                  </div>
+                </div>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm font-medium text-slate-800">
                   Selling price (NPR)
@@ -723,6 +830,20 @@ export function ProductEditButton({
                   />
                 </label>
                 <label className="block text-sm font-medium text-slate-800">
+                  MRP / original price
+                  <input
+                    name="original_price"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    defaultValue={record.original_price == null ? "" : String(record.original_price)}
+                    placeholder="Optional"
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-medium text-slate-800">
                   Status
                   <select
                     name="status"
@@ -733,6 +854,15 @@ export function ProductEditButton({
                       <option key={status} value={status}>{status.replaceAll("_", " ")}</option>
                     ))}
                   </select>
+                </label>
+                <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm font-medium text-slate-800">
+                  <input
+                    name="is_featured"
+                    type="checkbox"
+                    defaultChecked={record.is_featured === true}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Feature as a popular product
                 </label>
               </div>
               <p className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">

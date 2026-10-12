@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { preHandler } from "../middleware/authentication.js";
@@ -87,6 +88,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       categories: "catalog",
       stores: "stores",
       pages: "content",
+      offers: "content",
       context: "dashboard",
       notifications: "dashboard",
       search: "dashboard",
@@ -591,6 +593,90 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Homepage promotions / offers
+  fastify.get("/offers", async (request, reply) => {
+    const input = z
+      .object({
+        search: z.string().max(100).optional(),
+        status: publicationStatusSchema.optional(),
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .parse(request.query);
+    try {
+      const result = await query(
+        `SELECT id, title_en, description_en, image_url, banner_image_url,
+          start_date, end_date, status, is_featured, sort_order, created_at, updated_at,
+          COUNT(*) OVER()::int AS total_count
+         FROM offers
+         WHERE ($1::text IS NULL OR title_en ILIKE '%' || $1 || '%' OR description_en ILIKE '%' || $1 || '%')
+           AND ($2::text IS NULL OR status::text = $2)
+         ORDER BY is_featured DESC, sort_order, start_date DESC
+         LIMIT $3 OFFSET $4`,
+        [input.search || null, input.status || null, input.limit, input.offset],
+      );
+      return {
+        items: result.rows.map(({ total_count: _total, ...row }) => row),
+        total: Number(result.rows[0]?.total_count || 0),
+        limit: input.limit,
+        offset: input.offset,
+      };
+    } catch (error) {
+      request.log.error({ error }, "Failed to fetch offers");
+      return reply.status(500).send({ error: "Failed to fetch promotions" });
+    }
+  });
+
+  fastify.get("/offers/:id", async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const result = await query("SELECT * FROM offers WHERE id = $1", [id]);
+    if (!result.rowCount)
+      return reply.status(404).send({ error: "Promotion not found" });
+    return result.rows[0];
+  });
+
+  fastify.post("/offers", async (request, reply) => {
+    const body = z
+      .object({
+        title_en: z.string().trim().min(1).max(255),
+        description_en: z.string().trim().min(1).max(2000),
+        image_url: httpsUrlSchema.optional(),
+        banner_image_url: httpsUrlSchema.optional(),
+        start_date: z.string().datetime(),
+        end_date: z.string().datetime(),
+        status: publicationStatusSchema.default("DRAFT"),
+        is_featured: z.boolean().default(false),
+      })
+      .strict()
+      .parse(request.body);
+    const startDate = new Date(body.start_date);
+    const endDate = new Date(body.end_date);
+    if (endDate <= startDate)
+      return reply
+        .status(400)
+        .send({ error: "Promotion end date must be after the start date" });
+    const result = await query(
+      `INSERT INTO offers
+        (title_en, description_en, image_url, banner_image_url, start_date, end_date,
+         status, published_at, is_featured, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING *`,
+      [
+        body.title_en,
+        body.description_en,
+        body.image_url || null,
+        body.banner_image_url || null,
+        startDate,
+        endDate,
+        body.status,
+        body.status === "PUBLISHED" ? new Date() : null,
+        body.is_featured,
+        actor(request).id,
+      ],
+    );
+    return reply.status(201).send(result.rows[0]);
+  });
+
   // Stores CRUD
   fastify.get("/stores", async (request, reply) => {
     const input = z
@@ -697,6 +783,114 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Products CRUD
+  fastify.post(
+    "/products/image-upload",
+    { bodyLimit: 5 * 1024 * 1024 },
+    async (request, reply) => {
+      const body = z
+        .object({
+          filename: z.string().trim().min(1).max(180),
+          mime_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+          data_base64: z.string().min(16).max(4_500_000),
+        })
+        .strict()
+        .parse(request.body);
+
+      const imageBytes = Buffer.from(body.data_base64, "base64");
+      if (!imageBytes.length || imageBytes.length > 3 * 1024 * 1024) {
+        return reply
+          .status(413)
+          .send({ error: "Product image must be 3 MB or smaller" });
+      }
+
+      const validMagic =
+        body.mime_type === "image/jpeg"
+          ? imageBytes.length >= 3 &&
+            imageBytes[0] === 0xff &&
+            imageBytes[1] === 0xd8 &&
+            imageBytes[2] === 0xff
+          : body.mime_type === "image/png"
+            ? imageBytes.length >= 8 &&
+              imageBytes.subarray(0, 8).equals(
+                Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+              )
+            : imageBytes.length >= 12 &&
+              imageBytes.toString("ascii", 0, 4) === "RIFF" &&
+              imageBytes.toString("ascii", 8, 12) === "WEBP";
+      if (!validMagic) {
+        return reply
+          .status(400)
+          .send({ error: "Image file contents do not match the selected file type" });
+      }
+
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+      const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+      const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+      if (!cloudName || !apiKey || !apiSecret) {
+        return reply.status(503).send({
+          error:
+            "Product image upload is not configured. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET on Render.",
+        });
+      }
+
+      const timestamp = Math.floor(Date.now() / 1000);
+      const folder = "pasalho/products";
+      const publicId = `product-${timestamp}-${randomUUID()}`;
+      const signature = createHash("sha1")
+        .update(
+          `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`,
+        )
+        .digest("hex");
+
+      const upload = new FormData();
+      upload.set(
+        "file",
+        `data:${body.mime_type};base64,${body.data_base64}`,
+      );
+      upload.set("api_key", apiKey);
+      upload.set("timestamp", String(timestamp));
+      upload.set("folder", folder);
+      upload.set("public_id", publicId);
+      upload.set("signature", signature);
+
+      try {
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
+          {
+            method: "POST",
+            body: upload,
+            signal: AbortSignal.timeout(15_000),
+          },
+        );
+        const result = (await response.json()) as {
+          secure_url?: string;
+          width?: number;
+          height?: number;
+          error?: { message?: string };
+        };
+        if (!response.ok || !result.secure_url) {
+          request.log.warn(
+            { status: response.status, cloudinaryError: result.error?.message },
+            "Product image upload failed",
+          );
+          return reply
+            .status(502)
+            .send({ error: "Image storage rejected the upload" });
+        }
+        return reply.send({
+          image_url: result.secure_url,
+          width: result.width,
+          height: result.height,
+        });
+      } catch (error) {
+        request.log.error({ error }, "Product image upload failed");
+        return reply
+          .status(502)
+          .send({ error: "Image storage is temporarily unavailable" });
+      }
+    },
+  );
+
   fastify.get("/products", async (request, reply) => {
     const input = z
       .object({
@@ -904,6 +1098,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
           )
         ORDER BY CASE WHEN $2::uuid IS NOT NULL AND store_id = $2 THEN 0 ELSE 1 END, valid_from DESC
         LIMIT 1) AS price,
+      (SELECT original_price FROM product_prices
+        WHERE product_id = p.id AND active = TRUE
+          AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
+          AND (
+            ($2::uuid IS NULL AND store_id IS NULL)
+            OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL))
+          )
+        ORDER BY CASE WHEN $2::uuid IS NOT NULL AND store_id = $2 THEN 0 ELSE 1 END, valid_from DESC
+        LIMIT 1) AS original_price,
       (SELECT currency_code FROM product_prices
         WHERE product_id = p.id AND active = TRUE
           AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
@@ -937,13 +1140,29 @@ export async function adminRoutes(fastify: FastifyInstance) {
         status: publicationStatusSchema.optional(),
         is_featured: z.boolean().optional(),
         price: z.coerce.number().positive().max(99_999_999.99).optional(),
+        original_price: z.coerce.number().positive().max(99_999_999.99).nullable().optional(),
         store_id: z.string().uuid().optional(),
       })
       .strict()
       .parse(request.body);
 
+    if (body.original_price !== undefined && body.price === undefined)
+      return reply
+        .status(400)
+        .send({ error: "Original price requires the selling price in the same update" });
+    if (
+      body.original_price != null &&
+      body.price !== undefined &&
+      body.original_price < body.price
+    )
+      return reply
+        .status(400)
+        .send({ error: "Original price cannot be lower than the selling price" });
+
     const productFields = Object.fromEntries(
-      Object.entries(body).filter(([key]) => !["price", "store_id"].includes(key)),
+      Object.entries(body).filter(
+        ([key]) => !["price", "original_price", "store_id"].includes(key),
+      ),
     );
     if (!Object.keys(productFields).length && body.price === undefined)
       return reply
@@ -1020,9 +1239,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
         );
         await client.query(
           `INSERT INTO product_prices
-            (product_id, store_id, price, currency_code, active, valid_from)
-           VALUES ($1, $2, $3, $4, TRUE, NOW())`,
-          [id, body.store_id || null, body.price, MARKET.currencyCode],
+            (product_id, store_id, price, original_price, currency_code, active, valid_from)
+           VALUES ($1, $2, $3, $4, $5, TRUE, NOW())`,
+          [
+            id,
+            body.store_id || null,
+            body.price,
+            body.original_price ?? null,
+            MARKET.currencyCode,
+          ],
         );
       }
       await client.query("COMMIT");
