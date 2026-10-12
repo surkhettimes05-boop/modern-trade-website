@@ -21,6 +21,7 @@ import { tenderReconciliationRoutes } from "../routes/tenderReconciliation.js";
 import { staffRoutes } from "../routes/staff.js";
 import { auditReportRoutes } from "../routes/auditReports.js";
 import { posDeviceRoutes } from "../routes/posDevices.js";
+import { campaignAdminRoutes } from "../routes/campaigns.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
 import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
@@ -122,6 +123,11 @@ const capabilityAccess: Array<{
     write: ["orders.modify"],
   },
   { prefix: "/staff", read: ["staff.read"], write: ["staff.manage"] },
+  {
+    prefix: "/admin/campaigns",
+    read: ["content.read"],
+    write: ["content.write"],
+  },
 ];
 
 export function requiresStepUpMfa(method: string, routePath: string): boolean {
@@ -266,6 +272,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
   });
 
   await fastify.register(adminRoutes, { prefix: "/admin" });
+  await fastify.register(campaignAdminRoutes, { prefix: "/admin" });
   await fastify.register(customerRoutes, { prefix: "/customers" });
   await fastify.register(consentRoutes, { prefix: "/consent" });
   await fastify.register(posRoutes, { prefix: "/pos" });
