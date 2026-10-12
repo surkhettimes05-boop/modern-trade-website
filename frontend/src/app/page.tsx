@@ -36,19 +36,19 @@ export default function Home() {
     <div className="service-strip shell"><span><Truck />Delivery fee based on your service area</span><span><PackageCheck />Store pickup available</span><span><ShieldCheck />Cash on delivery</span><span><Tags />Live store pricing and availability</span></div>
 
     <section className="shell mt-6">
-      <Link href="/offers" className="relative block min-h-[220px] overflow-hidden rounded-3xl bg-slate-950 text-white shadow-sm">
-        <Image src={promotionImage} alt="" fill unoptimized sizes="100vw" className="object-cover opacity-55" />
-        <div className="relative z-10 max-w-2xl p-7 sm:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-lime-300">
+      <Link href="/offers" className="home-promotion relative block min-h-[220px] overflow-hidden rounded-3xl bg-slate-950 shadow-sm">
+        <Image src={promotionImage} alt="" fill unoptimized sizes="100vw" className="home-promotion-image object-cover" />
+        <div className="home-promotion-content relative z-10 max-w-2xl p-7 sm:p-10">
+          <p className="home-promotion-eyebrow text-xs font-black uppercase tracking-[0.18em]">
             {promotion ? 'Pasalho promotion' : 'Pasalho launch'}
           </p>
-          <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
+          <h2 className="home-promotion-title mt-3 text-3xl font-black tracking-tight sm:text-4xl">
             {promotion?.title || 'Shop local. Pay cash on delivery.'}
           </h2>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-100 sm:text-base">
+          <p className="home-promotion-description mt-3 max-w-xl text-sm leading-6 sm:text-base">
             {promotion?.description || 'Real store pricing, confirmed stock, and convenient delivery or pickup in Birendranagar.'}
           </p>
-          <span className="mt-6 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-bold text-slate-950">
+          <span className="home-promotion-cta mt-6 inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold">
             Shop promotion <ArrowRight size={17} />
           </span>
         </div>

@@ -21,3 +21,18 @@
 .product-image img{width:100%!important;height:100%!important;object-fit:cover}
 .gallery{display:block;min-width:0}
 .gallery-main{display:block;width:100%}
+
+/* Home promotion contrast: keep campaign copy readable on bright or busy imagery. */
+.home-promotion{isolation:isolate;color:#fff}
+.home-promotion:after{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,rgba(5,23,16,.92) 0%,rgba(5,23,16,.82) 48%,rgba(5,23,16,.48) 100%)}
+.home-promotion-image{object-fit:cover;opacity:.9}
+.home-promotion-content{color:#fff}
+.home-promotion-title{color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.35)}
+.home-promotion-description{color:#f3f7f4!important;text-shadow:0 1px 8px rgba(0,0,0,.4)}
+.home-promotion-eyebrow{color:#d9f58b!important}
+.home-promotion-cta{background:#fff;color:#17221b!important;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+@media(max-width:800px){
+  .home-promotion:after{background:linear-gradient(180deg,rgba(5,23,16,.64) 0%,rgba(5,23,16,.90) 72%,rgba(5,23,16,.94) 100%)}
+  .home-promotion-title{font-size:28px;line-height:1.05}
+  .home-promotion-description{font-size:14px;line-height:1.55}
+}
