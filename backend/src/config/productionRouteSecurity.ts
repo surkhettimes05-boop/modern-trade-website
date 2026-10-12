@@ -15,6 +15,7 @@ export type ProductionRouteBoundary =
 export const PRODUCTION_ROUTE_SECURITY: Readonly<Record<string, ProductionRouteBoundary>> = {
   healthRoutes: "PUBLIC_READ_ONLY",
   publicRoutes: "PUBLIC_VALIDATED_MUTATION",
+  publicCampaignRoutes: "PUBLIC_READ_ONLY",
   authRoutes: "MIXED_EXPLICIT",
   shoppingCartRoutes: "CUSTOMER_SESSION",
   checkoutRoutes: "CUSTOMER_SESSION",
