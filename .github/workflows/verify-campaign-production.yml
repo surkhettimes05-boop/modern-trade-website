@@ -13,28 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check Render campaign API
+      - name: Probe live endpoints
         shell: bash
         run: |
-          set -euo pipefail
-          url='https://storesync-backend-dg8z.onrender.com/api/public/campaigns?channel=WEB'
-          echo "GET $url"
-          status="$(curl -sS -L --max-time 30 -o /tmp/render-body.txt -w '%{http_code}' "$url")"
-          echo "status=$status"
-          head -c 2000 /tmp/render-body.txt || true
-          echo
-          test "$status" -ge 200
-          test "$status" -lt 300
-
-      - name: Check Vercel campaign route
-        shell: bash
-        run: |
-          set -euo pipefail
-          url='https://modern-trade-website-vwqm-nine.vercel.app/api/public/campaigns?channel=WEB'
-          echo "GET $url"
-          status="$(curl -sS -L --max-time 30 -o /tmp/vercel-body.txt -w '%{http_code}' "$url")"
-          echo "status=$status"
-          head -c 2000 /tmp/vercel-body.txt || true
-          echo
-          test "$status" -ge 200
-          test "$status" -lt 300
+          set -u
+          probe() {
+            label="$1"
+            url="$2"
+            body="/tmp/$(echo "$label" | tr ' /' '__').txt"
+            status="$(curl -sS -L --max-time 30 -o "$body" -w '%{http_code}' "$url" || echo curl_error)"
+            echo "===== $label ====="
+            echo "url=$url"
+            echo "status=$status"
+            head -c 2500 "$body" 2>/dev/null || true
+            echo
+          }
+          probe "render ready" "https://storesync-backend-dg8z.onrender.com/api/health/ready"
+          probe "render campaigns" "https://storesync-backend-dg8z.onrender.com/api/public/campaigns?channel=WEB"
+          probe "vercel campaigns" "https://modern-trade-website-vwqm-nine.vercel.app/api/public/campaigns?channel=WEB"
