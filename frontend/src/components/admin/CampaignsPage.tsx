@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Megaphone, Pencil, Plus, RefreshCw } from "lucide-react";
 import { resilientFetch } from "@/lib/resilientFetch";
+import { useStaffSession } from "@/components/StaffSessionProvider";
 import {
   AdminPageHeader,
   Button,
@@ -183,6 +184,8 @@ function numeric(value: string) {
 }
 
 export function CampaignsPage() {
+  const { hasCapability } = useStaffSession();
+  const canWrite = hasCapability("content.write");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [products, setProducts] = useState<Choice[]>([]);
   const [categories, setCategories] = useState<Choice[]>([]);
@@ -356,13 +359,18 @@ export function CampaignsPage() {
             <Button variant="secondary" onClick={() => void load()}>
               <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
-            <Button onClick={reset}>
+            <Button onClick={reset} disabled={!canWrite}>
               <Plus className="h-4 w-4" /> New campaign
             </Button>
           </>
         }
       />
 
+      {!canWrite && (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          You can view campaigns, but your staff role does not include content.write.
+        </p>
+      )}
       {notice && (
         <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
           {notice}
@@ -387,7 +395,7 @@ export function CampaignsPage() {
               Marketing content is shared. Desktop and mobile creative can differ.
             </p>
           </div>
-          <Button type="submit" busy={saving}>
+          <Button type="submit" busy={saving} disabled={!canWrite}>
             {editingId ? "Save changes" : "Create campaign"}
           </Button>
         </div>
@@ -852,7 +860,7 @@ export function CampaignsPage() {
                       : ""}
                   </p>
                 </div>
-                <Button variant="secondary" onClick={() => edit(campaign)}>
+                <Button variant="secondary" onClick={() => edit(campaign)} disabled={!canWrite}>
                   <Pencil className="h-4 w-4" /> Edit
                 </Button>
               </article>
