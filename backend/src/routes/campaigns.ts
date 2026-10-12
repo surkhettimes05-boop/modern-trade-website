@@ -375,7 +375,7 @@ export async function publicCampaignRoutes(fastify: FastifyInstance) {
 }
 
 export async function campaignAdminRoutes(fastify: FastifyInstance) {
-  fastify.get("/", async (request) => {
+  fastify.get("/campaigns", async (request) => {
     const input = z
       .object({
         status: publicationStatusSchema.optional(),
@@ -410,7 +410,7 @@ export async function campaignAdminRoutes(fastify: FastifyInstance) {
     return { items: result.rows, limit: input.limit, offset: input.offset };
   });
 
-  fastify.get("/:id", async (request, reply) => {
+  fastify.get("/campaigns/:id", async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const allowed = await allowedStoreIds(actor(request));
     const result = await getPool().query(
@@ -425,7 +425,7 @@ export async function campaignAdminRoutes(fastify: FastifyInstance) {
     return result.rows[0];
   });
 
-  fastify.post("/", async (request, reply) => {
+  fastify.post("/campaigns", async (request, reply) => {
     const input = campaignSchema.parse(request.body);
     try {
       await assertStoreWriteAccess(request, input.store_id);
@@ -500,7 +500,7 @@ export async function campaignAdminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.put("/:id", async (request, reply) => {
+  fastify.put("/campaigns/:id", async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const input = campaignSchema.parse(request.body);
     try {
