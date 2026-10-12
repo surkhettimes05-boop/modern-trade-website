@@ -400,7 +400,7 @@ export function CampaignsPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, name: event.target.value }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
               placeholder="Dashain Mega Savings"
             />
           </Field>
@@ -414,7 +414,7 @@ export function CampaignsPage() {
                   title_en: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
               placeholder="Save more this Dashain"
             />
           </Field>
@@ -427,7 +427,7 @@ export function CampaignsPage() {
                   subtitle_en: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
               placeholder="Festival essentials at better prices"
             />
           </Field>
@@ -440,7 +440,7 @@ export function CampaignsPage() {
                   store_id: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
             >
               <option value="">All stores / global</option>
               {stores.map((store) => (
@@ -462,7 +462,7 @@ export function CampaignsPage() {
                     description_en: event.target.value,
                   }))
                 }
-                className="field"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                 placeholder="Explain the value of the campaign in one or two sentences."
               />
             </Field>
@@ -479,7 +479,7 @@ export function CampaignsPage() {
                   start_date: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
             />
           </Field>
           <Field label="End date & time">
@@ -493,7 +493,7 @@ export function CampaignsPage() {
                   end_date: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
             />
           </Field>
 
@@ -506,7 +506,7 @@ export function CampaignsPage() {
                   status: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
             >
               {["DRAFT", "REVIEW", "PUBLISHED", "SCHEDULED", "UNPUBLISHED"].map(
                 (status) => (
@@ -526,7 +526,7 @@ export function CampaignsPage() {
                   sort_order: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
             />
           </Field>
 
@@ -540,7 +540,7 @@ export function CampaignsPage() {
                     banner_image_url: event.target.value,
                   }))
                 }
-                className="field"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                 placeholder="https://res.cloudinary.com/..."
               />
             </Field>
@@ -553,7 +553,7 @@ export function CampaignsPage() {
                     mobile_banner_image_url: event.target.value,
                   }))
                 }
-                className="field"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                 placeholder="https://res.cloudinary.com/..."
               />
             </Field>
@@ -566,7 +566,7 @@ export function CampaignsPage() {
                     image_url: event.target.value,
                   }))
                 }
-                className="field"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                 placeholder="https://res.cloudinary.com/..."
               />
             </Field>
@@ -581,7 +581,7 @@ export function CampaignsPage() {
                   cta_text_en: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
               placeholder="Shop the offer"
             />
           </Field>
@@ -594,7 +594,7 @@ export function CampaignsPage() {
                   cta_url: event.target.value,
                 }))
               }
-              className="field"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
               placeholder="/offers"
             />
           </Field>
@@ -689,7 +689,7 @@ export function CampaignsPage() {
                         .value as FormState["promotion_type"],
                     }))
                   }
-                  className="field"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                 >
                   <option value="NONE">No discount rule</option>
                   <option value="PERCENTAGE">Percentage off</option>
@@ -711,7 +711,7 @@ export function CampaignsPage() {
                       discount_value: event.target.value,
                     }))
                   }
-                  className="field"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                 />
               </Field>
               <Field label="Minimum order">
@@ -727,7 +727,7 @@ export function CampaignsPage() {
                       minimum_order_value: event.target.value,
                     }))
                   }
-                  className="field"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                 />
               </Field>
               {form.promotion_type === "PERCENTAGE" && (
@@ -743,7 +743,7 @@ export function CampaignsPage() {
                         maximum_discount_amount: event.target.value,
                       }))
                     }
-                    className="field"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                   />
                 </Field>
               )}
@@ -760,7 +760,7 @@ export function CampaignsPage() {
                           buy_quantity: event.target.value,
                         }))
                       }
-                      className="field"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                     />
                   </Field>
                   <Field label="Get quantity">
@@ -774,7 +774,7 @@ export function CampaignsPage() {
                           get_quantity: event.target.value,
                         }))
                       }
-                      className="field"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                     />
                   </Field>
                 </>
@@ -793,7 +793,7 @@ export function CampaignsPage() {
                     terms_en: event.target.value,
                   }))
                 }
-                className="field"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
                 placeholder="Optional customer-facing terms"
               />
             </Field>
@@ -941,7 +941,7 @@ function SelectionBox({
             ),
           )
         }
-        className="field min-h-36"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400 min-h-36"
       >
         {choices.map((choice) => (
           <option key={choice.id} value={choice.id}>
