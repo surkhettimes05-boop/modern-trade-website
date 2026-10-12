@@ -65,8 +65,8 @@ const importFields: readonly ImportFieldDefinition[] = [
   { key: "unit", label: "Unit", aliases: ["unit", "uom", "unit_en"] },
   { key: "selling_price", label: "Selling price (NPR)", aliases: ["selling_price", "price", "mrp", "retail_price"] },
   { key: "status", label: "Status", aliases: ["status", "publication_status"] },
-  { key: "opening_quantity", label: "Opening quantity", aliases: ["opening_quantity", "opening_qty", "quantity", "opening_stock"] },
-  { key: "unit_cost", label: "Unit cost (NPR)", aliases: ["unit_cost", "unit_cost_npr", "cost_price", "cost"] },
+  { key: "opening_quantity", label: "Opening quantity", aliases: ["opening_quantity", "opening_qty", "opening_stock", "opening_stock_qty", "opening_stock_quantity", "stock_qty", "stock", "quantity", "qty"] },
+  { key: "unit_cost", label: "Unit cost (NPR)", aliases: ["unit_cost", "unit_cost_npr", "cost_price", "purchase_price", "buying_price", "cost"] },
   { key: "batch_code", label: "Batch code", aliases: ["batch_code", "batch", "batch_number"] },
   { key: "stock_date", label: "Stock as of", aliases: ["stock_date", "stock_as_of", "opening_date"] },
   { key: "expiry_date", label: "Expiry date", aliases: ["expiry_date", "expiry", "best_before"] },
@@ -212,9 +212,15 @@ function automaticMapping(headers: string[]) {
 }
 
 function downloadTemplate() {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kathmandu",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
   const template =
-    "sku,name,description,category,pack_size,unit,selling_price,status,image_url\n" +
-    'DAL001,Masoor Dal,"Red lentils",Pulses,1 kg,pack,180,DRAFT,https://example.com/masoor-dal.jpg\n';
+    "sku,name,description,category,pack_size,unit,selling_price,status,opening_quantity,unit_cost,batch_code,stock_date,expiry_date,opening_reason,image_url\n" +
+    `DAL001,Masoor Dal,"Red lentils",Pulses,1 kg,pack,180,DRAFT,25,150,OPEN-DAL001-001,${today},,"Initial stock count",https://example.com/masoor-dal.jpg\n`;
   const url = URL.createObjectURL(new Blob([template], { type: "text/csv;charset=utf-8" }));
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -305,6 +311,10 @@ export function ProductImportButton({
     setError("");
     try {
       const rows = mappedRows();
+      const hasOpeningStock = rows.some((row) => Number(row.opening_quantity || 0) > 0);
+      if (hasOpeningStock && selectedStoreId === "all") {
+        throw new Error("Choose a specific store before importing opening stock.");
+      }
       const response = await resilientFetch("/api/admin/products/import/preview", {
         method: "POST",
         credentials: "include",
@@ -415,6 +425,9 @@ export function ProductImportButton({
             {headers.length > 0 && (
               <div className="mt-6">
                 <h3 className="font-semibold text-slate-950">Map spreadsheet columns</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  To load opening stock, map Opening quantity, Unit cost, Batch code, and Stock as of, and choose a specific store. Re-importing an existing SKU updates the product and can post its opening stock without creating a duplicate.
+                </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {importFields.map((field) => (
                     <label key={field.key} className="text-sm font-medium text-slate-700">
@@ -451,6 +464,11 @@ export function ProductImportButton({
 
             {preview && (
               <div className="mt-6 space-y-4">
+                {preview.summary.openingStock === 0 && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    No opening quantities were detected. Confirming this import will leave stock unchanged. If you want stock loaded, map an Opening quantity column and the required opening-stock fields, then preview again.
+                  </p>
+                )}
                 <div className="grid gap-3 sm:grid-cols-5">
                   {[
                     ["Rows", preview.summary.total],
