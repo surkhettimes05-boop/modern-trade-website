@@ -1,10 +1,10 @@
 import 'server-only';
 
 import { cache } from 'react';
-import { mapProduct, type Offer, type Product, type Store, type StorefrontCategory } from '@/lib/catalog';
+import { mapProduct, type Campaign, type Offer, type Product, type Store, type StorefrontCategory } from '@/lib/catalog';
 import { configuredServerApiUrl } from '@/lib/serverApiUrl';
 
-type CatalogData = { products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[] };
+type CatalogData = { products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[]; campaigns: Campaign[] };
 
 function apiBaseUrl() {
   try {
@@ -34,14 +34,15 @@ async function fetchPublic<T>(path: string): Promise<T[]> {
 }
 
 export const getCatalog = cache(async (): Promise<CatalogData> => {
-  const [productRows, categoryRows, stores, offers] = await Promise.all([
+  const [productRows, categoryRows, stores, offers, campaigns] = await Promise.all([
     fetchPublic<Record<string, unknown>>('products'),
     fetchPublic<StorefrontCategory>('categories'),
     fetchPublic<Store>('stores'),
     fetchPublic<Offer>('offers'),
+    fetchPublic<Campaign>('campaigns?channel=WEB'),
   ]);
   const products = productRows.map(mapProduct).filter((product) => product.price > 0);
-  return { products, categories: categoryRows, stores, offers };
+  return { products, categories: categoryRows, stores, offers, campaigns };
 });
 
 export const getProductBySlug = cache(async (slug: string) => {

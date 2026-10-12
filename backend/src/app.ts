@@ -7,6 +7,7 @@ import cookie from "@fastify/cookie";
 
 import { healthRoutes } from "./routes/health.js";
 import { publicRoutes } from "./routes/public.js";
+import { publicCampaignRoutes } from "./routes/campaigns.js";
 import { authRoutes } from "./routes/auth.js";
 import { shoppingCartRoutes } from "./routes/shoppingCart.js";
 import { webOrderRoutes } from "./routes/webOrders.js";
@@ -159,6 +160,7 @@ export async function buildApp(
   fastify.setErrorHandler(errorHandler);
   await fastify.register(healthRoutes, { prefix: "/api/health" });
   await fastify.register(publicRoutes, { prefix: "/api/public" });
+  await fastify.register(publicCampaignRoutes, { prefix: "/api/public" });
   if (deferredFeatureEnabled("ENABLE_ELECTRONIC_PAYMENTS")) {
     await fastify.register(paymentWebhookRoutes, { prefix: "/api" });
   }

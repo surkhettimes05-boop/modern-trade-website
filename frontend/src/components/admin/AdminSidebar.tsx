@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   FileClock,
   FileText,
+  Megaphone,
   Package,
   Settings,
   ShieldCheck,
@@ -86,6 +87,20 @@ const navigation: NavItem[] = [
     href: "/admin/content/pages",
     icon: FileText,
     capability: "content.read",
+    children: [
+      {
+        title: "Pages",
+        href: "/admin/content/pages",
+        icon: FileText,
+        capability: "content.read",
+      },
+      {
+        title: "Campaigns",
+        href: "/admin/content/campaigns",
+        icon: Megaphone,
+        capability: "content.read",
+      },
+    ],
   },
   {
     title: "Stores",

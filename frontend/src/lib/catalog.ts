@@ -21,6 +21,39 @@ export type Product = {
 export type StorefrontCategory = { id: string; name: string; slug: string; image?: string; description?: string; skuCount?: number; priority?: 'Core' | 'Standard' | 'Test' };
 export type Store = { id: string; name: string; address?: string; phone?: string; hours?: string; services?: string[] | Record<string, unknown>; latitude?: number; longitude?: number; map_url?: string; is_temporarily_closed?: boolean };
 export type Offer = { id: string; title: string; description: string; image_url?: string; banner_image_url?: string; start_date: string; end_date: string; terms?: string; is_featured: boolean; sort_order: number };
+export type Campaign = {
+  id: string;
+  name: string;
+  title_en: string;
+  title_ne?: string | null;
+  subtitle_en?: string | null;
+  subtitle_ne?: string | null;
+  description_en: string;
+  description_ne?: string | null;
+  image_url?: string | null;
+  banner_image_url?: string | null;
+  mobile_banner_image_url?: string | null;
+  cta_text_en?: string | null;
+  cta_text_ne?: string | null;
+  cta_url?: string | null;
+  start_date: string;
+  end_date: string;
+  terms_en?: string | null;
+  terms_ne?: string | null;
+  is_featured: boolean;
+  sort_order: number;
+  channels: Array<'WEB' | 'APP'>;
+  placements: Array<'HOME_HERO' | 'OFFERS_PAGE' | 'CATEGORY_BANNER' | 'APP_HOME'>;
+  store_id?: string | null;
+  product_ids: string[];
+  category_ids: string[];
+  promotion?: {
+    promotion_type: string;
+    discount_value: number;
+    minimum_order_value?: number | null;
+    maximum_discount_amount?: number | null;
+  } | null;
+};
 
 export { MARKET, formatPrice } from './market';
 export const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

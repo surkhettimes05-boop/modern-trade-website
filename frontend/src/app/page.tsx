@@ -4,7 +4,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, PackageCheck, ShieldCheck, Store, Tags, Truck } from 'lucide-react';
 import { LocationPicker, ProductCard, useShop } from '@/components/CommerceClient';
-import { formatPrice } from '@/lib/market';
 
 const hero = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1600&q=85';
 
@@ -13,9 +12,22 @@ function SectionTitle({ eyebrow, title, link = 'View all' }: { eyebrow?: string;
 }
 
 export default function Home() {
-  const { products, categories, loading } = useShop();
+  const { products, categories, campaigns, loading } = useShop();
+  const featuredCampaign =
+    campaigns.find((campaign) => campaign.placements?.includes('HOME_HERO')) ||
+    campaigns.find((campaign) => campaign.is_featured);
+  const heroImage =
+    featuredCampaign?.banner_image_url ||
+    featuredCampaign?.image_url ||
+    hero;
+  const heroTitle = featuredCampaign?.title_en || 'Big savings for everyday living.';
+  const heroDescription =
+    featuredCampaign?.description_en ||
+    'Groceries, home essentials, electronics and more - quality products at prices made for everyday life.';
+  const heroCta = featuredCampaign?.cta_text_en || "Shop today's deals";
+  const heroHref = featuredCampaign?.cta_url || '/shop';
   return <>
-    <section className="hero shell"><div className="hero-main"><Image src={hero} alt="Fresh groceries arranged for a weekly shop" fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">THIS WEEK AT PASALHO</span><h1>Big savings for<br />everyday living.</h1><p>Groceries, home essentials, electronics and more - quality products at prices made for everyday life.</p><div><Link className="primary-btn" href="/shop">Shop today&apos;s deals <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href="/offers" className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>LIVE OFFERS</span><h2>Smart shopping.<br />Better value.</h2><b>See today&apos;s offers -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>Shop what&apos;s<br />near you.</h2><b>Find a store -&gt;</b></Link></div></section>
+    <section className="hero shell"><div className="hero-main"><Image src={heroImage} alt={featuredCampaign?.title_en || "Fresh groceries arranged for a weekly shop"} fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">{featuredCampaign?.subtitle_en || 'THIS WEEK AT PASALHO'}</span><h1>{heroTitle}</h1><p>{heroDescription}</p><div><Link className="primary-btn" href={heroHref}>{heroCta} <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href="/offers" className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>LIVE OFFERS</span><h2>Smart shopping.<br />Better value.</h2><b>See today&apos;s offers -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>Shop what&apos;s<br />near you.</h2><b>Find a store -&gt;</b></Link></div></section>
     <div className="service-strip shell"><span><Truck />Delivery fee based on your service area</span><span><PackageCheck />Store pickup available</span><span><ShieldCheck />Cash on delivery</span><span><Tags />Live store pricing and availability</span></div>
     <section className="section shell" id="categories"><SectionTitle eyebrow="Pasalho opening range" title="642 SKUs, organized to sell" /><p className="catalog-note">The lean launch assortment from your Opening SKU Plan v2: 300 Core, 270 Standard and 72 Test SKUs across 29 departments.</p><div className="category-grid">{categories.map((category) => <Link href={`/category/${category.slug}`} className="category-card" key={category.id}><div>{category.image && <Image src={category.image} fill sizes="220px" alt="" />}</div><h3>{category.name}</h3><span>{category.skuCount ? `${category.skuCount} SKUs` : 'Shop now'} <ArrowRight /></span></Link>)}</div></section>
     <section className="section warm"><div className="shell"><SectionTitle eyebrow="Worth adding to cart" title="Today&apos;s best deals" />{loading ? <p>Loading catalog...</p> : <div className="product-scroll">{products.filter((p) => p.originalPrice).slice(0, 6).map((product) => <ProductCard product={product} key={product.id} />)}</div>}</div></section>
