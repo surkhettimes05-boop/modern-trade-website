@@ -37,6 +37,7 @@ import {
   StatusBadge,
 } from "@/components/admin/AdminPrimitives";
 import { useAdminShell } from "@/components/admin/AdminShellContext";
+import { CampaignsPage } from "@/components/admin/CampaignsPage";
 import { useStaffSession } from "@/components/StaffSessionProvider";
 import { resilientFetch } from "@/lib/resilientFetch";
 import {
@@ -1621,6 +1622,8 @@ export function AdminWorkspace() {
   if (key === "dashboard") return <Dashboard />;
   if (key === "settings")
     return hasCapability("settings.manage") ? <SettingsPage /> : <Forbidden />;
+  if (key === "content/campaigns")
+    return hasCapability("content.read") ? <CampaignsPage /> : <Forbidden />;
   const direct = resources[key];
   if (direct)
     return hasCapability(direct.capability) ? (
