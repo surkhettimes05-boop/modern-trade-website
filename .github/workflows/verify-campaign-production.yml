@@ -30,4 +30,9 @@ jobs:
           }
           probe "render ready" "https://storesync-backend-dg8z.onrender.com/api/health/ready"
           probe "render campaigns" "https://storesync-backend-dg8z.onrender.com/api/public/campaigns?channel=WEB"
+          echo "===== render opening-stock route fingerprint ====="
+          status="$(curl -sS -X POST -H 'content-type: application/json' -d '{}' --max-time 30 -o /tmp/opening-stock.txt -w '%{http_code}' 'https://storesync-backend-dg8z.onrender.com/api/admin/inventory/opening-stock' || echo curl_error)"
+          echo "status=$status"
+          head -c 1200 /tmp/opening-stock.txt 2>/dev/null || true
+          echo
           probe "vercel campaigns" "https://modern-trade-website-vwqm-nine.vercel.app/api/public/campaigns?channel=WEB"
