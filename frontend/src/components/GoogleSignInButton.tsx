@@ -11,7 +11,7 @@ interface FirebaseAuthResult {
   user?: FirebaseUser | null;
 }
 
-interface FirebaseGoogleProvider {}
+type FirebaseGoogleProvider = object;
 
 interface FirebaseAuth {
   signInWithPopup(provider: FirebaseGoogleProvider): Promise<FirebaseAuthResult>;
