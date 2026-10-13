@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { GoogleSignInButton } from '@/components/GoogleSignInButton';
+import { FirebaseGoogleSignInButton } from '@/components/GoogleSignInButton';
 import { resilientFetch } from '@/lib/resilientFetch';
 
 async function readApiResponse(response: Response): Promise<Record<string, unknown>> {
@@ -151,12 +151,13 @@ export default function AccountPage() {
         {!googleCredential && !otpSent && (
           <>
             <div className="flex justify-center min-h-11">
-              <GoogleSignInButton
+              <FirebaseGoogleSignInButton
                 disabled={loading}
                 onCredential={handleGoogleCredential}
+                onError={setError}
               />
             </div>
-            {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
+            {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID && (
               <div className="flex items-center gap-3 my-5" aria-hidden="true">
                 <div className="h-px flex-1 bg-gray-200" />
                 <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
