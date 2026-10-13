@@ -10,6 +10,10 @@ import { AuthenticatedUser } from "../plugins/authorization.js";
 import crypto from "node:crypto";
 import { TwilioVerifyUnavailableError } from "../services/twilioVerifyService.js";
 import {
+  GoogleIdentityService,
+  verifyGoogleIdToken,
+} from "../services/googleIdentityService.js";
+import {
   CUSTOMER_CSRF_COOKIE,
   CUSTOMER_SESSION_COOKIE,
   authenticateCustomer,
@@ -19,6 +23,7 @@ import { csrfMatches } from "../utils/csrf.js";
 const otpService = new OTPService();
 const sessionService = new SessionService();
 const customerService = new CustomerService();
+const googleIdentityService = new GoogleIdentityService();
 
 export async function authRoutes(fastify: FastifyInstance) {
   fastify.addHook("onSend", async (_request, reply) => {
@@ -221,6 +226,219 @@ export async function authRoutes(fastify: FastifyInstance) {
         }
         reply.status(500);
         return { error: "Failed to verify OTP" };
+      }
+    },
+  );
+
+  // Public: Sign in with a verified Google ID token. Existing Google identities
+  // receive the normal Pasalho customer session. First-time Google users must
+  // prove ownership of a Nepal mobile number before the identity is attached.
+  fastify.post(
+    "/google",
+    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const schema = z.object({
+        id_token: z.string().min(100).max(16_384),
+      });
+
+      try {
+        const body = schema.parse(request.body);
+        const identity = await verifyGoogleIdToken(body.id_token);
+        const customerId = await googleIdentityService.findLinkedCustomerId(
+          identity.subject,
+        );
+
+        if (!customerId) {
+          const linkToken = await googleIdentityService.createLinkAttempt(
+            identity,
+            {
+              ipAddress: (request as any).ip,
+              userAgent: request.headers["user-agent"],
+            },
+          );
+          return {
+            success: true,
+            link_required: true,
+            link_token: linkToken,
+            google_profile: {
+              email: identity.email,
+              display_name: identity.displayName ?? null,
+            },
+          };
+        }
+
+        const customer = await customerService.findById(customerId);
+        if (!customer) {
+          reply.status(401);
+          return { error: "Google sign-in failed" };
+        }
+
+        await googleIdentityService.markLogin(identity.subject);
+        await query(
+          `UPDATE customers SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = $1 WHERE id = $2`,
+          [(request as any).ip, customer.id],
+        );
+        const session = await sessionService.createSession({
+          customer_id: customer.id,
+          ip_address: (request as any).ip,
+          user_agent: request.headers["user-agent"],
+        });
+        const csrfToken = crypto.randomBytes(32).toString("hex");
+        reply.setCookie(CUSTOMER_SESSION_COOKIE, session.session_token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
+        reply.setCookie(CUSTOMER_CSRF_COOKIE, csrfToken, {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
+        return {
+          success: true,
+          link_required: false,
+          customer: {
+            id: customer.id,
+            phone_masked: customer.phone_masked,
+            preferred_name: customer.preferred_name,
+            email: customer.email,
+            verification_status: customer.verification_status,
+          },
+        };
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          reply.status(400);
+          return { error: "Validation failed", details: error.issues };
+        }
+        if (
+          error instanceof Error &&
+          error.message === "Google sign-in is not configured"
+        ) {
+          reply.status(503);
+          return { error: "Google sign-in is not configured" };
+        }
+        reply.status(401);
+        return { error: "Google sign-in failed" };
+      }
+    },
+  );
+
+  // Public: Complete first-time Google sign-in by verifying the customer's
+  // Nepal mobile number. The OTP is consumed before the Google identity is
+  // attached, preventing an email-only account merge.
+  fastify.post(
+    "/google/link",
+    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const schema = z.object({
+        link_token: z.string().min(20).max(200),
+        phone: z.string().min(10),
+        otp_code: z.string().length(6),
+      });
+
+      try {
+        const body = schema.parse(request.body);
+        if (!validatePhone(body.phone)) {
+          reply.status(400);
+          return { error: "Invalid phone number format" };
+        }
+
+        const attempt = await googleIdentityService.getLinkAttempt(
+          body.link_token,
+        );
+        if (!attempt) {
+          reply.status(400);
+          return { error: "Google linking session expired. Sign in with Google again." };
+        }
+
+        const verification = await otpService.verifyOTP({
+          phone: body.phone,
+          otp_code: body.otp_code,
+          purpose: "LOGIN",
+          ip_address: (request as any).ip,
+        });
+        if (!verification.valid) {
+          reply.status(400);
+          return { error: "Invalid or expired OTP" };
+        }
+
+        let customer = await customerService.findByPhone(body.phone);
+        if (!customer) {
+          customer = await customerService.createCustomer({
+            phone: body.phone,
+            preferred_name: attempt.display_name ?? undefined,
+            email: attempt.email ?? undefined,
+            enrollment_source: "GOOGLE_SELF_REGISTRATION",
+            enrollment_channel: "ONLINE",
+            enrolled_by: "google-phone-verification",
+          });
+        }
+        if (customer.verification_status === "UNVERIFIED") {
+          customer = await customerService.markVerified(
+            customer.id,
+            "GOOGLE_PHONE_VERIFICATION",
+          );
+        }
+
+        await googleIdentityService.attachIdentity(attempt, customer.id);
+        await query(
+          `UPDATE customers SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = $1 WHERE id = $2`,
+          [(request as any).ip, customer.id],
+        );
+        const session = await sessionService.createSession({
+          customer_id: customer.id,
+          ip_address: (request as any).ip,
+          user_agent: request.headers["user-agent"],
+        });
+        const csrfToken = crypto.randomBytes(32).toString("hex");
+        reply.setCookie(CUSTOMER_SESSION_COOKIE, session.session_token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
+        reply.setCookie(CUSTOMER_CSRF_COOKIE, csrfToken, {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        });
+
+        return {
+          success: true,
+          link_required: false,
+          customer: {
+            id: customer.id,
+            phone_masked: customer.phone_masked,
+            preferred_name: customer.preferred_name,
+            email: customer.email,
+            verification_status: customer.verification_status,
+          },
+        };
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          reply.status(400);
+          return { error: "Validation failed", details: error.issues };
+        }
+        if (error instanceof TwilioVerifyUnavailableError) {
+          reply.status(503);
+          return { error: "OTP verification is temporarily unavailable" };
+        }
+        if (
+          error instanceof Error &&
+          error.message === "Google identity is already linked to another customer"
+        ) {
+          reply.status(409);
+          return { error: "This Google account is already linked to another customer." };
+        }
+        reply.status(500);
+        return { error: "Failed to link Google account" };
       }
     },
   );
