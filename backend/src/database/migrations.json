@@ -134,5 +134,9 @@
   [
     "035_founding_1000",
     "../database/035_founding_1000.sql"
+  ],
+  [
+    "036_google_web_auth",
+    "../database/036_google_web_auth.sql"
   ]
 ]
