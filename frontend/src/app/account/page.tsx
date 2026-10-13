@@ -272,7 +272,7 @@ export default function AccountPage() {
           <form onSubmit={handleRequestOtp} className="space-y-4">
             <div>
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                Mobile number
+                Phone Number
               </label>
               <input
                 type="tel"
@@ -302,7 +302,7 @@ export default function AccountPage() {
               disabled={loading || googleLoading}
               className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
             >
-              {loading ? 'Sending...' : googleLinkToken ? 'Send verification code' : 'Continue with mobile'}
+              {loading ? 'Sending...' : googleLinkToken ? 'Send verification code' : 'Send OTP'}
             </button>
 
             {googleLinkToken && (
@@ -320,7 +320,7 @@ export default function AccountPage() {
           <form onSubmit={handleVerifyOtp} className="space-y-4">
             <div>
               <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
-                Enter verification code
+                Enter OTP
               </label>
               <input
                 type="text"
@@ -362,7 +362,7 @@ export default function AccountPage() {
                 ? 'Verifying...'
                 : googleLinkToken
                   ? 'Verify & connect Google'
-                  : 'Verify & sign in'}
+                  : 'Verify & Login'}
             </button>
 
             <button
