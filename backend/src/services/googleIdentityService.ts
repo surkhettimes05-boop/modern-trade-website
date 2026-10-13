@@ -1,6 +1,6 @@
 import {
   createPublicKey,
-  verify as verifySignature
+  verify as verifySignature,
   type KeyObject,
 } from "node:crypto";
 
