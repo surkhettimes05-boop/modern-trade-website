@@ -61,6 +61,8 @@ export async function buildApp(
               "body.otp_code",
               "body.phone",
               "body.email",
+              "body.id_token",
+              "body.link_token",
               "*.password",
               "*.token",
               "*.secret",
