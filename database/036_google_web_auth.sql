@@ -1,6 +1,6 @@
--- Google web authentication identities
--- A Google account is an alternate sign-in credential for an existing
--- phone-verified Pasalho customer. We never auto-merge customers by email.
+-- Firebase Google web authentication identities
+-- A Firebase-authenticated Google account is an alternate sign-in credential
+-- for an existing phone-verified Pasalho customer. We never auto-merge by email.
 
 CREATE TABLE customer_external_identities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -15,7 +15,7 @@ CREATE TABLE customer_external_identities (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_login_at TIMESTAMPTZ,
   CONSTRAINT customer_external_identities_provider_allowed
-    CHECK (provider IN ('GOOGLE')),
+    CHECK (provider IN ('FIREBASE_GOOGLE')),
   CONSTRAINT customer_external_identities_provider_subject_unique
     UNIQUE (provider, provider_subject)
 );
