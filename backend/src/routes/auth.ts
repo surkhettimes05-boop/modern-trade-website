@@ -10,15 +10,15 @@ import { AuthenticatedUser } from "../plugins/authorization.js";
 import crypto from "node:crypto";
 import { TwilioVerifyUnavailableError } from "../services/twilioVerifyService.js";
 import {
-  GoogleIdentityConfigurationError,
-  InvalidGoogleIdTokenError,
-  verifyGoogleIdToken,
-} from "../services/googleIdentityService.js";
+  FirebaseIdentityConfigurationError,
+  InvalidFirebaseIdTokenError,
+  verifyFirebaseGoogleIdToken,
+} from "../services/firebaseIdentityService.js";
 import {
-  findCustomerByGoogleSubject,
-  linkGoogleIdentityToCustomer,
-  touchGoogleIdentity,
-} from "../services/googleCustomerIdentityService.js";
+  findCustomerByFirebaseGoogleSubject,
+  linkFirebaseGoogleIdentityToCustomer,
+  touchFirebaseGoogleIdentity,
+} from "../services/firebaseCustomerIdentityService.js";
 import {
   CUSTOMER_CSRF_COOKIE,
   CUSTOMER_SESSION_COOKIE,
@@ -278,7 +278,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // Public: Sign in with a Google ID token issued for this web client.
+  // Public: Sign in with a Firebase ID token from the Google provider.
   fastify.post(
     "/google",
     { config: { rateLimit: { max: 20, timeWindow: "15 minutes" } } },
@@ -289,8 +289,8 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       try {
         const body = schema.parse(request.body);
-        const identity = await verifyGoogleIdToken(body.credential);
-        const linked = await findCustomerByGoogleSubject(identity.subject);
+        const identity = await verifyFirebaseGoogleIdToken(body.credential);
+        const linked = await findCustomerByFirebaseGoogleSubject(identity.subject);
 
         if (!linked) {
           return {
@@ -309,7 +309,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           return { error: "This Google account is not linked to an active customer" };
         }
 
-        await touchGoogleIdentity(identity.subject, identity);
+        await touchFirebaseGoogleIdentity(identity.subject, identity);
         await createCustomerWebSession(request, reply, customer.id);
 
         return {
@@ -327,11 +327,11 @@ export async function authRoutes(fastify: FastifyInstance) {
           reply.status(400);
           return { error: "Validation failed", details: error.issues };
         }
-        if (error instanceof GoogleIdentityConfigurationError) {
+        if (error instanceof FirebaseIdentityConfigurationError) {
           reply.status(503);
           return { error: "Google sign-in is not configured" };
         }
-        if (error instanceof InvalidGoogleIdTokenError) {
+        if (error instanceof InvalidFirebaseIdTokenError) {
           reply.status(401);
           return { error: "Google sign-in could not be verified" };
         }
@@ -342,7 +342,7 @@ export async function authRoutes(fastify: FastifyInstance) {
   );
 
   // Public: First Google sign-in requires one verified Nepal phone number.
-  // The same Google credential is verified again here; the browser cannot
+  // The same Firebase ID token is verified again here; the browser cannot
   // choose or forge the Google subject that becomes linked.
   fastify.post(
     "/google/link",
@@ -361,8 +361,8 @@ export async function authRoutes(fastify: FastifyInstance) {
           return { error: "Invalid phone number format" };
         }
 
-        const identity = await verifyGoogleIdToken(body.credential);
-        const alreadyLinked = await findCustomerByGoogleSubject(identity.subject);
+        const identity = await verifyFirebaseGoogleIdToken(body.credential);
+        const alreadyLinked = await findCustomerByFirebaseGoogleSubject(identity.subject);
         if (alreadyLinked) {
           const linkedCustomer = await customerService.findById(
             alreadyLinked.customer_id,
@@ -371,7 +371,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             reply.status(403);
             return { error: "This Google account is not linked to an active customer" };
           }
-          await touchGoogleIdentity(identity.subject, identity);
+          await touchFirebaseGoogleIdentity(identity.subject, identity);
           await createCustomerWebSession(request, reply, linkedCustomer.id);
           return {
             success: true,
@@ -413,7 +413,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           );
         }
 
-        await linkGoogleIdentityToCustomer(customer.id, identity);
+        await linkFirebaseGoogleIdentityToCustomer(customer.id, identity);
         await query(
           `UPDATE customers
               SET email = COALESCE(email, $1),
@@ -440,11 +440,11 @@ export async function authRoutes(fastify: FastifyInstance) {
           reply.status(400);
           return { error: "Validation failed", details: error.issues };
         }
-        if (error instanceof GoogleIdentityConfigurationError) {
+        if (error instanceof FirebaseIdentityConfigurationError) {
           reply.status(503);
           return { error: "Google sign-in is not configured" };
         }
-        if (error instanceof InvalidGoogleIdTokenError) {
+        if (error instanceof InvalidFirebaseIdTokenError) {
           reply.status(401);
           return { error: "Google sign-in could not be verified" };
         }
