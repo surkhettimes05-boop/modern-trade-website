@@ -130,5 +130,9 @@
   [
     "034_campaign_manager",
     "../database/034_campaign_manager.sql"
+  ],
+  [
+    "035_founding_1000",
+    "../database/035_founding_1000.sql"
   ]
 ]
