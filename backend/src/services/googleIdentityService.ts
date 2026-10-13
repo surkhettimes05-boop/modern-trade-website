@@ -1,7 +1,6 @@
 import {
   createPublicKey,
-  verify as verifySignature,
-  type JsonWebKey,
+  verify as verifySignature
   type KeyObject,
 } from "node:crypto";
 
@@ -34,7 +33,7 @@ interface GoogleJwtClaims {
 }
 
 interface GoogleJwksResponse {
-  keys?: Array<JsonWebKey & { kid?: string; alg?: string; use?: string }>;
+  keys?: Array<Record<string, unknown> & { kid?: string; alg?: string; use?: string }>;
 }
 
 export interface VerifiedGoogleIdentity {
@@ -121,7 +120,12 @@ async function refreshGoogleKeys(): Promise<void> {
   for (const jwk of body.keys || []) {
     if (!jwk.kid || (jwk.alg && jwk.alg !== "RS256")) continue;
     try {
-      nextKeys.set(jwk.kid, createPublicKey({ key: jwk, format: "jwk" }));
+      nextKeys.set(
+        jwk.kid,
+        createPublicKey(
+          { key: jwk, format: "jwk" } as Parameters<typeof createPublicKey>[0],
+        ),
+      );
     } catch {
       // Ignore malformed/unusable keys and keep processing Google's key set.
     }
