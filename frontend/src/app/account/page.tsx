@@ -180,7 +180,7 @@ export default function AccountPage() {
           <form onSubmit={handleRequestOtp} className="space-y-4">
             <div>
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                Mobile Number
+                Phone Number
               </label>
               <input
                 type="tel"
