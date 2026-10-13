@@ -77,7 +77,7 @@ export default function FoundersClient() {
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {\n    const timer = window.setTimeout(() => { void refresh(); }, 0);\n    return () => window.clearTimeout(timer);\n  }, [refresh]);
 
   async function requestOtp(event: React.FormEvent) {
     event.preventDefault();
