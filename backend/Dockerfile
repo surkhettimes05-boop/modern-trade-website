@@ -33,4 +33,4 @@ EXPOSE 10000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:10000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "if [ \"${RUN_DEPLOY_MIGRATIONS_ON_START:-false}\" = \"true\" ]; then npm run deploy:migrate; fi; exec node dist/index.js"]

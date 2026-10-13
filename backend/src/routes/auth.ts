@@ -10,6 +10,16 @@ import { AuthenticatedUser } from "../plugins/authorization.js";
 import crypto from "node:crypto";
 import { TwilioVerifyUnavailableError } from "../services/twilioVerifyService.js";
 import {
+  FirebaseIdentityConfigurationError,
+  InvalidFirebaseIdTokenError,
+  verifyFirebaseGoogleIdToken,
+} from "../services/firebaseIdentityService.js";
+import {
+  findCustomerByFirebaseGoogleSubject,
+  linkFirebaseGoogleIdentityToCustomer,
+  touchFirebaseGoogleIdentity,
+} from "../services/firebaseCustomerIdentityService.js";
+import {
   CUSTOMER_CSRF_COOKIE,
   CUSTOMER_SESSION_COOKIE,
   authenticateCustomer,
@@ -20,6 +30,43 @@ import { csrfMatches } from "../utils/csrf.js";
 const otpService = new OTPService();
 const sessionService = new SessionService();
 const customerService = new CustomerService();
+
+async function createCustomerWebSession(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  customerId: string,
+) {
+  await query(
+    `UPDATE customers
+        SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = $1
+      WHERE id = $2`,
+    [(request as any).ip, customerId],
+  );
+
+  const session = await sessionService.createSession({
+    customer_id: customerId,
+    ip_address: (request as any).ip,
+    user_agent: request.headers["user-agent"],
+  });
+  const csrfToken = crypto.randomBytes(32).toString("hex");
+
+  reply.setCookie(CUSTOMER_SESSION_COOKIE, session.session_token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 24 * 60 * 60,
+  });
+  reply.setCookie(CUSTOMER_CSRF_COOKIE, csrfToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 24 * 60 * 60,
+  });
+
+  return session;
+}
 
 export async function authRoutes(fastify: FastifyInstance) {
   fastify.addHook("onSend", async (_request, reply) => {
@@ -227,6 +274,193 @@ export async function authRoutes(fastify: FastifyInstance) {
         }
         reply.status(500);
         return { error: "Failed to verify OTP" };
+      }
+    },
+  );
+
+  // Public: Sign in with a Firebase ID token from the Google provider.
+  fastify.post(
+    "/google",
+    { config: { rateLimit: { max: 20, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const schema = z.object({
+        credential: z.string().min(100).max(10000),
+      });
+
+      try {
+        const body = schema.parse(request.body);
+        const identity = await verifyFirebaseGoogleIdToken(body.credential);
+        const linked = await findCustomerByFirebaseGoogleSubject(identity.subject);
+
+        if (!linked) {
+          return {
+            success: true,
+            requires_phone_verification: true,
+            google_profile: {
+              email: identity.email,
+              preferred_name: identity.displayName,
+            },
+          };
+        }
+
+        const customer = await customerService.findById(linked.customer_id);
+        if (!customer) {
+          reply.status(403);
+          return { error: "This Google account is not linked to an active customer" };
+        }
+
+        await touchFirebaseGoogleIdentity(identity.subject, identity);
+        await createCustomerWebSession(request, reply, customer.id);
+
+        return {
+          success: true,
+          requires_phone_verification: false,
+          customer: {
+            id: customer.id,
+            phone_masked: customer.phone_masked,
+            preferred_name: customer.preferred_name,
+            verification_status: customer.verification_status,
+          },
+        };
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          reply.status(400);
+          return { error: "Validation failed", details: error.issues };
+        }
+        if (error instanceof FirebaseIdentityConfigurationError) {
+          reply.status(503);
+          return { error: "Google sign-in is not configured" };
+        }
+        if (error instanceof InvalidFirebaseIdTokenError) {
+          reply.status(401);
+          return { error: "Google sign-in could not be verified" };
+        }
+        reply.status(500);
+        return { error: "Google sign-in failed" };
+      }
+    },
+  );
+
+  // Public: First Google sign-in requires one verified Nepal phone number.
+  // The same Firebase ID token is verified again here; the browser cannot
+  // choose or forge the Google subject that becomes linked.
+  fastify.post(
+    "/google/link",
+    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const schema = z.object({
+        credential: z.string().min(100).max(10000),
+        phone: z.string().min(10),
+        otp_code: z.string().length(6),
+      });
+
+      try {
+        const body = schema.parse(request.body);
+        if (!validatePhone(body.phone)) {
+          reply.status(400);
+          return { error: "Invalid phone number format" };
+        }
+
+        const identity = await verifyFirebaseGoogleIdToken(body.credential);
+        const alreadyLinked = await findCustomerByFirebaseGoogleSubject(identity.subject);
+        if (alreadyLinked) {
+          const linkedCustomer = await customerService.findById(
+            alreadyLinked.customer_id,
+          );
+          if (!linkedCustomer) {
+            reply.status(403);
+            return { error: "This Google account is not linked to an active customer" };
+          }
+          await touchFirebaseGoogleIdentity(identity.subject, identity);
+          await createCustomerWebSession(request, reply, linkedCustomer.id);
+          return {
+            success: true,
+            customer: {
+              id: linkedCustomer.id,
+              phone_masked: linkedCustomer.phone_masked,
+              preferred_name: linkedCustomer.preferred_name,
+              verification_status: linkedCustomer.verification_status,
+            },
+          };
+        }
+
+        const verification = await otpService.verifyOTP({
+          phone: body.phone,
+          otp_code: body.otp_code,
+          purpose: "LOGIN",
+          ip_address: (request as any).ip,
+        });
+        if (!verification.valid) {
+          reply.status(400);
+          return { error: "Invalid or expired OTP" };
+        }
+
+        let customer = await customerService.findByPhone(body.phone);
+        if (!customer) {
+          customer = await customerService.createCustomer({
+            phone: body.phone,
+            preferred_name: identity.displayName,
+            email: identity.email,
+            enrollment_source: "WEB_GOOGLE_REGISTRATION",
+            enrollment_channel: "WEB",
+            enrolled_by: "google-phone-verification",
+          });
+        }
+        if (customer.verification_status === "UNVERIFIED") {
+          customer = await customerService.markVerified(
+            customer.id,
+            "GOOGLE_PHONE_OTP_VERIFICATION",
+          );
+        }
+
+        await linkFirebaseGoogleIdentityToCustomer(customer.id, identity);
+        await query(
+          `UPDATE customers
+              SET email = COALESCE(email, $1),
+                  preferred_name = COALESCE(preferred_name, $2),
+                  updated_by = 'GOOGLE_LINK'
+            WHERE id = $3`,
+          [identity.email ?? null, identity.displayName ?? null, customer.id],
+        );
+        const refreshedCustomer =
+          (await customerService.findById(customer.id)) ?? customer;
+        await createCustomerWebSession(request, reply, customer.id);
+
+        return {
+          success: true,
+          customer: {
+            id: refreshedCustomer.id,
+            phone_masked: refreshedCustomer.phone_masked,
+            preferred_name: refreshedCustomer.preferred_name,
+            verification_status: refreshedCustomer.verification_status,
+          },
+        };
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          reply.status(400);
+          return { error: "Validation failed", details: error.issues };
+        }
+        if (error instanceof FirebaseIdentityConfigurationError) {
+          reply.status(503);
+          return { error: "Google sign-in is not configured" };
+        }
+        if (error instanceof InvalidFirebaseIdTokenError) {
+          reply.status(401);
+          return { error: "Google sign-in could not be verified" };
+        }
+        if (error instanceof TwilioVerifyUnavailableError) {
+          reply.status(503);
+          return { error: "OTP verification is temporarily unavailable" };
+        }
+        if (
+          error instanceof Error &&
+          error.message.includes("already linked to another customer")
+        ) {
+          reply.status(409);
+          return { error: error.message };
+        }
+        reply.status(500);
+        return { error: "Failed to link Google account" };
       }
     },
   );
