@@ -153,7 +153,7 @@ export async function verifyGoogleIdToken(
 
   let publicKey;
   try {
-    publicKey = createPublicKey({ key: jwk as JsonWebKey, format: "jwk" });
+    publicKey = createPublicKey({ key: jwk, format: "jwk" });
   } catch {
     throw new Error("Invalid Google identity token");
   }
