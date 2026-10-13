@@ -38,7 +38,7 @@ declare global {
 }
 
 function firebaseConfig() {
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim();
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_WEB_API?.trim();
   const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim();
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim();
   const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim();
