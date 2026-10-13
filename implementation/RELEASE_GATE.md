@@ -2,7 +2,7 @@
 
 Decision: **NOT READY**
 
-Reviewed: 2026-08-19
+Reviewed: 2026-10-04
 
 Scope: Nepal (`NP`) / NPR / `en-NP` / `Asia/Kathmandu`; customer COD and staff cash POS only.
 
@@ -21,6 +21,9 @@ Scope: Nepal (`NP`) / NPR / `en-NP` / `Asia/Kathmandu`; customer COD and staff c
 
 ## Release blockers
 
+> 2026-10-04 certification restart: release branch `production-ready-pilot` was cut from current `main`. Render Web Service and Key Value definitions were upgraded from `free` to `starter`. This is configuration evidence only; live paid resources, managed PostgreSQL, real OTP, browser journeys, backup/restore, monitoring, and fiscal review remain unverified.
+
+
 1. Docker and Docker Compose are not installed on the certification host. The Docker QA topology, dependency stop/start drill, backup, restore, rollback, and immutable-image deployment therefore remain unverified.
 2. No real SMS provider is configured. Customer OTP delivery and the complete authenticated COD order/tracking browser journey cannot be certified. The backend now fails delivery closed and invalidates an undelivered OTP.
 3. No Nepal-approved electronic payment provider credentials or certified callback/refund contract are available. Electronic payment features must remain disabled; see `docs/PAYMENT_EXTERNAL_REQUIREMENTS.md`.
@@ -37,6 +40,9 @@ Scope: Nepal (`NP`) / NPR / `en-NP` / `Asia/Kathmandu`; customer COD and staff c
 5. Record alert simulations, centralized log/redaction review, TLS/domain verification, and professional Nepal VAT/IRD sign-off.
 
 ## Approval record
+
+Release branch evidence: `production-ready-pilot` commit `499adf3416daec9e66990f74c4d0a0056bfea359` changes Render service plans to `starter`; no production secrets are stored in the repository.
+
 
 - Approver: Unassigned
 - Decision: **NOT READY**
