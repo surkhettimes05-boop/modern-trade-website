@@ -95,6 +95,12 @@ const navigation: NavItem[] = [
         capability: "content.read",
       },
       {
+        title: "Promotions",
+        href: "/admin/content/offers",
+        icon: Tags,
+        capability: "content.read",
+      },
+      {
         title: "Campaigns",
         href: "/admin/content/campaigns",
         icon: Megaphone,

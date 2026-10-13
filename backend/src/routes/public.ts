@@ -140,7 +140,8 @@ export async function publicRoutes(fastify: FastifyInstance) {
           slug,
           image_url,
           parent_id,
-          sort_order
+          sort_order,
+          (SELECT COUNT(*)::int FROM products p WHERE p.category_id = categories.id AND p.status = 'PUBLISHED') AS sku_count
         FROM categories 
         WHERE status = 'PUBLISHED'
         ORDER BY sort_order, name_en`,
@@ -169,7 +170,7 @@ export async function publicRoutes(fastify: FastifyInstance) {
         category: z.string().uuid().optional(),
         featured: z.enum(["true", "false"]).optional(),
         store_id: z.string().uuid().optional(),
-        limit: z.coerce.number().int().min(1).max(200).default(100),
+        limit: z.coerce.number().int().min(1).max(2500).default(500),
         offset: z.coerce.number().int().min(0).max(100_000).default(0),
       })
       .strict()
@@ -191,6 +192,8 @@ export async function publicRoutes(fastify: FastifyInstance) {
           products.image_url,
           products.images,
           products.is_featured,
+          products.created_at,
+          products.published_at,
           COALESCE(store_price.price, organization_price.price) as price,
           COALESCE(store_price.original_price, organization_price.original_price) as original_price,
           COALESCE(store_price.currency_code, organization_price.currency_code, '${MARKET.currencyCode}') as currency_code,

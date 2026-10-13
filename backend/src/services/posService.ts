@@ -1,4 +1,4 @@
-import { query } from "../database/connection.js";
+import { query, getPool } from "../database/connection.js";
 import { CustomerService } from "./customerService.js";
 import { RuleEngineService } from "./ruleEngineService.js";
 import { LedgerService } from "./ledgerService.js";
@@ -178,63 +178,107 @@ export class POSService {
   /**
    * Create a sale (draft)
    */
-  async createSale(input: CreateSaleInput) {
+  async createSale(
+    input: CreateSaleInput,
+  ): Promise<{
+    success: boolean;
+    sale_id: string;
+    sale_number: string;
+    sale_status: string;
+    error?: string;
+  }> {
+    const client = await getPool().connect();
     try {
-      // Check idempotency
-      if (input.idempotency_key) {
-        const existing = await query(
-          "SELECT id FROM sales WHERE idempotency_key = $1",
-          [input.idempotency_key],
-        );
-        if (existing.rows.length > 0) {
-          return {
-            success: false,
-            error: "Sale with this idempotency key already exists",
-            sale_id: existing.rows[0].id,
-          };
-        }
+      await client.query("BEGIN");
+      if (input.currency && input.currency !== MARKET.currencyCode)
+        throw new Error("NPR is required");
+      if (input.payment_method && input.payment_method !== "CASH")
+        throw new Error("Cash POS only");
+      if (!input.items.length || input.items.length > 100)
+        throw new Error("Invalid sale items");
+      if (!input.idempotency_key)
+        throw new Error("An idempotency key is required");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `pos:${input.idempotency_key}`,
+      ]);
+      const existing = await client.query(
+        "SELECT * FROM sales WHERE idempotency_key = $1",
+        [input.idempotency_key],
+      );
+      if (existing.rows[0]) {
+        if (existing.rows[0].store_id !== input.store_id)
+          throw new Error("Idempotency key conflict");
+        await client.query("COMMIT");
+        return {
+          success: true,
+          sale_id: existing.rows[0].id,
+          sale_number: existing.rows[0].sale_number,
+          sale_status: existing.rows[0].sale_status,
+        };
       }
-
-      const result = await query(
-        `INSERT INTO sales (
-          sale_number, customer_id, store_id, total_amount, currency,
-          payment_method, sale_status, idempotency_key, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'DRAFT', $7, $8)
-        RETURNING *`,
+      const priced = [];
+      let total = 0;
+      for (const item of input.items) {
+        if (
+          !item.product_id ||
+          !Number.isInteger(item.quantity) ||
+          item.quantity < 1 ||
+          item.quantity > 999
+        )
+          throw new Error("Invalid sale quantity or product");
+        const result = await client.query(
+          `SELECT p.sku, p.name_en, COALESCE(
+            (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = $2 AND active = TRUE
+             AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW()) ORDER BY valid_from DESC LIMIT 1),
+            (SELECT price FROM product_prices WHERE product_id = p.id AND store_id IS NULL AND active = TRUE
+             AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW()) ORDER BY valid_from DESC LIMIT 1)) AS price
+           FROM products p WHERE id = $1 AND status = 'PUBLISHED'`,
+          [item.product_id, input.store_id],
+        );
+        const product = result.rows[0];
+        const price = Number(product?.price);
+        if (!Number.isFinite(price) || price <= 0)
+          throw new Error("Product price unavailable");
+        const linePaisa = Math.round(price * 100) * item.quantity;
+        total += linePaisa;
+        priced.push({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          price,
+          lineTotal: linePaisa / 100,
+          ...product,
+        });
+      }
+      const result = await client.query(
+        `INSERT INTO sales (sale_number, customer_id, store_id, total_amount, currency,
+          payment_method, sale_status, idempotency_key, created_by)
+         VALUES ($1, $2, $3, $4, 'NPR', 'CASH', 'DRAFT', $5, $6) RETURNING *`,
         [
           input.sale_number,
           input.customer_id || null,
           input.store_id,
-          input.total_amount,
-          input.currency || MARKET.currencyCode,
-          input.payment_method || null,
-          input.idempotency_key || null,
+          total / 100,
+          input.idempotency_key,
           input.created_by,
         ],
       );
-
       const sale = result.rows[0];
-
-      // Insert sale items
-      for (const item of input.items) {
-        await query(
-          `INSERT INTO sale_items (
-            sale_id, product_id, sku, product_name, quantity, unit_price, line_total, discount_amount, points_eligible
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      for (const item of priced) {
+        await client.query(
+          `INSERT INTO sale_items (sale_id, product_id, sku, product_name, quantity, unit_price, line_total, discount_amount, points_eligible)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, TRUE)`,
           [
             sale.id,
-            item.product_id || null,
-            item.sku || null,
-            item.product_name || null,
+            item.product_id,
+            item.sku,
+            item.name_en,
             item.quantity,
-            item.unit_price,
-            item.line_total,
-            item.discount_amount || 0,
-            item.points_eligible !== undefined ? item.points_eligible : true,
+            item.price,
+            item.lineTotal,
           ],
         );
       }
-
+      await client.query("COMMIT");
       return {
         success: true,
         sale_id: sale.id,
@@ -242,44 +286,97 @@ export class POSService {
         sale_status: sale.sale_status,
       };
     } catch (error) {
-      if (error instanceof Error && error.message.includes("already exists")) {
-        return {
-          success: false,
-          error: error.message,
-        };
-      }
-      throw new Error("Failed to create sale");
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
   }
 
-  /**
-   * Update sale status
-   */
   async updateSaleStatus(saleId: string, status: string, updatedBy: string) {
+    const client = await getPool().connect();
     try {
-      const validStatuses = [
-        "DRAFT",
-        "PENDING",
-        "COMPLETED",
-        "VOIDED",
-        "RETURNED",
-      ];
-      if (!validStatuses.includes(status)) {
-        throw new Error("Invalid sale status");
+      await client.query("BEGIN");
+      const result = await client.query(
+        "SELECT * FROM sales WHERE id = $1 FOR UPDATE",
+        [saleId],
+      );
+      const sale = result.rows[0];
+      if (!sale) throw new Error("Sale not found");
+      if (sale.sale_status === status) {
+        await client.query("COMMIT");
+        return sale;
       }
-
-      const result = await query(
-        `UPDATE sales SET sale_status = $1, updated_by = $2 WHERE id = $3 RETURNING *`,
+      if (
+        !["DRAFT", "PENDING"].includes(sale.sale_status) ||
+        !["PENDING", "COMPLETED", "VOIDED"].includes(status)
+      ) {
+        throw new Error("Sale transition unavailable in cash pilot");
+      }
+      if (status === "COMPLETED") {
+        if (sale.payment_method !== "CASH" || sale.currency !== "NPR")
+          throw new Error("Cash NPR sale required");
+        const items = await client.query(
+          "SELECT * FROM sale_items WHERE sale_id = $1 ORDER BY product_id",
+          [saleId],
+        );
+        if (!items.rows.length) throw new Error("Sale is empty");
+        for (const item of items.rows) {
+          await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+            `${item.product_id}:${sale.store_id}`,
+          ]);
+          const batches = await client.query(
+            "SELECT id, batch_id, quantity FROM batch_inventory WHERE store_id = $1 AND product_id = $2 AND quantity > 0 ORDER BY expiry_date, created_at FOR UPDATE",
+            [sale.store_id, item.product_id],
+          );
+          const reserved = await client.query(
+            "SELECT COALESCE(SUM(quantity), 0) AS quantity FROM stock_reservations WHERE store_id = $1 AND product_id = $2 AND status = 'ACTIVE' AND (order_id IS NOT NULL OR expires_at > NOW())",
+            [sale.store_id, item.product_id],
+          );
+          let remaining = Number(item.quantity);
+          const stock = batches.rows.reduce(
+            (sum, batch) => sum + Number(batch.quantity),
+            0,
+          );
+          if (
+            remaining <= 0 ||
+            stock - Number(reserved.rows[0].quantity) < remaining
+          )
+            throw new Error("Insufficient unreserved stock");
+          for (const batch of batches.rows) {
+            if (remaining <= 0) break;
+            const deduct = Math.min(remaining, Number(batch.quantity));
+            await client.query(
+              "UPDATE batch_inventory SET quantity = quantity - $1, updated_at = NOW() WHERE id = $2",
+              [deduct, batch.id],
+            );
+            await client.query(
+              `INSERT INTO inventory_transactions (transaction_type, store_id, product_id, batch_id, quantity, reference_id, reference_type, reason, performed_by)
+               VALUES ('ISSUE', $1, $2, $3, $4, $5, 'CASH_POS', 'Cash sale completed', $6)`,
+              [
+                sale.store_id,
+                item.product_id,
+                batch.batch_id,
+                -deduct,
+                saleId,
+                updatedBy,
+              ],
+            );
+            remaining -= deduct;
+          }
+        }
+      }
+      const updated = await client.query(
+        "UPDATE sales SET sale_status = $1, updated_by = $2 WHERE id = $3 RETURNING *",
         [status, updatedBy, saleId],
       );
-
-      if (result.rows.length === 0) {
-        throw new Error("Sale not found");
-      }
-
-      return result.rows[0];
-    } catch {
-      throw new Error("Failed to update sale status");
+      await client.query("COMMIT");
+      return updated.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
   }
 

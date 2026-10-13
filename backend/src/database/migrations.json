@@ -120,11 +120,19 @@
     "../database/031_loyalty_numeric_hardening.sql"
   ],
   [
-    "032_campaign_manager",
-    "../database/032_campaign_manager.sql"
+    "032_cod_inventory_evidence",
+    "../database/032_cod_inventory_evidence.sql"
   ],
   [
-    "033_founding_1000",
-    "../database/033_founding_1000.sql"
+    "033_opening_stock_guard",
+    "../database/033_opening_stock_guard.sql"
+  ],
+  [
+    "034_campaign_manager",
+    "../database/034_campaign_manager.sql"
+  ],
+  [
+    "035_founding_1000",
+    "../database/035_founding_1000.sql"
   ]
 ]

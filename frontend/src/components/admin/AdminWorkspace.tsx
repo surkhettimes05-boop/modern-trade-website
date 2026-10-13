@@ -21,6 +21,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   AdminDataTable,
   AdminRecord,
+  apiErrorMessage,
   Column,
   TableFilter,
   asText,
@@ -39,11 +40,17 @@ import { useAdminShell } from "@/components/admin/AdminShellContext";
 import { CampaignsPage } from "@/components/admin/CampaignsPage";
 import { useStaffSession } from "@/components/StaffSessionProvider";
 import { resilientFetch } from "@/lib/resilientFetch";
+import {
+  ProductEditButton,
+  ProductImportButton,
+} from "@/components/admin/ProductCatalogTools";
+import { CategoryEditButton } from "@/components/admin/CategoryCatalogTools";
+import { OpeningStockButton } from "@/components/admin/OpeningStockTools";
 
 type FormField = {
   name: string;
   label: string;
-  type?: "text" | "email" | "url" | "textarea" | "select";
+  type?: "text" | "email" | "url" | "textarea" | "select" | "datetime-local" | "checkbox";
   required?: boolean;
   options?: Array<{ label: string; value: string }>;
 };
@@ -120,6 +127,71 @@ const resources: Record<string, ResourceConfig> = {
         key: "published_at",
         label: "Published",
         render: (row) => dateTime(row.published_at),
+      },
+      {
+        key: "updated_at",
+        label: "Updated",
+        render: (row) => dateTime(row.updated_at),
+      },
+    ],
+    filters: [{ key: "status", label: "Status", options: statusOptions }],
+  },
+  "content/offers": {
+    title: "Promotions",
+    description:
+      "Schedule the homepage promotional banner and customer-facing offer messaging.",
+    eyebrow: "Content",
+    capability: "content.read",
+    endpoint: "/api/admin/offers",
+    createCapability: "content.write",
+    createLabel: "Create promotion",
+    fields: [
+      { name: "title_en", label: "Promotion title", required: true },
+      {
+        name: "description_en",
+        label: "Description",
+        type: "textarea",
+        required: true,
+      },
+      { name: "banner_image_url", label: "Banner image URL", type: "url" },
+      { name: "image_url", label: "Fallback image URL", type: "url" },
+      {
+        name: "start_date",
+        label: "Starts",
+        type: "datetime-local",
+        required: true,
+      },
+      {
+        name: "end_date",
+        label: "Ends",
+        type: "datetime-local",
+        required: true,
+      },
+      {
+        name: "status",
+        label: "Status",
+        type: "select",
+        options: statusOptions,
+      },
+      { name: "is_featured", label: "Use as homepage banner", type: "checkbox" },
+    ],
+    columns: [
+      { key: "title_en", label: "Promotion" },
+      { key: "status", label: "Status" },
+      {
+        key: "start_date",
+        label: "Starts",
+        render: (row) => dateTime(row.start_date),
+      },
+      {
+        key: "end_date",
+        label: "Ends",
+        render: (row) => dateTime(row.end_date),
+      },
+      {
+        key: "is_featured",
+        label: "Homepage",
+        render: (row) => (row.is_featured ? "Featured" : "Standard"),
       },
       {
         key: "updated_at",
@@ -218,6 +290,7 @@ const resources: Record<string, ResourceConfig> = {
       { name: "name_en", label: "Category name", required: true },
       { name: "slug", label: "Slug", required: true },
       { name: "description_en", label: "Description", type: "textarea" },
+      { name: "image_url", label: "Image URL", type: "url" },
       {
         name: "status",
         label: "Status",
@@ -226,7 +299,31 @@ const resources: Record<string, ResourceConfig> = {
       },
     ],
     columns: [
-      { key: "name_en", label: "Category" },
+      {
+        key: "name_en",
+        label: "Category",
+        render: (row) => (
+          <div className="flex items-center gap-3">
+            {row.image_url ? (
+              <span className="relative h-10 w-12 overflow-hidden rounded-lg bg-slate-100">
+                <Image
+                  src={String(row.image_url)}
+                  alt=""
+                  fill
+                  sizes="48px"
+                  unoptimized
+                  className="object-cover"
+                />
+              </span>
+            ) : (
+              <span className="grid h-10 w-12 place-items-center rounded-lg bg-slate-100 text-xs font-bold text-slate-500">
+                {asText(row.name_en).slice(0, 1)}
+              </span>
+            )}
+            <span>{asText(row.name_en)}</span>
+          </div>
+        ),
+      },
       { key: "slug", label: "Slug" },
       { key: "parent_name", label: "Parent" },
       { key: "product_count", label: "Products" },
@@ -644,8 +741,6 @@ const nextOrderStatus: Record<string, { status: string; label: string }> = {
   PICKING: { status: "PACKED", label: "Mark packed" },
   PACKED: { status: "OUT_FOR_DELIVERY", label: "Send for delivery" },
   OUT_FOR_DELIVERY: { status: "DELIVERED", label: "Mark delivered" },
-  DELIVERED: { status: "RETURN_REQUESTED", label: "Request return" },
-  RETURN_REQUESTED: { status: "RETURNED", label: "Mark returned" },
 };
 
 function OrderActions({
@@ -679,7 +774,7 @@ function OrderActions({
       );
       const body = (await response.json()) as AdminRecord;
       if (!response.ok)
-        throw new Error(asText(body.error, "Order update failed"));
+        throw new Error(apiErrorMessage(body, "Order update failed"));
       onUpdated(body);
     } catch (updateError) {
       setError(
@@ -747,6 +842,9 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
     config.fields &&
     hasCapability(config.createCapability),
   );
+  const canAddOpeningStock =
+    (config.title === "Inventory" || config.title === "Inventory batches") &&
+    hasCapability("inventory.adjust");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -756,10 +854,21 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(
       config
-        .fields!.map((field) => [
-          field.name,
-          String(form.get(field.name) || ""),
-        ])
+        .fields!.map((field) => {
+          if (field.type === "checkbox")
+            return [field.name, form.get(field.name) === "on"];
+          const rawValue = String(form.get(field.name) || "").trim();
+          const value =
+            field.name === "slug"
+              ? rawValue
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")
+                  .replace(/^-+|-+$/g, "")
+              : field.type === "datetime-local" && rawValue
+                ? new Date(rawValue).toISOString()
+                : rawValue;
+          return [field.name, value];
+        })
         .filter(([, value]) => value !== ""),
     );
     try {
@@ -773,8 +882,32 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
         body: JSON.stringify(payload),
       });
       const body = (await response.json()) as AdminRecord;
-      if (!response.ok)
-        throw new Error(asText(body.error, "Unable to create record"));
+      if (!response.ok) {
+        const issues = Array.isArray(body.validation)
+          ? body.validation
+          : Array.isArray(body.details)
+            ? body.details
+            : [];
+        const details = issues
+          .map((issue) => {
+            if (!(typeof issue === "object" && issue && "message" in issue))
+              return "";
+            const path =
+              "path" in issue && Array.isArray((issue as { path?: unknown }).path)
+                ? (issue as { path: unknown[] }).path.join(".")
+                : "";
+            const message = String((issue as { message: unknown }).message);
+            return path ? `${path}: ${message}` : message;
+          })
+          .filter(Boolean)
+          .join("; ");
+        const message =
+          details ||
+          (typeof body.message === "string" && body.message) ||
+          (typeof body.error === "string" && body.error) ||
+          "Unable to create record";
+        throw new Error(message);
+      }
       setFormOpen(false);
       setNotice(`${config.createLabel || "Record"} created successfully.`);
       setRefreshKey((key) => key + 1);
@@ -794,11 +927,31 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
         title={config.title}
         description={config.description}
         actions={
-          canCreate ? (
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="h-4 w-4" />
-              {config.createLabel}
-            </Button>
+          canCreate || canAddOpeningStock ? (
+            <>
+              {canAddOpeningStock && (
+                <OpeningStockButton
+                  onCreated={(message) => {
+                    setNotice(message);
+                    setRefreshKey((key) => key + 1);
+                  }}
+                />
+              )}
+              {canCreate && config.title === "Products" && (
+                <ProductImportButton
+                  onImported={(message) => {
+                    setNotice(message);
+                    setRefreshKey((key) => key + 1);
+                  }}
+                />
+              )}
+              {canCreate && (
+                <Button onClick={() => setFormOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  {config.createLabel}
+                </Button>
+              )}
+            </>
           ) : undefined
         }
       />
@@ -888,6 +1041,12 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
                         </option>
                       ))}
                     </select>
+                  ) : field.type === "checkbox" ? (
+                    <input
+                      name={field.name}
+                      type="checkbox"
+                      className="ml-3 h-4 w-4 rounded border-slate-300"
+                    />
                   ) : (
                     <input
                       name={field.name}
@@ -945,7 +1104,7 @@ function Dashboard() {
       });
       const body = (await response.json()) as AdminRecord;
       if (!response.ok)
-        throw new Error(asText(body.error, "Unable to load dashboard"));
+        throw new Error(apiErrorMessage(body, "Unable to load dashboard"));
       setData(body);
     } catch (loadError) {
       setError(
@@ -1177,6 +1336,7 @@ function Dashboard() {
 }
 
 function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
+  const { selectedStoreId } = useAdminShell();
   const [record, setRecord] = useState<AdminRecord | null>(null);
   const [related, setRelated] = useState<AdminRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1186,8 +1346,12 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
     async function load() {
       setLoading(true);
       try {
-        const endpoint =
+        const baseEndpoint =
           config.detailEndpoint?.(id) || `${config.endpoint}/${id}`;
+        const endpoint =
+          config.title === "Products" && selectedStoreId !== "all"
+            ? `${baseEndpoint}?store_id=${encodeURIComponent(selectedStoreId)}`
+            : baseEndpoint;
         const [response, relatedResponse] = await Promise.all([
           resilientFetch(endpoint, {
             credentials: "include",
@@ -1204,7 +1368,7 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
         ]);
         const body = (await response.json()) as AdminRecord;
         if (!response.ok)
-          throw new Error(asText(body.error, "Unable to load record"));
+          throw new Error(apiErrorMessage(body, "Unable to load record"));
         setRecord(body);
         if (relatedResponse?.ok) {
           const relatedBody = (await relatedResponse.json()) as
@@ -1228,7 +1392,7 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
     }
     void load();
     return () => controller.abort();
-  }, [config, id]);
+  }, [config, id, selectedStoreId]);
   if (loading) return <LoadingSkeleton rows={8} />;
   if (error || !record)
     return (
@@ -1266,14 +1430,30 @@ function DetailPage({ config, id }: { config: ResourceConfig; id: string }) {
         title={heading}
         description={`Record ${asText(record.id)}`}
         actions={
-          Boolean(record.status || record.payment_status) ? (
-            <div className="flex gap-2">
-              {Boolean(record.payment_status) && (
-                <StatusBadge value={record.payment_status} />
-              )}
-              <StatusBadge value={record.status} />
-            </div>
-          ) : undefined
+          <>
+            {config.title === "Products" && (
+              <ProductEditButton
+                id={id}
+                record={record}
+                onUpdated={(updated) => setRecord(updated)}
+              />
+            )}
+            {config.title === "Categories" && (
+              <CategoryEditButton
+                id={id}
+                record={record}
+                onUpdated={(updated) => setRecord(updated)}
+              />
+            )}
+            {Boolean(record.status || record.payment_status) && (
+              <div className="flex gap-2">
+                {Boolean(record.payment_status) && (
+                  <StatusBadge value={record.payment_status} />
+                )}
+                <StatusBadge value={record.status} />
+              </div>
+            )}
+          </>
         }
       />
       {config.title === "Orders" && (

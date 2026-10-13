@@ -14,10 +14,10 @@ export async function healthRoutes(fastify: FastifyInstance) {
       environment: process.env.NODE_ENV || "development",
     };
   };
-  fastify.get("/", liveness);
-  fastify.get("/live", liveness);
+  fastify.get("/", { config: { rateLimit: false } }, liveness);
+  fastify.get("/live", { config: { rateLimit: false } }, liveness);
 
-  fastify.get("/db", async (_, reply) => {
+  fastify.get("/db", { config: { rateLimit: false } }, async (_, reply) => {
     try {
       const { query } = await import("../database/connection.js");
       await query("SELECT 1");
@@ -34,14 +34,14 @@ export async function healthRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.get("/integrations", async (_, reply) => {
+  fastify.get("/integrations", { config: { rateLimit: false } }, async (_, reply) => {
     if (process.env.NODE_ENV === "production") {
       return reply.status(404).send({ error: "Not found" });
     }
     return { status: "ok", integrations: getIntegrationSnapshot() };
   });
 
-  fastify.get("/ready", async (_, reply) => {
+  fastify.get("/ready", { config: { rateLimit: false } }, async (_, reply) => {
     if (isShuttingDown()) {
       reply.status(503);
       return {

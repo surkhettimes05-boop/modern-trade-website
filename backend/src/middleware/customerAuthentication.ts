@@ -10,7 +10,8 @@ export async function authenticateCustomer(
   reply: FastifyReply,
 ) {
   reply.header("cache-control", "private, no-store");
-  const token = request.cookies?.[CUSTOMER_SESSION_COOKIE];
+  const bearer = customerBearerToken(request);
+  const token = bearer || request.cookies?.[CUSTOMER_SESSION_COOKIE];
   if (!token)
     return reply.status(401).send({ error: "Customer login required" });
   const session = await sessions.validateSession(token);
@@ -19,6 +20,7 @@ export async function authenticateCustomer(
   (request as FastifyRequest & { customerId?: string }).customerId =
     session.customer_id;
   if (
+    !bearer &&
     !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
     !customerCsrfValid(request)
   ) {
@@ -36,4 +38,16 @@ export function customerCsrfValid(request: FastifyRequest): boolean {
   const cookie = request.cookies?.[CUSTOMER_CSRF_COOKIE];
   const header = request.headers["x-csrf-token"];
   return Boolean(cookie && typeof header === "string" && cookie === header);
+}
+
+
+export function customerBearerToken(request: FastifyRequest): string | undefined {
+  const header = request.headers.authorization;
+  if (typeof header !== "string") return undefined;
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match?.[1]?.trim() || undefined;
+}
+
+export function customerSessionToken(request: FastifyRequest): string | undefined {
+  return customerBearerToken(request) || request.cookies?.[CUSTOMER_SESSION_COOKIE];
 }

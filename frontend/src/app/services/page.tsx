@@ -2,9 +2,9 @@ export default function ServicesPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Our Services</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">Pasalho shopping in Birendranagar</h1>
         <p className="text-xl text-gray-600 mb-8">
-          What we offer to make your shopping experience better
+          Shopping, pickup and delivery options for Birendranagar, Surkhet
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -38,9 +38,9 @@ export default function ServicesPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Extended Hours</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Store-specific hours</h3>
             <p className="text-gray-600">
-              Open early and late for your convenience
+              Check current opening hours for a published Pasalho store in Birendranagar.
             </p>
           </div>
 
@@ -50,9 +50,9 @@ export default function ServicesPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Nepal pilot payments</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Birendranagar pilot payments</h3>
             <p className="text-gray-600">
-              Cash on delivery and cash at the POS are available during the pilot
+              Pay cash on delivery or cash at store pickup for eligible orders in the pilot area.
             </p>
           </div>
 
@@ -82,7 +82,7 @@ export default function ServicesPage() {
         </div>
 
         <div className="mt-12 p-6 bg-emerald-50 border border-emerald-200 rounded-lg">
-          <h2 className="text-lg font-semibold text-emerald-900 mb-2">Availability depends on your store</h2>
+          <h2 className="text-lg font-semibold text-emerald-900 mb-2">Serving Birendranagar, Surkhet</h2>
           <p className="text-emerald-800">Delivery eligibility, pickup timing, opening hours and stock are shown using the selected store whenever current information is available.</p>
         </div>
       </div>

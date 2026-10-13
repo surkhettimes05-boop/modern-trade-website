@@ -5,6 +5,11 @@ import {
 } from "../integrations.js";
 
 describe("integration health snapshot", () => {
+  it("rejects production without an OTP provider", () => {
+    expect(() =>
+      validateProductionIntegrations({ NODE_ENV: "production" }),
+    ).toThrow("SMS_PROVIDER is required");
+  });
   it("reports configured notifications as enabled", () => {
     const snapshot = getIntegrationSnapshot({
       EMAIL_PROVIDER: "smtp",

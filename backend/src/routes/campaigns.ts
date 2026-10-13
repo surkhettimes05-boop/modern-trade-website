@@ -445,8 +445,8 @@ export async function campaignAdminRoutes(fastify: FastifyInstance) {
           start_date, end_date, terms_en, terms_ne, status, published_at,
           is_featured, sort_order, channels, placements, store_id, created_by
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-          CASE WHEN $18 = 'PUBLISHED' THEN NOW() ELSE NULL END,
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::publication_status,
+          CASE WHEN $18::publication_status = 'PUBLISHED'::publication_status THEN NOW() ELSE NULL END,
           $19,$20,$21::text[],$22::text[],$23,$24
         ) RETURNING id`,
         [
@@ -546,9 +546,9 @@ export async function campaignAdminRoutes(fastify: FastifyInstance) {
           end_date = $15,
           terms_en = $16,
           terms_ne = $17,
-          status = $18,
+          status = $18::publication_status,
           published_at = CASE
-            WHEN $18 = 'PUBLISHED' THEN COALESCE(published_at, NOW())
+            WHEN $18::publication_status = 'PUBLISHED'::publication_status THEN COALESCE(published_at, NOW())
             ELSE published_at
           END,
           is_featured = $19,

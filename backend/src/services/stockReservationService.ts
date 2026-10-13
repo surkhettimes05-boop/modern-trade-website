@@ -183,7 +183,7 @@ export class StockReservationService {
     const result = await query(
       `UPDATE stock_reservations 
        SET status = 'EXPIRED'
-       WHERE status = 'ACTIVE' AND expires_at < NOW()
+       WHERE status = 'ACTIVE' AND order_id IS NULL AND expires_at < NOW()
        RETURNING id`,
     );
     return result.rowCount || 0;

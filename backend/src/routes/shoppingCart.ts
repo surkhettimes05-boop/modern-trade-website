@@ -79,6 +79,50 @@ export async function shoppingCartRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.put("/shopping-cart/:cartId/items", async (request, reply) => {
+    const { cartId } = z
+      .object({ cartId: z.string().uuid() })
+      .parse(request.params);
+    const { items } = z
+      .object({
+        items: z
+          .array(
+            z
+              .object({
+                product_id: z.string().uuid(),
+                quantity: z.number().int().min(1).max(999),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(100),
+      })
+      .strict()
+      .parse(request.body);
+    if (new Set(items.map((item) => item.product_id)).size !== items.length) {
+      return reply.status(400).send({ error: "Duplicate cart products" });
+    }
+    try {
+      await shoppingCartService.replaceItems(
+        cartId,
+        customerId(request),
+        items,
+      );
+      return { success: true };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Cart not found") {
+        return reply.status(404).send({ error: "Cart not found" });
+      }
+      if (
+        error instanceof Error &&
+        error.message === "Product price unavailable"
+      ) {
+        return reply.status(400).send({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
   // Shopping Cart: Add item to cart
   fastify.post("/shopping-cart/:cartId/items", async (request, reply) => {
     const paramsSchema = z.object({

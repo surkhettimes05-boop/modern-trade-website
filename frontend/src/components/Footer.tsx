@@ -43,12 +43,12 @@ export default function Footer() {
   return <footer>
     <div className="footer-top shell">
       <Link href="/" className="logo light" aria-label="Pasalho home"><i>P</i><span>PASALHO</span></Link>
-      <p>Everyday value. Modern retail.<br />Built for every home.</p>
+      <p>Everyday value for Birendranagar.<br />Proudly serving Surkhet.</p>
       <nav className="socials" aria-label="Pasalho links">
         {socialLinks.map(({ label, href, icon: Icon }) => <Link href={href} key={label} aria-label={label} title={label}><Icon aria-hidden="true" /></Link>)}
       </nav>
     </div>
     <div className="footer-grid shell">{Object.entries(cols).map(([heading, links]) => <div key={heading}><h3>{heading}</h3>{links.map(({ label, href }) => <Link href={href} key={label}>{label}</Link>)}</div>)}</div>
-    <div className="footer-bottom shell"><span>© 2026 Pasalho</span><span>Nepal · English</span><span>Cash on delivery · Store pickup</span></div>
+    <div className="footer-bottom shell"><span>© 2026 Pasalho</span><span>Birendranagar, Surkhet · Nepal</span><span>Cash on delivery · Store pickup</span></div>
   </footer>;
 }

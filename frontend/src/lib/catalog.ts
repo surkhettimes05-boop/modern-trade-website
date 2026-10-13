@@ -16,9 +16,35 @@ export type Product = {
   tags: string[];
   unit?: string;
   specifications: Record<string, string>;
+  createdAt?: string;
+  featured?: boolean;
 };
 
 export type StorefrontCategory = { id: string; name: string; slug: string; image?: string; description?: string; skuCount?: number; priority?: 'Core' | 'Standard' | 'Test' };
+
+export function mapCategory(row: Record<string, unknown>): StorefrontCategory {
+  return {
+    id: String(row.id),
+    name: String(row.name || row.name_en || "Category"),
+    slug: String(row.slug || slugify(String(row.name || row.name_en || "category"))),
+    image: row.image ? String(row.image) : row.image_url ? String(row.image_url) : undefined,
+    description: row.description
+      ? String(row.description)
+      : row.description_en
+        ? String(row.description_en)
+        : undefined,
+    skuCount:
+      row.skuCount != null
+        ? Number(row.skuCount)
+        : row.sku_count != null
+          ? Number(row.sku_count)
+          : undefined,
+    priority:
+      row.priority === "Core" || row.priority === "Standard" || row.priority === "Test"
+        ? row.priority
+        : undefined,
+  };
+}
 export type Store = { id: string; name: string; address?: string; phone?: string; hours?: string; services?: string[] | Record<string, unknown>; latitude?: number; longitude?: number; map_url?: string; is_temporarily_closed?: boolean };
 export type Offer = { id: string; title: string; description: string; image_url?: string; banner_image_url?: string; start_date: string; end_date: string; terms?: string; is_featured: boolean; sort_order: number };
 export type Campaign = {
@@ -123,5 +149,49 @@ export const openingProducts: Product[] = [
 export function mapProduct(row: Record<string, unknown>): Product {
   const name = String(row.name || 'Product');
   const image = String(row.image_url || (Array.isArray(row.images) ? row.images[0] : '') || '/placeholder-product.svg');
-  return { id: String(row.id), slug: slugify(name), sku: row.sku ? String(row.sku) : undefined, name, brand: String(row.brand || 'Unbranded'), category: String(row.category_name || 'Everyday essentials'), categoryId: row.category_id ? String(row.category_id) : undefined, description: String(row.description || ''), image, price: Number(row.price || 0), originalPrice: row.original_price ? Number(row.original_price) : undefined, rating: Number(row.rating || 0), reviews: Number(row.review_count || 0), availability: String(row.availability_status || 'OUT_OF_STOCK').replaceAll('_', ' '), tags: row.is_featured ? ['Featured'] : [], unit: row.unit ? String(row.unit) : undefined, specifications: { SKU: String(row.sku || '—'), Pack: String(row.pack_size || '—'), Department: String(row.category_name || 'Everyday essentials') } };
+  return { id: String(row.id), slug: slugify(name), sku: row.sku ? String(row.sku) : undefined, name, brand: String(row.brand || 'Unbranded'), category: String(row.category_name || 'Everyday essentials'), categoryId: row.category_id ? String(row.category_id) : undefined, description: String(row.description || ''), image, price: Number(row.price || 0), originalPrice: row.original_price ? Number(row.original_price) : undefined, rating: Number(row.rating || 0), reviews: Number(row.review_count || 0), availability: String(row.availability_status || 'OUT_OF_STOCK').replaceAll('_', ' '), tags: row.is_featured ? ['Featured'] : [], unit: row.unit ? String(row.unit) : undefined, specifications: { SKU: String(row.sku || '—'), Pack: String(row.pack_size || '—'), Department: String(row.category_name || 'Everyday essentials') }, createdAt: row.created_at ? String(row.created_at) : undefined, featured: row.is_featured === true };
+}
+
+
+function normalizedSearch(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9\s-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function searchProducts(products: Product[], query: string): Product[] {
+  const normalized = normalizedSearch(query);
+  if (!normalized) return products;
+  const terms = normalized.split(" ").filter(Boolean);
+  return products
+    .map((product) => {
+      const name = normalizedSearch(product.name);
+      const sku = normalizedSearch(product.sku || "");
+      const category = normalizedSearch(product.category);
+      const brand = normalizedSearch(product.brand);
+      const description = normalizedSearch(product.description);
+      const unit = normalizedSearch(product.unit || "");
+      const haystack = [name, sku, category, brand, description, unit].join(" ");
+      if (!terms.every((term) => haystack.includes(term))) return null;
+      let score = 0;
+      if (name === normalized) score += 160;
+      if (sku === normalized) score += 150;
+      if (name.startsWith(normalized)) score += 110;
+      if (sku.startsWith(normalized)) score += 100;
+      for (const term of terms) {
+        if (name.split(" ").some((token) => token.startsWith(term))) score += 35;
+        if (category.includes(term)) score += 18;
+        if (brand.includes(term)) score += 16;
+        if (description.includes(term)) score += 5;
+      }
+      if (product.featured) score += 8;
+      if (!product.availability.toLowerCase().includes("out of")) score += 3;
+      return { product, score };
+    })
+    .filter((entry): entry is { product: Product; score: number } => Boolean(entry))
+    .sort((a, b) => b.score - a.score || a.product.name.localeCompare(b.product.name))
+    .map((entry) => entry.product);
 }

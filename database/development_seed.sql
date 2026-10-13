@@ -1,8 +1,8 @@
 -- Repeatable Nepal MVP development data. Run only against a local development database.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 INSERT INTO organizations (organization_name, legal_name, country_code, default_currency_code, default_locale, default_timezone, tax_regime, payment_providers, feature_flags)
-VALUES ('Pasalho Nepal', 'Pasalho', 'NP', 'NPR', 'en-NP', 'Asia/Kathmandu', 'IRD', '["cash"]'::jsonb, '{"ENABLE_VAT_TAX": true}'::jsonb)
-ON CONFLICT DO NOTHING;
+SELECT 'Pasalho Nepal', 'Pasalho', 'NP', 'NPR', 'en-NP', 'Asia/Kathmandu', 'IRD', '["cash"]'::jsonb, '{"ENABLE_VAT_TAX": true}'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM organizations WHERE organization_name = 'Pasalho Nepal' AND country_code = 'NP');
 
 INSERT INTO stores (name_en, address_en, phone, email, status, published_at, created_by, organization_id, country_code, currency_code, locale, timezone, tax_regime, payment_providers, feature_flags)
 SELECT seed.name, seed.address, seed.phone, seed.email, 'PUBLISHED', NOW(), 'development-seed', o.id, 'NP', 'NPR', 'en-NP', 'Asia/Kathmandu', 'IRD', '["cash"]'::jsonb, '{"ENABLE_VAT_TAX": true}'::jsonb
@@ -69,9 +69,8 @@ SELECT 'NEPAL-PILOT-1', o.id, s.id, 'Pasalho Rewards',
   'Earn 1 point per NPR 500 on delivered customer purchases.',
   0.002, 1.00, TRUE, FALSE, 500, 10, 5000, 1, 'development-seed',
   '{"market":"NP","currency":"NPR","locale":"en-NP","tiers":false,"mvp":true}'::jsonb
-FROM organizations o
-JOIN LATERAL (SELECT id FROM stores WHERE organization_id=o.id ORDER BY created_at LIMIT 1) s ON TRUE
-WHERE o.country_code='NP'
+FROM (SELECT id, organization_id FROM stores WHERE name_en = 'Pasalho Birendranagar' ORDER BY created_at, id LIMIT 1) s
+JOIN organizations o ON o.id = s.organization_id AND o.country_code = 'NP'
 ON CONFLICT (program_id) DO UPDATE SET organization_id=EXCLUDED.organization_id,
   store_id=EXCLUDED.store_id, is_active=TRUE, enable_tiers=FALSE,
   earn_npr_per_point=500, redemption_min_points=10, redemption_max_points=5000, rule_version=1;
@@ -133,6 +132,6 @@ ON CONFLICT (phone_normalized) DO NOTHING;
 
 INSERT INTO staff (staff_number, first_name, last_name, email, store_id, role, position, department, status, hire_date, username, password_hash, permissions, role_id, capabilities, scope_type, scope_store_ids, created_by)
 SELECT 'STF-LOCAL-ADMIN', 'Local', 'Administrator', 'admin@example.invalid', stores.id, 'ADMIN', 'System Administrator', 'Management', 'ACTIVE', CURRENT_DATE, 'admin', crypt(encode(gen_random_bytes(32), 'hex'), gen_salt('bf', 12)), '{"all": true}'::jsonb, roles.id, roles.capabilities, 'GLOBAL', ARRAY[stores.id]::uuid[], 'development-seed'
-FROM stores CROSS JOIN roles
+FROM stores CROSS JOIN LATERAL (SELECT * FROM roles WHERE role_key = 'platform_admin' ORDER BY id LIMIT 1) roles
 WHERE stores.name_en = 'Pasalho Birendranagar' AND roles.role_key = 'platform_admin'
 ON CONFLICT (staff_number) DO UPDATE SET store_id = EXCLUDED.store_id, status = 'ACTIVE', role_id = EXCLUDED.role_id, capabilities = EXCLUDED.capabilities, scope_type = EXCLUDED.scope_type, scope_store_ids = EXCLUDED.scope_store_ids;

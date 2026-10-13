@@ -15,6 +15,8 @@ export default {
     "<rootDir>/src/middleware/**/__tests__/**/*.test.ts",
     "<rootDir>/src/plugins/**/__tests__/**/*.security.test.ts",
     "<rootDir>/src/services/**/__tests__/shoppingCartSecurity.test.ts",
+    "<rootDir>/src/services/**/__tests__/codReadiness.security.test.ts",
+    "<rootDir>/src/services/**/__tests__/webOrderLifecycle.security.test.ts",
     "<rootDir>/src/services/**/__tests__/checkoutService.security.test.ts",
     "<rootDir>/src/services/**/__tests__/paymentService.test.ts",
     "<rootDir>/src/services/**/__tests__/twilioVerifyService.test.ts",

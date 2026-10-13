@@ -181,4 +181,26 @@ describe("web order lifecycle integrity", () => {
     ).rejects.toThrow("Invalid payment transition");
     expect(clientQuery).toHaveBeenCalledWith("ROLLBACK");
   });
+
+  it("keeps deferred COD returns and refunds fail-closed", async () => {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.startsWith("SELECT * FROM web_orders")) {
+        return {
+          rows: [
+            { id: "order-1", status: "DELIVERED", payment_status: "PAID" },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    const service = new WebOrderService();
+    await expect(
+      service.updateWebOrderStatus("order-1", "RETURN_REQUESTED", "staff-1"),
+    ).rejects.toThrow("Invalid transition");
+    await expect(
+      service.updatePaymentStatus("order-1", "REFUNDED", "staff-1"),
+    ).rejects.toThrow("Invalid payment transition");
+    expect(clientQuery).toHaveBeenCalledWith("ROLLBACK");
+  });
 });

@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
   if (!category) return buildMetadata({ title: 'Category not found', description: 'The requested category could not be found.', path: `/category/${slug}`, noIndex: true });
-  return buildMetadata({ title: `${category.name} products`, description: `${category.description || `Shop ${category.name.toLowerCase()} products`} at Pasalho Nepal with clear pricing and store-based availability.`, path: `/category/${category.slug}`, image: category.image });
+  return buildMetadata({ title: `${category.name} products`, description: `${category.description || `Shop ${category.name.toLowerCase()} products`} with Pasalho in Birendranagar, Surkhet, with NPR pricing and store-based availability.`, path: `/category/${category.slug}`, image: category.image });
 }
 
 export default async function CategoryPage({ params }: Props) {

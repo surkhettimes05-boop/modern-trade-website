@@ -1,11 +1,10 @@
 export default {
-  preset: 'ts-jest/presets/default-esm',
+  preset: 'ts-jest',
   testEnvironment: 'node',
   globalSetup: '<rootDir>/test/global-setup.ts',
   globalTeardown: '<rootDir>/test/global-teardown.ts',
   setupFiles: ['<rootDir>/test/setup-env.cjs'],
   setupFilesAfterEnv: ['<rootDir>/test/setup-after-env.ts'],
-  extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
@@ -13,7 +12,8 @@ export default {
     '^.+\\.tsx?$': [
       'ts-jest',
       {
-        useESM: true,
+        useESM: false,
+        tsconfig: { module: "CommonJS", moduleResolution: "node" },
       },
     ],
   },

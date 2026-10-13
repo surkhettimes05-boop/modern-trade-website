@@ -43,12 +43,14 @@ describe("checkout query batching", () => {
             {
               product_id: productOne,
               name_en: "Rice",
+              product_status: "PUBLISHED",
               quantity: 2,
               authoritative_price: "100.00",
             },
             {
               product_id: productTwo,
               name_en: "Tea",
+              product_status: "PUBLISHED",
               quantity: 1,
               authoritative_price: "50.00",
             },
@@ -81,10 +83,18 @@ describe("checkout query batching", () => {
 
     expect(order.id).toBe("order-1");
     const calls = clientQuery.mock.calls.map(([sql]) => String(sql));
-    expect(calls.filter((sql) => sql.includes("pg_advisory_xact_lock"))).toHaveLength(1);
-    expect(calls.filter((sql) => sql.includes("COALESCE(inventory.stock"))).toHaveLength(1);
-    expect(calls.filter((sql) => sql.includes("INSERT INTO web_order_items"))).toHaveLength(1);
-    expect(calls.filter((sql) => sql.includes("INSERT INTO stock_reservations"))).toHaveLength(1);
+    expect(
+      calls.filter((sql) => sql.includes("pg_advisory_xact_lock")),
+    ).toHaveLength(2);
+    expect(
+      calls.filter((sql) => sql.includes("COALESCE(inventory.stock")),
+    ).toHaveLength(1);
+    expect(
+      calls.filter((sql) => sql.includes("INSERT INTO web_order_items")),
+    ).toHaveLength(1);
+    expect(
+      calls.filter((sql) => sql.includes("INSERT INTO stock_reservations")),
+    ).toHaveLength(1);
     expect(clientQuery).toHaveBeenCalledWith("COMMIT");
     expect(release).toHaveBeenCalledTimes(1);
   });

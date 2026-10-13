@@ -1,5 +1,9 @@
 # Backend Deployment Guide
 
+For the current COD release, follow [PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md)
+in order. It includes explicit store/admin bootstrap, migration 032, OTP modes,
+Vercel Services settings, and all outstanding verification gates.
+
 ## Environment Variables
 
 Production startup validates all required configuration before connecting to
@@ -110,8 +114,8 @@ enter it only in Render. Render generates `JWT_SECRET`, `COOKIE_SECRET`,
 `ENCRYPTION_KEY`, `SIGNATURE_SECRET`, and `OTP_HASH_SECRET`; do not overwrite
 them with shared or placeholder values.
 
-Optional integrations should remain absent unless intentionally enabled. For
-customer OTP delivery with Twilio Verify, configure the complete group
+Customer OTP is mandatory for the production pilot; missing SMS configuration
+now prevents startup. Other integrations may remain absent. For customer OTP delivery with Twilio Verify, configure the complete group
 `SMS_PROVIDER=twilio_verify`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and
 `TWILIO_VERIFY_SERVICE_SID`. Verify manages the SMS sender, so
 `TWILIO_FROM_NUMBER` is not required. Configure both `EMAIL_PROVIDER` and

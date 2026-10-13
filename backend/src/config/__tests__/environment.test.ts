@@ -10,6 +10,10 @@ import { getResilienceConfig } from "../resilience.js";
 
 const productionEnvironment = {
   NODE_ENV: "production",
+  SMS_PROVIDER: "twilio_verify",
+  TWILIO_ACCOUNT_SID: "ACtest",
+  TWILIO_AUTH_TOKEN: "test-token",
+  TWILIO_VERIFY_SERVICE_SID: "VAtest",
   ACTIVE_MARKET: "NP",
   DEFAULT_COUNTRY_CODE: "NP",
   DEFAULT_CURRENCY_CODE: "NPR",
@@ -30,6 +34,7 @@ const productionEnvironment = {
   ENCRYPTION_KEY: "e".repeat(32),
   SIGNATURE_SECRET: "s".repeat(32),
   OTP_HASH_SECRET: "o".repeat(32),
+  PROXY_AUTH_SECRET: "p".repeat(32),
   PAYMENT_ENCRYPTION_KEY: "a".repeat(64),
   JWT_ISSUER: "storesync-backend",
   JWT_AUDIENCE: "storesync-operations",
@@ -256,18 +261,18 @@ describe("environment safety", () => {
   });
 
   it("rejects invalid or contradictory reliability limits", () => {
-    expect(() =>
-      getResilienceConfig({ DATABASE_POOL_MAX: "0" }),
-    ).toThrow("DATABASE_POOL_MAX must be between");
+    expect(() => getResilienceConfig({ DATABASE_POOL_MAX: "0" })).toThrow(
+      "DATABASE_POOL_MAX must be between",
+    );
     expect(() =>
       getResilienceConfig({
         DATABASE_STATEMENT_TIMEOUT_MS: "20000",
         DATABASE_QUERY_TIMEOUT_MS: "10000",
       }),
     ).toThrow("DATABASE_QUERY_TIMEOUT_MS must be greater than or equal");
-    expect(() =>
-      getResilienceConfig({ SHUTDOWN_TIMEOUT_MS: "30000" }),
-    ).toThrow("SHUTDOWN_TIMEOUT_MS must be between");
+    expect(() => getResilienceConfig({ SHUTDOWN_TIMEOUT_MS: "30000" })).toThrow(
+      "SHUTDOWN_TIMEOUT_MS must be between",
+    );
   });
 
   it("refuses to seed production or ambiguous remote databases", () => {

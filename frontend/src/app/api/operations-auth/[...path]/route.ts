@@ -1,3 +1,4 @@
+import { addProxyClientIdentity } from "@/lib/proxyClientIdentity";
 import { NextRequest, NextResponse } from "next/server";
 import { requireServerApiUrl, upstreamTimeoutMs } from "@/lib/serverApiUrl";
 import {
@@ -23,6 +24,9 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   }
 
   const requestHeaders = proxyRequestHeaders(request.headers);
+  try { addProxyClientIdentity(request.headers, requestHeaders); } catch {
+    return NextResponse.json({ error: "Proxy identity is not configured" }, { status: 503 });
+  }
 
   let requestBody: ArrayBuffer | undefined;
   try {

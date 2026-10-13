@@ -74,10 +74,7 @@ async function sendTwilioSms(
   );
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(
-      `Twilio SMS failed (${response.status}): ${detail.slice(0, 300)}`,
-    );
+    throw new Error(`Twilio SMS failed (${response.status})`);
   }
 }
 
@@ -122,7 +119,7 @@ export class OTPService {
     try {
       if (
         process.env.NODE_ENV === "test" ||
-        process.env.NODE_ENV === "development"
+        (process.env.NODE_ENV === "development" && !process.env.SMS_PROVIDER)
       ) {
         // Tests and local development receive the returned code from the API.
         // Production still requires an explicitly configured SMS provider.
@@ -159,6 +156,14 @@ export class OTPService {
   ): Promise<{ valid: boolean; customer_id?: string }> {
     const phoneNormalized = normalizePhone(input.phone);
 
+    if (process.env.SMS_PROVIDER === "demo") {
+      try {
+        getDemoOtpCodeForPhone(phoneNormalized);
+      } catch {
+        return { valid: false };
+      }
+    }
+
     // Find the most recent unused OTP for this phone and purpose
     const result = await query(
       `SELECT * FROM customer_otp 
@@ -185,7 +190,7 @@ export class OTPService {
     }
 
     const verified =
-      process.env.NODE_ENV === "production" &&
+      process.env.NODE_ENV !== "test" &&
       process.env.SMS_PROVIDER === "twilio_verify"
         ? await checkTwilioSmsVerification(phoneNormalized, input.otp_code)
         : digestMatches(
