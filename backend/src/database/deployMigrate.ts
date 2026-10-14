@@ -13,7 +13,7 @@ const backupPath = `${backupDir}/storesync-${stamp}.dump`;
 
 await mkdir(backupDir, { recursive: true });
 const databaseUrl = new URL(connectionString);
-const databaseName = decodeURIComponent(databaseUrl.pathname.replace(/^\\/+/, ""));
+const databaseName = decodeURIComponent(databaseUrl.pathname.replace(/^\/+/, ""));
 const sslMode =
   databaseUrl.searchParams.get("sslmode") ??
   (process.env.DATABASE_SSL === "true" ? "require" : undefined);
