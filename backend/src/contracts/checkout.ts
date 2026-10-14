@@ -14,6 +14,7 @@ const deliveryCheckoutSchema = z
   .object({
     ...commonCheckoutFields,
     delivery_type: z.literal("DELIVERY"),
+    address_id: z.string().uuid(),
     shipping_address: z.string().trim().min(1).max(500),
     shipping_municipality_id: z.coerce.number().int().positive(),
     shipping_ward_id: z.coerce.number().int().positive(),
@@ -33,5 +34,23 @@ export const CodCheckoutBodySchema = z.discriminatedUnion("delivery_type", [
   deliveryCheckoutSchema,
   pickupCheckoutSchema,
 ]);
+
+export const CartValidationBodySchema = z
+  .object({
+    address_id: z.string().uuid(),
+    items: z
+      .array(
+        z
+          .object({
+            product_id: z.string().uuid(),
+            quantity: z.coerce.number().int().min(1).max(999),
+            client_unit_price: z.coerce.number().nonnegative().optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(100),
+  })
+  .strict();
 
 export type CodCheckoutBody = z.infer<typeof CodCheckoutBodySchema>;

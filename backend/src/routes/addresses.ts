@@ -291,7 +291,7 @@ export async function addressRoutes(fastify: FastifyInstance) {
   // Administrative divisions: Get districts
   fastify.get("/admin/divisions/districts", async (request, reply) => {
     const schema = z.object({
-      province_id: z.number().optional(),
+      province_id: z.coerce.number().int().positive().optional(),
     });
 
     const { province_id } = schema.parse(request.query);
@@ -307,7 +307,7 @@ export async function addressRoutes(fastify: FastifyInstance) {
   // Administrative divisions: Get municipalities
   fastify.get("/admin/divisions/municipalities", async (request, reply) => {
     const schema = z.object({
-      district_id: z.number().optional(),
+      district_id: z.coerce.number().int().positive().optional(),
     });
 
     const { district_id } = schema.parse(request.query);
@@ -324,7 +324,7 @@ export async function addressRoutes(fastify: FastifyInstance) {
   // Administrative divisions: Get wards
   fastify.get("/admin/divisions/wards", async (request, reply) => {
     const schema = z.object({
-      municipality_id: z.number().optional(),
+      municipality_id: z.coerce.number().int().positive().optional(),
     });
 
     const { municipality_id } = schema.parse(request.query);

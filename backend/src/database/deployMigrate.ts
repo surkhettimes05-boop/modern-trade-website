@@ -14,8 +14,14 @@ const backupPath = `${backupDir}/storesync-${stamp}.dump`;
 await mkdir(backupDir, { recursive: true });
 await execFileAsync(
   process.env.PG_DUMP_BIN || "pg_dump",
-  ["--format=custom", "--file", backupPath, connectionString],
-  { maxBuffer: 1024 * 1024 },
+  ["--format=custom", "--schema=public", "--file", backupPath],
+  {
+    maxBuffer: 1024 * 1024,
+    env: {
+      ...process.env,
+      PGDATABASE: connectionString,
+    },
+  },
 );
 const applied = await runMigrations(connectionString);
 console.log(
