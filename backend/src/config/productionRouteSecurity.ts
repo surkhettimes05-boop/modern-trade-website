@@ -12,7 +12,9 @@ export type ProductionRouteBoundary =
  * test fails when a new production plugin is registered without an explicit
  * security-boundary review.
  */
-export const PRODUCTION_ROUTE_SECURITY: Readonly<Record<string, ProductionRouteBoundary>> = {
+export const PRODUCTION_ROUTE_SECURITY: Readonly<
+  Record<string, ProductionRouteBoundary>
+> = {
   healthRoutes: "PUBLIC_READ_ONLY",
   publicRoutes: "PUBLIC_VALIDATED_MUTATION",
   publicCampaignRoutes: "PUBLIC_READ_ONLY",
@@ -20,6 +22,8 @@ export const PRODUCTION_ROUTE_SECURITY: Readonly<Record<string, ProductionRouteB
   shoppingCartRoutes: "CUSTOMER_SESSION",
   checkoutRoutes: "CUSTOMER_SESSION",
   addressRoutes: "MIXED_EXPLICIT",
+  customerFavoritesRoutes: "CUSTOMER_SESSION",
+  customerOrderNotificationRoutes: "CUSTOMER_SESSION",
   loyaltyMvpRoutes: "MIXED_EXPLICIT",
   paymentWebhookRoutes: "SIGNED_WEBHOOK",
   operationsAuthRoutes: "MIXED_EXPLICIT",

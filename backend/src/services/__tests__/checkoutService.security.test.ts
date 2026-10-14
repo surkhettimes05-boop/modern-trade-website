@@ -1,7 +1,10 @@
-import { getPool } from "../../database/connection.js";
+import { getPool, query } from "../../database/connection.js";
 import { CheckoutService } from "../checkoutService.js";
 
-jest.mock("../../database/connection.js", () => ({ getPool: jest.fn() }));
+jest.mock("../../database/connection.js", () => ({
+  getPool: jest.fn(),
+  query: jest.fn(),
+}));
 
 describe("checkout query batching", () => {
   const release = jest.fn();
@@ -13,6 +16,9 @@ describe("checkout query batching", () => {
     (getPool as jest.Mock).mockReturnValue({
       connect: jest.fn().mockResolvedValue({ query: clientQuery, release }),
       query: jest.fn(),
+    });
+    (query as jest.Mock).mockResolvedValue({
+      rows: [{ id: "00000000-0000-0000-0000-000000000010" }],
     });
   });
 
@@ -40,20 +46,16 @@ describe("checkout query batching", () => {
       if (sql.includes("FROM cart_items")) {
         return {
           rows: [
-            {
-              product_id: productOne,
-              name_en: "Rice",
-              product_status: "PUBLISHED",
-              quantity: 2,
-              authoritative_price: "100.00",
-            },
-            {
-              product_id: productTwo,
-              name_en: "Tea",
-              product_status: "PUBLISHED",
-              quantity: 1,
-              authoritative_price: "50.00",
-            },
+            { product_id: productOne, quantity: 2 },
+            { product_id: productTwo, quantity: 1 },
+          ],
+        };
+      }
+      if (sql.includes("p.name_en")) {
+        return {
+          rows: [
+            { product_id: productOne, name_en: "Rice", product_status: "PUBLISHED", authoritative_price: "100.00" },
+            { product_id: productTwo, name_en: "Tea", product_status: "PUBLISHED", authoritative_price: "50.00" },
           ],
         };
       }
