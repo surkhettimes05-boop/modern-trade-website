@@ -150,5 +150,9 @@
   [
     "039_customer_favorites",
     "../database/039_customer_favorites.sql"
+  ],
+  [
+    "040_cod_fulfillment_cash",
+    "../database/040_cod_fulfillment_cash.sql"
   ]
 ]
