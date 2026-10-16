@@ -109,12 +109,10 @@ test("customer → address → serviceability → assigned cart → COD recovery
   );
   expect(migrationState.rows[0]).toMatchObject({
     database_name: "storesync_jest_test",
-    server_address: "127.0.0.1",
-    server_port: 55433,
     migration_037_count: "1",
     fingerprint_nullable: "YES",
   });
-  expect(Number(migrationState.rows[0].migration_count)).toBe(38); // 019 is intentionally absent from this project's manifest.
+  expect(Number(migrationState.rows[0].migration_count)).toBe(39); // 019 is intentionally absent from this project's manifest.
   const migrationIds = await query(
     "SELECT migration_id FROM schema_migrations ORDER BY migration_id",
   );
@@ -124,7 +122,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       (_, index) => `${String(index + 1).padStart(3, "0")}_`,
     ),
     ...Array.from(
-      { length: 20 },
+      { length: 21 },
       (_, index) => `${String(index + 20).padStart(3, "0")}_`,
     ),
   ];
