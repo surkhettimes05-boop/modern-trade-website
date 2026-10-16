@@ -278,6 +278,73 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.post("/web-orders/:orderId/cod-settlement", async (request, reply) => {
+    const { orderId } = z.object({ orderId: z.string().uuid() }).parse(request.params);
+    const body = z.object({
+      counted_amount: z.coerce.number().nonnegative(),
+      idempotency_key: z.string().trim().min(8).max(200),
+      reason: z.string().trim().min(1).max(500).optional(),
+    }).parse(request.body);
+    const user = request.user as { id: string; roleKey?: string; capabilities?: string[] };
+    const allowed = user.roleKey === "platform_admin" ||
+      user.capabilities?.includes("system.manage") ||
+      user.capabilities?.includes("reconciliation.manage");
+    if (!allowed) return reply.status(403).send({ error: "COD reconciliation permission required" });
+
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const found = await client.query(
+        "SELECT * FROM cod_cash_collections WHERE order_id = $1 FOR UPDATE", [orderId],
+      );
+      const collection = found.rows[0];
+      if (!collection) {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "COD cash has not been collected for this order" });
+      }
+      const prior = await client.query(
+        "SELECT * FROM cod_cash_settlements WHERE collection_id = $1", [collection.id],
+      );
+      if (prior.rows.length) {
+        await client.query("COMMIT");
+        return reply.send(prior.rows[0]);
+      }
+      const expected = Number(collection.amount);
+      const variance = body.counted_amount - expected;
+      const status = Math.abs(variance) < 0.005 ? "MATCHED" : "DISCREPANCY";
+      if (status === "DISCREPANCY" && !body.reason) {
+        await client.query("ROLLBACK");
+        return reply.status(400).send({ error: "Reason is required for a COD cash discrepancy" });
+      }
+      const inserted = await client.query(
+        `INSERT INTO cod_cash_settlements
+          (collection_id, store_id, settled_by, expected_amount, counted_amount,
+           variance, status, reason, idempotency_key, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
+         ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`,
+        [collection.id, collection.store_id, user.id, expected, body.counted_amount,
+         variance, status, body.reason || null, body.idempotency_key,
+         JSON.stringify({ order_id: orderId })],
+      );
+      if (!inserted.rows.length) {
+        const replay = await client.query(
+          "SELECT * FROM cod_cash_settlements WHERE idempotency_key = $1", [body.idempotency_key],
+        );
+        if (replay.rows[0]?.collection_id !== collection.id) throw new Error("Idempotency conflict");
+        await client.query("COMMIT");
+        return reply.send(replay.rows[0]);
+      }
+      await client.query("COMMIT");
+      return reply.status(201).send(inserted.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      request.log.error({ err: error, orderId }, "COD settlement failed");
+      return reply.status(500).send({ error: "Failed to reconcile COD cash" });
+    } finally {
+      client.release();
+    }
+  });
+
   // Web Order: Update order status
   fastify.put("/web-orders/:orderId/status", async (request, reply) => {
     const paramsSchema = z.object({
