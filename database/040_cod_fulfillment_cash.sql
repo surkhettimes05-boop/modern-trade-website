@@ -2,6 +2,19 @@
 -- Delivery/payment/inventory completion remains authoritative in WebOrderService.
 -- This migration adds append-only evidence for cash collected from COD orders.
 
+ALTER TABLE order_fulfillment
+  ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(200),
+  ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_order_fulfillment_one_active_per_order
+  ON order_fulfillment(order_id)
+  WHERE status NOT IN ('CANCELLED');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_order_fulfillment_idempotency
+  ON order_fulfillment(idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS cod_cash_collections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id UUID NOT NULL REFERENCES web_orders(id),
