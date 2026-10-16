@@ -22,6 +22,18 @@ function customerCsrf() {
   return document.cookie.match(/(?:^|; )customer_csrf=([^;]+)/)?.[1] || '';
 }
 
+function apiErrorMessage(body: unknown, fallback: string): string {
+  if (!body || typeof body !== 'object') return fallback;
+  const error = (body as { error?: unknown }).error;
+  return typeof error === 'string' && error.trim() ? error : fallback;
+}
+
+function quoteReason(reason: unknown): string {
+  return typeof reason === 'string' && reason.trim()
+    ? reason
+    : 'This address is outside the current delivery area.';
+}
+
 export default function CheckoutPage() {
   const { items, selectedStore, clear } = useShop();
   const router = useRouter();
@@ -139,7 +151,7 @@ export default function CheckoutPage() {
       return;
     }
     if (deliveryType === 'DELIVERY' && !activeQuote?.serviceable) {
-      setError(activeQuote?.reason || 'Choose a serviceable delivery area.');
+      setError(quoteReason(activeQuote?.reason));
       return;
     }
 
@@ -166,7 +178,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({ store_id: selectedStore.id }),
       });
       const cart = await cartResponse.json();
-      if (!cartResponse.ok) throw new Error(cart.error || 'Could not create cart');
+      if (!cartResponse.ok) throw new Error(apiErrorMessage(cart, 'Could not create cart'));
 
       const syncResponse = await resilientFetch(`/api/shopping-cart/${cart.id}/items`, {
         method: 'PUT',
@@ -176,7 +188,7 @@ export default function CheckoutPage() {
       });
       if (!syncResponse.ok) {
         const syncBody = await syncResponse.json().catch(() => ({}));
-        throw new Error(syncBody.error || 'Could not synchronize cart');
+        throw new Error(apiErrorMessage(syncBody, 'Could not synchronize cart'));
       }
 
       const payload =
@@ -210,7 +222,7 @@ export default function CheckoutPage() {
         body: JSON.stringify(payload),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Checkout failed');
+      if (!response.ok) throw new Error(apiErrorMessage(result, 'Checkout failed'));
 
       sessionStorage.removeItem(idempotencyStorageKey);
       clear();
@@ -338,7 +350,7 @@ export default function CheckoutPage() {
                   ? 'Checking delivery availability…'
                   : activeQuote.serviceable
                     ? `${activeQuote.zone_name || 'Delivery area'} · Delivery ${formatPrice(Number(activeQuote.delivery_fee || 0))}${activeQuote.estimated_delivery_hours ? ` · about ${activeQuote.estimated_delivery_hours}h` : ''}`
-                    : activeQuote.reason || 'This address is outside the current delivery area.'}
+                    : quoteReason(activeQuote.reason)}
               </div>
             ) : null}
           </>
