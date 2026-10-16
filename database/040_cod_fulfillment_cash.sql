@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS cod_cash_collections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id UUID NOT NULL REFERENCES web_orders(id),
   store_id UUID NOT NULL REFERENCES stores(id),
-  delivery_assignment_id UUID REFERENCES delivery_assignments(id),
+  fulfillment_id UUID REFERENCES order_fulfillment(id),
   collected_by UUID,
   amount DECIMAL(12,2) NOT NULL CHECK (amount >= 0),
   currency VARCHAR(3) NOT NULL DEFAULT 'NPR',
