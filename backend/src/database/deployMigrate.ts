@@ -7,6 +7,22 @@ import { runMigrations } from "./migrationRunner.js";
 
 const execFileAsync = promisify(execFile);
 const connectionString = getMigrationDatabaseUrl();
+const runtimeUrl = new URL(process.env.DATABASE_URL || "");
+const migrationUrl = new URL(connectionString);
+const databaseIdentity = (url: URL) => ({
+  host: url.hostname,
+  port: url.port || "5432",
+  database: decodeURIComponent(url.pathname.replace(/^\//, "")),
+});
+console.log(JSON.stringify({
+  event: "database_target_check",
+  runtime: databaseIdentity(runtimeUrl),
+  migration: databaseIdentity(migrationUrl),
+  sameTarget:
+    runtimeUrl.hostname === migrationUrl.hostname &&
+    (runtimeUrl.port || "5432") === (migrationUrl.port || "5432") &&
+    runtimeUrl.pathname === migrationUrl.pathname,
+}));
 const backupConnectionString = process.env.DATABASE_BACKUP_URL;
 if (!backupConnectionString) {
   throw new Error("DATABASE_BACKUP_URL is required for guarded production migrations");
