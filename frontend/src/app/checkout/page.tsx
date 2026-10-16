@@ -191,6 +191,32 @@ export default function CheckoutPage() {
         throw new Error(apiErrorMessage(syncBody, 'Could not synchronize cart'));
       }
 
+      let deliveryAddressId: string | undefined;
+      if (deliveryType === 'DELIVERY') {
+        const addressResponse = await resilientFetch('/api/addresses', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+          body: JSON.stringify({
+            municipality_id: Number(municipalityId),
+            ward_id: Number(wardId),
+            tole_locality: String(form.get('address') || '').trim(),
+            postal_code: String(form.get('postal_code') || '').trim(),
+            phone: String(form.get('phone') || '').trim(),
+            address_type: 'HOME',
+            metadata: { recipient_name: String(form.get('name') || '').trim() },
+          }),
+        });
+        const savedAddress = await addressResponse.json().catch(() => ({}));
+        if (!addressResponse.ok) {
+          throw new Error(apiErrorMessage(savedAddress, 'Could not save delivery address'));
+        }
+        if (typeof savedAddress?.id !== 'string' || !savedAddress.id) {
+          throw new Error('Could not save delivery address');
+        }
+        deliveryAddressId = savedAddress.id;
+      }
+
       const payload =
         deliveryType === 'DELIVERY'
           ? {
@@ -198,6 +224,7 @@ export default function CheckoutPage() {
               store_id: selectedStore.id,
               idempotency_key: idempotencyKey,
               delivery_type: 'DELIVERY',
+              address_id: deliveryAddressId,
               shipping_name: form.get('name'),
               shipping_phone: form.get('phone'),
               shipping_address: form.get('address'),
