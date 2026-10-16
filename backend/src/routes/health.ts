@@ -53,7 +53,7 @@ export async function healthRoutes(fastify: FastifyInstance) {
       const { query } = await import("../database/connection.js");
       await query("SELECT 1");
       const migration = await query(
-        "SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE migration_id = $1) AS current",
+        "SELECT EXISTS (SELECT 1 FROM public.schema_migrations WHERE migration_id = $1) AS current",
         [LATEST_MIGRATION_ID],
       );
       if (!migration.rows[0]?.current) {
