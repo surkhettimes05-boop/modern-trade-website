@@ -363,6 +363,30 @@ export class WebOrderService {
         throw new Error("COD cash receipt must be confirmed before delivery");
       }
 
+      if (status === "OUT_FOR_DELIVERY") {
+        const fulfillment = await client.query(
+          `SELECT id, status FROM order_fulfillment
+             WHERE order_id = $1 AND status <> 'CANCELLED'
+             ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+          [orderId],
+        );
+        if (!fulfillment.rows.length) {
+          throw new Error("Delivery assignment is required before dispatch");
+        }
+      }
+
+      if (status === "DELIVERED" && order.delivery_type === "DELIVERY") {
+        const fulfillment = await client.query(
+          `SELECT id, status FROM order_fulfillment
+             WHERE order_id = $1 AND status <> 'CANCELLED'
+             ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+          [orderId],
+        );
+        if (!fulfillment.rows.length) {
+          throw new Error("Delivery assignment is required before delivery");
+        }
+      }
+
       // Keep reserved stock unavailable while staff fulfils the order. When the
       // delivery is completed, deduct the physical batch inventory and consume
       // the reservations in the same database transaction.
@@ -467,6 +491,57 @@ export class WebOrderService {
           [status, orderId],
         );
       }
+      if (status === "OUT_FOR_DELIVERY" && order.delivery_type === "DELIVERY") {
+        stage = "dispatch-fulfillment";
+        await client.query(
+          `UPDATE order_fulfillment
+              SET status = 'IN_PROGRESS',
+                  started_at = COALESCE(started_at, NOW()),
+                  dispatched_at = COALESCE(dispatched_at, NOW()),
+                  updated_at = NOW()
+            WHERE order_id = $1 AND status <> 'CANCELLED'`,
+          [orderId],
+        );
+      }
+      if (status === "DELIVERED" && order.delivery_type === "DELIVERY") {
+        stage = "complete-fulfillment";
+        await client.query(
+          `UPDATE order_fulfillment
+              SET status = 'COMPLETED',
+                  completed_at = COALESCE(completed_at, NOW()),
+                  delivered_at = COALESCE(delivered_at, NOW()),
+                  updated_at = NOW()
+            WHERE order_id = $1 AND status <> 'CANCELLED'`,
+          [orderId],
+        );
+      }
+      if (status === "DELIVERED" && order.payment_method === "COD") {
+        stage = "record-cod-cash";
+        const fulfillment = await client.query(
+          `SELECT id FROM order_fulfillment
+             WHERE order_id = $1 AND status <> 'CANCELLED'
+             ORDER BY created_at DESC LIMIT 1`,
+          [orderId],
+        );
+        await client.query(
+          `INSERT INTO cod_cash_collections
+             (order_id, store_id, fulfillment_id, collected_by, amount, currency,
+              idempotency_key, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+           ON CONFLICT (order_id) DO NOTHING`,
+          [
+            orderId,
+            order.store_id,
+            fulfillment.rows[0]?.id || null,
+            actorId,
+            order.total_amount,
+            order.currency || "NPR",
+            `cod-delivery:${orderId}`,
+            JSON.stringify({ source: "web_order_delivery" }),
+          ],
+        );
+      }
+
       stage = "update-reservations";
       if (
         ["CONFIRMED", "PICKING", "PACKED", "OUT_FOR_DELIVERY"].includes(status)
@@ -522,6 +597,7 @@ export class WebOrderService {
         message.startsWith("Invalid transition") ||
         message.includes("COD cash receipt") ||
         message.includes("Insufficient inventory") ||
+        message.includes("Delivery assignment is required") ||
         message.includes("Order has no items") ||
         message === "Order not found"
       ) {
