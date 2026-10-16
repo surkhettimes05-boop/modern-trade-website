@@ -4,7 +4,7 @@ import { WebOrderService } from "../services/webOrderService.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
 import { requireStoreAccess } from "../plugins/authorization.js";
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
 import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
 
 const webOrderService = new WebOrderService();
@@ -199,6 +199,82 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       return reply.send(items);
     } catch {
       return reply.status(500).send({ error: "Failed to get order items" });
+    }
+  });
+
+  // Web Order: Assign delivery. web_orders remains the lifecycle source of truth;
+  // order_fulfillment stores assignment/tracking evidence only.
+  fastify.post("/web-orders/:orderId/fulfillment/assign", async (request, reply) => {
+    const { orderId } = z.object({ orderId: z.string().uuid() }).parse(request.params);
+    const body = z.object({
+      assigned_to: z.string().trim().min(1).max(100),
+      idempotency_key: z.string().trim().min(8).max(200),
+      notes: z.string().trim().max(500).optional(),
+    }).parse(request.body);
+
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const orderResult = await client.query(
+        "SELECT id, status, delivery_type FROM web_orders WHERE id = $1 FOR UPDATE",
+        [orderId],
+      );
+      const order = orderResult.rows[0];
+      if (!order) return reply.status(404).send({ error: "Order not found" });
+      if (order.delivery_type !== "DELIVERY") {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "Pickup orders do not require delivery assignment" });
+      }
+      if (order.status !== "PACKED") {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "Order must be PACKED before delivery assignment" });
+      }
+
+      const existing = await client.query(
+        `SELECT * FROM order_fulfillment
+          WHERE order_id = $1 AND status <> 'CANCELLED'
+          ORDER BY created_at DESC LIMIT 1`,
+        [orderId],
+      );
+      if (existing.rows.length) {
+        await client.query("COMMIT");
+        return reply.send(existing.rows[0]);
+      }
+
+      const result = await client.query(
+        `INSERT INTO order_fulfillment
+          (order_id, fulfillment_type, status, assigned_to, assigned_at, notes,
+           idempotency_key, metadata)
+         VALUES ($1, 'DELIVERY', 'ASSIGNED', $2, NOW(), $3, $4, $5::jsonb)
+         ON CONFLICT (idempotency_key) DO NOTHING
+         RETURNING *`,
+        [
+          orderId,
+          body.assigned_to,
+          body.notes || null,
+          body.idempotency_key,
+          JSON.stringify({ assigned_by: (request.user as { id: string }).id }),
+        ],
+      );
+      if (!result.rows.length) {
+        const replay = await client.query(
+          "SELECT * FROM order_fulfillment WHERE idempotency_key = $1",
+          [body.idempotency_key],
+        );
+        if (replay.rows[0]?.order_id !== orderId) {
+          throw new Error("Idempotency key already belongs to another order");
+        }
+        await client.query("COMMIT");
+        return reply.send(replay.rows[0]);
+      }
+      await client.query("COMMIT");
+      return reply.status(201).send(result.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      request.log.error({ err: error, orderId }, "Delivery assignment failed");
+      return reply.status(500).send({ error: "Failed to assign delivery" });
+    } finally {
+      client.release();
     }
   });
 
