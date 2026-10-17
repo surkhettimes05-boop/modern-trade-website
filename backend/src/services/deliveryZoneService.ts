@@ -25,6 +25,76 @@ interface DeliveryZone {
 
 export class DeliveryZoneService {
   /**
+   * Resolve the first open, published store whose active zones serve this
+   * municipality/ward. Store name and ID form the explicit V1 tie-breaker;
+   * inventory is deliberately not part of serviceability assignment.
+   */
+  async resolveFulfillmentStore(addressData: {
+    municipality_id: number;
+    ward_id: number;
+    order_value?: number;
+  }): Promise<{
+    serviceable: boolean;
+    fulfillment_store_id: string | null;
+    delivery_fee: number | null;
+    estimated_delivery_hours: number | null;
+    delivery_quote: any | null;
+    reason: string | null;
+  }> {
+    const stores = await query(
+      `SELECT id
+         FROM stores
+        WHERE status = 'PUBLISHED'
+          AND is_temporarily_closed = FALSE
+        ORDER BY lower(name_en), id`,
+    );
+
+    for (const store of stores.rows) {
+      const quote = await this.getDeliveryQuote({
+        municipality_id: addressData.municipality_id,
+        ward_id: addressData.ward_id,
+        store_id: store.id,
+        order_value: addressData.order_value ?? 0,
+      });
+      if (quote.serviceable) {
+        return {
+          serviceable: true,
+          fulfillment_store_id: store.id,
+          delivery_fee: Number(quote.delivery_fee || 0),
+          estimated_delivery_hours:
+            quote.estimated_delivery_hours == null
+              ? null
+              : Number(quote.estimated_delivery_hours),
+          delivery_quote: quote,
+          reason: null,
+        };
+      }
+    }
+
+    return {
+      serviceable: false,
+      fulfillment_store_id: null,
+      delivery_fee: null,
+      estimated_delivery_hours: null,
+      delivery_quote: null,
+      reason: "OUTSIDE_SERVICE_AREA",
+    };
+  }
+
+  /** Deterministic backend choice used for legacy pickup checkout requests. */
+  async getDefaultOpenStoreId(): Promise<string | null> {
+    const result = await query(
+      `SELECT id
+         FROM stores
+        WHERE status = 'PUBLISHED'
+          AND is_temporarily_closed = FALSE
+        ORDER BY lower(name_en), id
+        LIMIT 1`,
+    );
+    return result.rows[0]?.id || null;
+  }
+
+  /**
    * Create delivery zone
    */
   async createDeliveryZone(zoneData: {
