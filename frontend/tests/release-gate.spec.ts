@@ -264,7 +264,11 @@ test("complete Pasalho COD order flow reconciles inventory and payment", async (
   await page.getByRole("button", { name: "Mark packed" }).click();
   await expect(page.getByRole("button", { name: "Send for delivery" })).toBeVisible();
   await page.getByRole("button", { name: "Send for delivery" }).click();
-  await expect(page.getByRole("button", { name: "Confirm delivered + cash received" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Assign delivery person" })).toBeVisible();
+  await page.getByLabel("Delivery person / rider").fill("QA Delivery Rider");
+  await page.getByRole("button", { name: "Assign & dispatch" }).click();
+  await expect(page.getByRole("dialog", { name: "Assign delivery person" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Confirm delivered + cash received" })).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Confirm delivered + cash received" }).click();
   await expect(page.getByText(order.order_number)).toHaveCount(0, { timeout: 10_000 });
 
