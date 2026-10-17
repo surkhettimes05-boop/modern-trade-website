@@ -66,8 +66,29 @@ test("cart replacement verifies ownership before deleting and rolls back on deni
 });
 
 test("checkout replay locks its key and returns the existing order without stock mutation", async () => {
+  const fingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        customerId: "customer",
+        cartId: "cart",
+        cart: [],
+        addressId: null,
+        deliveryType: "PICKUP",
+        shippingName: "Test",
+        shippingPhone: "9812345678",
+        shippingAddress: null,
+        shippingMunicipalityId: null,
+        shippingWardId: null,
+        shippingPostalCode: null,
+        shippingCountry: null,
+        notes: null,
+      }),
+    )
+    .digest("hex");
   db.mockImplementation(async (sql: string) => ({
-    rows: sql.includes("FROM web_orders") ? [{ id: "order" }] : [],
+    rows: sql.includes("FROM web_orders")
+      ? [{ id: "order", idempotency_request_fingerprint: fingerprint }]
+      : [],
   }));
   const order = await new CheckoutService().createCodOrder({
     cartId: "cart",
@@ -179,3 +200,4 @@ test("configured development Twilio uses provider delivery/check, never a local-
     process.env = oldEnv;
   }
 });
+import { createHash } from "node:crypto";

@@ -34,6 +34,7 @@ describe("COD checkout contract", () => {
       CodCheckoutBodySchema.parse({
         ...common,
         delivery_type: "DELIVERY",
+        address_id: "3f4d234c-2bcc-4e44-91dd-30e4f481451b",
         shipping_address: "Ward 6, Birendranagar",
         shipping_municipality_id: 1,
         shipping_ward_id: 1,
