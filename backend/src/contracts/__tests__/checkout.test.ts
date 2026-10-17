@@ -1,4 +1,7 @@
-import { CodCheckoutBodySchema } from "../checkout.js";
+import {
+  CartValidationBodySchema,
+  CodCheckoutBodySchema,
+} from "../checkout.js";
 
 const common = {
   cart_id: "1f4d234c-2bcc-4e44-91dd-30e4f481451b",
@@ -34,12 +37,38 @@ describe("COD checkout contract", () => {
       CodCheckoutBodySchema.parse({
         ...common,
         delivery_type: "DELIVERY",
+        address_id: "19bb5697-c6bc-4a6e-9e04-f4c08c2d8563",
         shipping_address: "Ward 6, Birendranagar",
         shipping_municipality_id: 1,
         shipping_ward_id: 1,
         shipping_postal_code: "21700",
         shipping_country: "NP",
       }),
-    ).toMatchObject({ delivery_type: "DELIVERY", shipping_country: "NP" });
+    ).toMatchObject({
+      delivery_type: "DELIVERY",
+      address_id: "19bb5697-c6bc-4a6e-9e04-f4c08c2d8563",
+      shipping_country: "NP",
+    });
+  });
+});
+
+describe("cart validation contract", () => {
+  const body = {
+    address_id: "19bb5697-c6bc-4a6e-9e04-f4c08c2d8563",
+    items: [
+      {
+        product_id: "1f4d234c-2bcc-4e44-91dd-30e4f481451b",
+        quantity: 2,
+        client_unit_price: 120,
+      },
+    ],
+  };
+
+  it("accepts address and product quantities without a store authority", () => {
+    expect(CartValidationBodySchema.parse(body)).toEqual(body);
+  });
+
+  it("rejects a client supplied fulfillment store", () => {
+    expect(() => CartValidationBodySchema.parse({ ...body, store_id: common.store_id })).toThrow();
   });
 });

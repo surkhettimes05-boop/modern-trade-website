@@ -12,10 +12,27 @@ const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const backupPath = `${backupDir}/storesync-${stamp}.dump`;
 
 await mkdir(backupDir, { recursive: true });
+const databaseUrl = new URL(connectionString);
+const databaseName = decodeURIComponent(databaseUrl.pathname.replace(/^\/+/, ""));
+const sslMode =
+  databaseUrl.searchParams.get("sslmode") ??
+  (process.env.DATABASE_SSL === "true" ? "require" : undefined);
+
 await execFileAsync(
   process.env.PG_DUMP_BIN || "pg_dump",
-  ["--format=custom", "--file", backupPath, connectionString],
-  { maxBuffer: 1024 * 1024 },
+  ["--format=custom", "--schema=public", "--file", backupPath],
+  {
+    maxBuffer: 1024 * 1024,
+    env: {
+      ...process.env,
+      PGHOST: databaseUrl.hostname,
+      PGPORT: databaseUrl.port || "5432",
+      PGUSER: decodeURIComponent(databaseUrl.username),
+      PGPASSWORD: decodeURIComponent(databaseUrl.password),
+      PGDATABASE: databaseName,
+      ...(sslMode ? { PGSSLMODE: sslMode } : {}),
+    },
+  },
 );
 const applied = await runMigrations(connectionString);
 console.log(

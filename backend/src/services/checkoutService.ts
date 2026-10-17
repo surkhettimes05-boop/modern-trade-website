@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getPool } from "../database/connection.js";
 import { MARKET } from "../config/market.js";
 import { DeliveryZoneService } from "./deliveryZoneService.js";
+import { loadCanonicalCartItems } from "./cartValidationService.js";
 
 const deliveryZones = new DeliveryZoneService();
 
@@ -9,6 +10,7 @@ export class CheckoutService {
   async createCodOrder(input: {
     customerId: string;
     storeId: string;
+    addressId?: string;
     cartId: string;
     idempotencyKey: string;
     deliveryType: "DELIVERY" | "PICKUP";
@@ -24,6 +26,7 @@ export class CheckoutService {
   }) {
     const pool = getPool();
     const client = await pool.connect();
+    let requestFingerprint = "";
     try {
       await client.query("BEGIN");
 
@@ -31,13 +34,106 @@ export class CheckoutService {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
         `checkout:${input.customerId}:${input.idempotencyKey}`,
       ]);
+      const cartFingerprintRows = await client.query(
+        `SELECT ci.product_id, ci.quantity
+           FROM cart_items ci
+           JOIN shopping_carts sc ON sc.id = ci.cart_id
+          WHERE ci.cart_id = $1 AND sc.customer_id = $2
+          ORDER BY ci.product_id`,
+        [input.cartId, input.customerId],
+      );
+      requestFingerprint = createHash("sha256")
+        .update(
+          JSON.stringify({
+            customerId: input.customerId,
+            cartId: input.cartId,
+            cart: cartFingerprintRows.rows.map((row) => [
+              String(row.product_id),
+              Number(row.quantity),
+            ]),
+            addressId: input.addressId || null,
+            deliveryType: input.deliveryType,
+            shippingName: input.shippingName.trim(),
+            shippingPhone: input.shippingPhone.trim(),
+            shippingAddress: input.shippingAddress?.trim() || null,
+            shippingMunicipalityId: input.shippingMunicipalityId || null,
+            shippingWardId: input.shippingWardId || null,
+            shippingPostalCode: input.shippingPostalCode?.trim() || null,
+            shippingCountry: input.shippingCountry || null,
+            notes: input.notes?.trim() || null,
+          }),
+        )
+        .digest("hex");
       const existing = await client.query(
         "SELECT * FROM web_orders WHERE idempotency_key = $1 AND customer_id = $2",
         [input.idempotencyKey, input.customerId],
       );
       if (existing.rows[0]) {
+        if (
+          existing.rows[0].idempotency_request_fingerprint !==
+          requestFingerprint
+        ) {
+          throw new Error("IDEMPOTENCY_CONFLICT");
+        }
         await client.query("COMMIT");
         return existing.rows[0];
+      }
+
+      let fulfillmentStoreId = input.storeId;
+      let savedAddress: {
+        id: string;
+        municipality_id: number;
+        ward_id: number;
+        house_number: string | null;
+        street: string | null;
+        tole_locality: string | null;
+        landmark: string | null;
+        postal_code: string | null;
+      } | null = null;
+      if (input.deliveryType === "DELIVERY") {
+        if (!input.addressId) {
+          throw new Error("A saved delivery address is required");
+        }
+        const addressResult = await client.query(
+          `SELECT id, municipality_id, ward_id, house_number, street,
+                  tole_locality, landmark, postal_code
+             FROM customer_addresses
+            WHERE id = $1 AND customer_id = $2
+            FOR SHARE`,
+          [input.addressId, input.customerId],
+        );
+        savedAddress = addressResult.rows[0] || null;
+        if (
+          !savedAddress ||
+          !savedAddress.municipality_id ||
+          !savedAddress.ward_id
+        ) {
+          throw new Error("A complete saved delivery address is required");
+        }
+        const geography = await client.query(
+          `SELECT 1 FROM nepal_wards
+            WHERE id = $1 AND municipality_id = $2`,
+          [savedAddress.ward_id, savedAddress.municipality_id],
+        );
+        if (!geography.rows[0]) {
+          throw new Error("Saved address municipality and ward do not match");
+        }
+        const assignment = await deliveryZones.resolveFulfillmentStore({
+          municipality_id: savedAddress.municipality_id,
+          ward_id: savedAddress.ward_id,
+        });
+        if (!assignment.serviceable || !assignment.fulfillment_store_id) {
+          throw new Error("Address is outside all active delivery areas");
+        }
+        // The legacy request field remains accepted for compatibility, but is
+        // never used as the authority for a delivery order.
+        fulfillmentStoreId = assignment.fulfillment_store_id;
+      } else {
+        // Pickup has no delivery address to resolve. Keep its store choice
+        // backend-owned as well by using the same deterministic store order.
+        const defaultStoreId = await deliveryZones.getDefaultOpenStoreId();
+        if (!defaultStoreId) throw new Error("No store is accepting orders");
+        fulfillmentStoreId = defaultStoreId;
       }
 
       const storeResult = await client.query(
@@ -45,7 +141,7 @@ export class CheckoutService {
            FROM stores
           WHERE id = $1 AND status = 'PUBLISHED'
           FOR SHARE`,
-        [input.storeId],
+        [fulfillmentStoreId],
       );
       const store = storeResult.rows[0];
       if (!store || store.is_temporarily_closed) {
@@ -54,42 +150,16 @@ export class CheckoutService {
 
       const cart = await client.query(
         "SELECT * FROM shopping_carts WHERE id = $1 AND customer_id = $2 AND store_id = $3 AND status = 'ACTIVE' FOR UPDATE",
-        [input.cartId, input.customerId, input.storeId],
+        [input.cartId, input.customerId, fulfillmentStoreId],
       );
       if (!cart.rows[0]) {
         throw new Error("Cart is not available for this customer and store");
       }
 
       const items = await client.query(
-        `SELECT ci.*, p.name_en, p.status AS product_status,
-                COALESCE(store_price.price, organization_price.price, 0) AS authoritative_price
-           FROM cart_items ci
-           JOIN products p ON p.id = ci.product_id
-           LEFT JOIN LATERAL (
-             SELECT price
-               FROM product_prices
-              WHERE product_id = p.id
-                AND store_id = $2
-                AND active = TRUE
-                AND valid_from <= NOW()
-                AND (valid_to IS NULL OR valid_to > NOW())
-              ORDER BY valid_from DESC
-              LIMIT 1
-           ) store_price ON TRUE
-           LEFT JOIN LATERAL (
-             SELECT price
-               FROM product_prices
-              WHERE product_id = p.id
-                AND store_id IS NULL
-                AND active = TRUE
-                AND valid_from <= NOW()
-                AND (valid_to IS NULL OR valid_to > NOW())
-              ORDER BY valid_from DESC
-              LIMIT 1
-           ) organization_price ON TRUE
-          WHERE ci.cart_id = $1
-          FOR UPDATE OF ci`,
-        [input.cartId, input.storeId],
+        `SELECT product_id, quantity FROM cart_items
+          WHERE cart_id = $1 ORDER BY product_id FOR UPDATE`,
+        [input.cartId],
       );
       if (!items.rows.length) throw new Error("Cart is empty");
 
@@ -98,59 +168,34 @@ export class CheckoutService {
         `SELECT pg_advisory_xact_lock(hashtext(requested.product_id::text || ':' || $2))
            FROM unnest($1::uuid[]) AS requested(product_id)
           ORDER BY requested.product_id`,
-        [productIds, input.storeId],
+        [productIds, fulfillmentStoreId],
       );
 
-      const stockResult = await client.query(
-        `SELECT requested.product_id,
-                COALESCE(inventory.stock, 0)::int AS stock,
-                COALESCE(reservations.reserved, 0)::int AS reserved
-           FROM unnest($1::uuid[]) AS requested(product_id)
-           LEFT JOIN LATERAL (
-             SELECT SUM(quantity)::int AS stock
-               FROM batch_inventory
-              WHERE product_id = requested.product_id AND store_id = $2
-           ) inventory ON TRUE
-           LEFT JOIN LATERAL (
-             SELECT SUM(quantity)::int AS reserved
-               FROM stock_reservations
-              WHERE product_id = requested.product_id
-                AND store_id = $2
-                AND status = 'ACTIVE'
-                AND (order_id IS NOT NULL OR expires_at > NOW())
-           ) reservations ON TRUE`,
-        [productIds, input.storeId],
-      );
-
-      const stockByProduct = new Map(
-        stockResult.rows.map((row) => [String(row.product_id), row]),
+      const canonicalItems = await loadCanonicalCartItems(
+        client,
+        fulfillmentStoreId,
+        items.rows.map((item) => ({
+          product_id: String(item.product_id),
+          quantity: Number(item.quantity),
+        })),
       );
 
       // Product prices are the final customer-facing NPR prices. We do not add
       // a blanket 13% VAT on top because FMCG tax treatment varies by SKU.
       let subtotalPaisa = 0;
-      const pricedItems = items.rows.map((item) => {
-        if (
-          item.product_status !== "PUBLISHED" ||
-          !Number.isInteger(Number(item.quantity)) ||
-          Number(item.quantity) < 1 ||
-          Number(item.quantity) > 999
-        ) {
+      const pricedItems = canonicalItems.map((item) => {
+        if (item.status !== "VALID") {
           throw new Error(
-            "Cart contains an unavailable product or invalid quantity",
+            item.issues[0]?.code === "INSUFFICIENT_STOCK" ||
+                item.issues[0]?.code === "OUT_OF_STOCK"
+              ? `Insufficient stock for ${item.name_en || item.product_id}`
+              : item.issues[0]?.code === "PRODUCT_INACTIVE" ||
+                  item.issues[0]?.code === "PRODUCT_UNAVAILABLE"
+                ? "Cart contains an unavailable product or invalid quantity"
+                : `Price unavailable for ${item.name_en || item.product_id}`,
           );
         }
-        const stock = stockByProduct.get(String(item.product_id));
         const authoritativePrice = Number(item.authoritative_price);
-        if (!Number.isFinite(authoritativePrice) || authoritativePrice <= 0) {
-          throw new Error(`Price unavailable for ${item.name_en}`);
-        }
-        if (
-          Number(stock?.stock || 0) - Number(stock?.reserved || 0) <
-          Number(item.quantity)
-        ) {
-          throw new Error(`Insufficient stock for ${item.name_en}`);
-        }
         const linePaisa =
           Math.round(authoritativePrice * 100) * Number(item.quantity);
         subtotalPaisa += linePaisa;
@@ -177,13 +222,7 @@ export class CheckoutService {
       if (input.deliveryType === "PICKUP") {
         shippingAddress = store.address_en;
       } else {
-        if (
-          !input.shippingAddress ||
-          !input.shippingMunicipalityId ||
-          !input.shippingWardId ||
-          !input.shippingPostalCode ||
-          input.shippingCountry !== MARKET.countryCode
-        ) {
+        if (!savedAddress || input.shippingCountry !== MARKET.countryCode) {
           throw new Error("A complete Nepal delivery address is required");
         }
 
@@ -201,16 +240,16 @@ export class CheckoutService {
                ON w.id = $2
               AND w.municipality_id = m.id
             WHERE m.id = $1`,
-          [input.shippingMunicipalityId, input.shippingWardId],
+          [savedAddress.municipality_id, savedAddress.ward_id],
         );
         if (!division.rows[0]) {
           throw new Error("Delivery municipality and ward do not match");
         }
 
         const quote = await deliveryZones.getDeliveryQuote({
-          municipality_id: input.shippingMunicipalityId,
-          ward_id: input.shippingWardId,
-          store_id: input.storeId,
+          municipality_id: savedAddress.municipality_id,
+          ward_id: savedAddress.ward_id,
+          store_id: fulfillmentStoreId,
           order_value: subtotal,
         });
         if (!quote.serviceable) {
@@ -219,13 +258,28 @@ export class CheckoutService {
           );
         }
 
-        shippingAddress = input.shippingAddress;
+        shippingAddress = [
+          savedAddress.house_number,
+          savedAddress.street,
+          savedAddress.tole_locality,
+          savedAddress.landmark,
+        ]
+          .map((part) => part?.trim())
+          .filter((part): part is string => Boolean(part))
+          .join(", ");
+        if (!shippingAddress) {
+          shippingAddress = input.shippingAddress || null;
+        }
+        if (!shippingAddress) {
+          throw new Error("Saved delivery address has no street or locality");
+        }
         shippingCity = division.rows[0].municipality_name;
         shippingState = division.rows[0].province_name;
-        shippingPostalCode = input.shippingPostalCode;
+        shippingPostalCode =
+          savedAddress.postal_code || input.shippingPostalCode || null;
         shippingCountry = input.shippingCountry;
-        shippingMunicipalityId = input.shippingMunicipalityId;
-        shippingWardId = input.shippingWardId;
+        shippingMunicipalityId = savedAddress.municipality_id;
+        shippingWardId = savedAddress.ward_id;
         deliveryZoneId = quote.zone_id;
         deliveryQuote = quote;
         shipping = Number(quote.delivery_fee || 0);
@@ -237,7 +291,8 @@ export class CheckoutService {
       const order = await client.query(
         `INSERT INTO web_orders (
           order_number, customer_id, store_id, fulfillment_store_id, cart_id,
-          idempotency_key, status, subtotal, tax_amount, shipping_amount,
+          idempotency_key, idempotency_request_fingerprint, status,
+          subtotal, tax_amount, shipping_amount,
           delivery_fee, discount_amount, total_amount, currency, payment_method,
           payment_status, shipping_name, shipping_phone, shipping_address,
           shipping_city, shipping_state, shipping_postal_code, shipping_country,
@@ -246,16 +301,17 @@ export class CheckoutService {
         )
         VALUES (
           'WO-' || TO_CHAR(NOW(), 'YYYYMMDDHH24MISS') || '-' || SUBSTRING($1, 1, 8),
-          $2, $3, $3, $4, $1, 'PENDING_PAYMENT', $5, $6, $7, $7, 0, $8,
-          '${MARKET.currencyCode}', 'COD', 'PENDING', $9, $10, $11, $12, $13,
-          $14, $15, $16, $17, $18, $19, $20::jsonb, $21
+          $2, $3, $3, $4, $1, $5, 'PENDING_PAYMENT', $6, $7, $8, $8, 0, $9,
+          '${MARKET.currencyCode}', 'COD', 'PENDING', $10, $11, $12, $13, $14,
+          $15, $16, $17, $18, $19, $20, $21::jsonb, $22
         )
         RETURNING *`,
         [
           input.idempotencyKey,
           input.customerId,
-          input.storeId,
+          fulfillmentStoreId,
           input.cartId,
+          requestFingerprint,
           subtotal,
           tax,
           shipping,
@@ -313,7 +369,7 @@ export class CheckoutService {
                 AS reservation(reservation_id, product_id, quantity)`,
         [
           order.rows[0].id,
-          input.storeId,
+          fulfillmentStoreId,
           pricedItems.map(() => `RES-${randomUUID()}`),
           pricedItems.map((item) => item.product_id),
           pricedItems.map((item) => item.quantity),
@@ -360,12 +416,30 @@ export class CheckoutService {
           "SELECT * FROM web_orders WHERE idempotency_key = $1 AND customer_id = $2",
           [input.idempotencyKey, input.customerId],
         );
-        if (existing.rows[0]) return existing.rows[0];
+        if (existing.rows[0]) {
+          if (
+            existing.rows[0].idempotency_request_fingerprint !==
+            requestFingerprint
+          ) {
+            throw new Error("IDEMPOTENCY_CONFLICT");
+          }
+          return existing.rows[0];
+        }
       }
       throw error;
     } finally {
       client.release();
     }
+  }
+
+  async getOrderAttempt(customerId: string, idempotencyKey: string) {
+    const result = await getPool().query(
+      `SELECT id, order_number, status, total_amount, order_date, delivery_type
+         FROM web_orders
+        WHERE customer_id = $1 AND idempotency_key = $2`,
+      [customerId, idempotencyKey],
+    );
+    return result.rows[0] || null;
   }
 
   async cancelCustomerOrder(

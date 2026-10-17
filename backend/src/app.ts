@@ -16,6 +16,8 @@ import { webOrderRoutes } from "./routes/webOrders.js";
 import { operationsAuthRoutes } from "./routes/operationsAuth.js";
 import { checkoutRoutes } from "./routes/checkout.js";
 import { addressRoutes } from "./routes/addresses.js";
+import { customerFavoritesRoutes } from "./routes/customerFavorites.js";
+import { customerOrderNotificationRoutes } from "./routes/customerOrderNotifications.js";
 import { protectedOperations } from "./plugins/protectedOperations.js";
 import { privilegedAdministration } from "./plugins/privilegedAdministration.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -196,6 +198,8 @@ export async function buildApp(
   await fastify.register(shoppingCartRoutes, { prefix: "/api" });
   await fastify.register(checkoutRoutes, { prefix: "/api" });
   await fastify.register(addressRoutes, { prefix: "/api" });
+  await fastify.register(customerFavoritesRoutes, { prefix: "/api" });
+  await fastify.register(customerOrderNotificationRoutes, { prefix: "/api" });
   await fastify.register(loyaltyMvpRoutes, { prefix: "/api" });
 
   if (process.env.ENABLE_ADMIN_API === "true") {

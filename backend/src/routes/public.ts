@@ -1,5 +1,69 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
+import {
+  authenticateCustomer,
+  customerId,
+} from "../middleware/customerAuthentication.js";
+import { AddressService } from "../services/addressService.js";
+import { DeliveryZoneService } from "../services/deliveryZoneService.js";
+
+const customerAddresses = new AddressService();
+const deliveryZones = new DeliveryZoneService();
+
+async function resolveCustomerProductStore(
+  request: any,
+  reply: any,
+  input: {
+    address_id?: string;
+    store_id?: string;
+  },
+): Promise<string | null | undefined> {
+  if (!input.address_id) {
+    if (input.store_id) {
+      reply
+        .status(400)
+        .send({
+          error: "A saved address is required for store-scoped product data",
+        });
+      return undefined;
+    }
+    return null;
+  }
+  await authenticateCustomer(request, reply);
+  if (reply.sent) return undefined;
+  const address = await customerAddresses.getAddress(
+    input.address_id,
+    customerId(request),
+  );
+  if (!address || !address.municipality_id || !address.ward_id) {
+    reply.status(404).send({ error: "Serviceable customer address not found" });
+    return undefined;
+  }
+  const db = await import("../database/connection.js");
+  const geography = await db.query(
+    "SELECT 1 FROM nepal_wards WHERE id = $1 AND municipality_id = $2",
+    [address.ward_id, address.municipality_id],
+  );
+  if (!geography.rows[0]) {
+    reply.status(409).send({ error: "Customer address is not serviceable" });
+    return undefined;
+  }
+  const assignment = await deliveryZones.resolveFulfillmentStore({
+    municipality_id: Number(address.municipality_id),
+    ward_id: Number(address.ward_id),
+  });
+  if (!assignment.serviceable || !assignment.fulfillment_store_id) {
+    reply.status(409).send({ error: "Customer address is not serviceable" });
+    return undefined;
+  }
+  if (input.store_id && input.store_id !== assignment.fulfillment_store_id) {
+    reply
+      .status(409)
+      .send({ error: "Fulfillment store does not match the selected address" });
+    return undefined;
+  }
+  return assignment.fulfillment_store_id;
+}
 import { MARKET } from "../config/market.js";
 
 // Validation schemas
@@ -161,7 +225,9 @@ export async function publicRoutes(fastify: FastifyInstance) {
       lang: validatedLang,
       category,
       featured,
+      search,
       store_id,
+      address_id,
       limit,
       offset,
     } = z
@@ -169,12 +235,20 @@ export async function publicRoutes(fastify: FastifyInstance) {
         lang: langSchema,
         category: z.string().uuid().optional(),
         featured: z.enum(["true", "false"]).optional(),
+        search: z.string().trim().min(1).max(100).optional(),
         store_id: z.string().uuid().optional(),
+        address_id: z.string().uuid().optional(),
         limit: z.coerce.number().int().min(1).max(2500).default(500),
         offset: z.coerce.number().int().min(0).max(100_000).default(0),
       })
       .strict()
       .parse(request.query);
+
+    const assignedStoreId = await resolveCustomerProductStore(request, reply, {
+      address_id,
+      store_id,
+    });
+    if (assignedStoreId === undefined) return reply;
 
     try {
       const { query } = await import("../database/connection.js");
@@ -197,11 +271,18 @@ export async function publicRoutes(fastify: FastifyInstance) {
           COALESCE(store_price.price, organization_price.price) as price,
           COALESCE(store_price.original_price, organization_price.original_price) as original_price,
           COALESCE(store_price.currency_code, organization_price.currency_code, '${MARKET.currencyCode}') as currency_code,
-          COALESCE(spa.availability_status, CASE WHEN EXISTS (SELECT 1 FROM batch_inventory bi WHERE bi.product_id = products.id AND bi.store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1)) AND bi.quantity > 0) THEN 'AVAILABLE' ELSE 'OUT_OF_STOCK' END) as availability_status,
+          COALESCE(spa.availability_status, CASE WHEN GREATEST(COALESCE(stock.quantity, 0) - COALESCE(reserved.quantity, 0), 0) > 0 THEN 'AVAILABLE' ELSE 'OUT_OF_STOCK' END) as availability_status,
+          GREATEST(COALESCE(stock.quantity, 0) - COALESCE(reserved.quantity, 0), 0)::int AS available_quantity,
           COALESCE(products.meta_title_${validatedLang}, products.meta_title_en) as meta_title,
           COALESCE(products.meta_description_${validatedLang}, products.meta_description_en) as meta_description
         FROM products
         LEFT JOIN categories c ON c.id = products.category_id
+        LEFT JOIN LATERAL (
+          SELECT SUM(quantity) AS quantity FROM batch_inventory WHERE product_id = products.id AND store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1))
+        ) stock ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT SUM(quantity) AS quantity FROM stock_reservations WHERE product_id = products.id AND store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1)) AND status = 'ACTIVE' AND (order_id IS NOT NULL OR expires_at > NOW())
+        ) reserved ON TRUE
         LEFT JOIN LATERAL (
           SELECT pp.price, pp.original_price, pp.currency_code FROM product_prices pp
           WHERE pp.product_id = products.id AND pp.store_id = COALESCE($1::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1)) AND pp.active = TRUE
@@ -223,12 +304,22 @@ export async function publicRoutes(fastify: FastifyInstance) {
           AND COALESCE(store_price.price, organization_price.price) IS NOT NULL
           AND (expires_at IS NULL OR expires_at > NOW())
       `;
-      const params: unknown[] = [store_id || null];
+      const params: unknown[] = [assignedStoreId];
       let paramIndex = 2;
 
       if (category) {
         queryText += ` AND category_id = $${paramIndex}`;
         params.push(category);
+        paramIndex++;
+      }
+
+      if (search) {
+        queryText += ` AND (
+          COALESCE(products.name_${validatedLang}, products.name_en) ILIKE $${paramIndex}
+          OR products.name_en ILIKE $${paramIndex}
+          OR COALESCE(c.name_${validatedLang}, c.name_en) ILIKE $${paramIndex}
+        )`;
+        params.push(`%${search}%`);
         paramIndex++;
       }
 
@@ -250,30 +341,73 @@ export async function publicRoutes(fastify: FastifyInstance) {
   // Get single product
   fastify.get("/products/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { lang } = request.query as { lang?: string };
-    const validatedLang = langSchema.parse(lang);
+    const {
+      lang: validatedLang,
+      store_id,
+      address_id,
+    } = z
+      .object({
+        lang: langSchema,
+        store_id: z.string().uuid().optional(),
+        address_id: z.string().uuid().optional(),
+      })
+      .strict()
+      .parse(request.query);
+    const assignedStoreId = await resolveCustomerProductStore(request, reply, {
+      address_id,
+      store_id,
+    });
+    if (assignedStoreId === undefined) return reply;
+    const storeExpr =
+      "COALESCE($2::uuid, (SELECT id FROM stores WHERE status = 'PUBLISHED' ORDER BY name_en LIMIT 1))";
 
     try {
       const { query } = await import("../database/connection.js");
 
       const result = await query(
         `SELECT 
-          id,
-          sku,
-          COALESCE(name_${validatedLang}, name_en) as name,
-          COALESCE(description_${validatedLang}, description_en) as description,
-          category_id,
-          COALESCE(pack_size_${validatedLang}, pack_size_en) as pack_size,
-          COALESCE(unit_${validatedLang}, unit_en) as unit,
-          image_url,
-          images,
-          is_featured,
-          COALESCE(meta_title_${validatedLang}, meta_title_en) as meta_title,
-          COALESCE(meta_description_${validatedLang}, meta_description_en) as meta_description
-        FROM products 
-        WHERE id = $1 AND status = 'PUBLISHED'
-          AND (expires_at IS NULL OR expires_at > NOW())`,
-        [id],
+          products.id,
+          products.sku,
+          COALESCE(products.name_${validatedLang}, products.name_en) as name,
+          COALESCE(products.description_${validatedLang}, products.description_en) as description,
+          products.category_id,
+          c.name_en as category_name,
+          COALESCE(products.pack_size_${validatedLang}, products.pack_size_en) as pack_size,
+          COALESCE(products.unit_${validatedLang}, products.unit_en) as unit,
+          products.image_url,
+          products.images,
+          products.is_featured,
+          COALESCE(store_price.price, organization_price.price) as price,
+          COALESCE(store_price.original_price, organization_price.original_price) as original_price,
+          COALESCE(store_price.currency_code, organization_price.currency_code, '${MARKET.currencyCode}') as currency_code,
+          CASE WHEN GREATEST(COALESCE(stock.quantity, 0) - COALESCE(reserved.quantity, 0), 0) > 0 THEN 'AVAILABLE' ELSE 'OUT_OF_STOCK' END as availability_status,
+          GREATEST(COALESCE(stock.quantity, 0) - COALESCE(reserved.quantity, 0), 0)::int AS available_quantity,
+          COALESCE(products.meta_title_${validatedLang}, products.meta_title_en) as meta_title,
+          COALESCE(products.meta_description_${validatedLang}, products.meta_description_en) as meta_description
+        FROM products
+        LEFT JOIN categories c ON c.id = products.category_id
+        LEFT JOIN LATERAL (SELECT SUM(quantity) AS quantity FROM batch_inventory WHERE product_id = products.id AND store_id = ${storeExpr}) stock ON TRUE
+        LEFT JOIN LATERAL (SELECT SUM(quantity) AS quantity FROM stock_reservations WHERE product_id = products.id AND store_id = ${storeExpr} AND status = 'ACTIVE' AND (order_id IS NOT NULL OR expires_at > NOW())) reserved ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT pp.price, pp.original_price, pp.currency_code FROM product_prices pp
+          WHERE pp.product_id = products.id
+            AND pp.store_id = ${storeExpr}
+            AND pp.active = TRUE AND pp.price > 0
+            AND pp.price::text NOT IN ('NaN', 'Infinity', '-Infinity')
+            AND pp.valid_from <= NOW() AND (pp.valid_to IS NULL OR pp.valid_to > NOW())
+          ORDER BY pp.valid_from DESC LIMIT 1
+        ) store_price ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT pp.price, pp.original_price, pp.currency_code FROM product_prices pp
+          WHERE pp.product_id = products.id AND pp.store_id IS NULL
+            AND pp.active = TRUE AND pp.price > 0
+            AND pp.price::text NOT IN ('NaN', 'Infinity', '-Infinity')
+            AND pp.valid_from <= NOW() AND (pp.valid_to IS NULL OR pp.valid_to > NOW())
+          ORDER BY pp.valid_from DESC LIMIT 1
+        ) organization_price ON TRUE
+        WHERE products.id = $1 AND products.status = 'PUBLISHED'
+          AND (products.expires_at IS NULL OR products.expires_at > NOW())`,
+        [id, assignedStoreId],
       );
 
       if (result.rows.length === 0) {

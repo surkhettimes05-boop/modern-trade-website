@@ -138,5 +138,17 @@
   [
     "036_google_web_auth",
     "../database/036_google_web_auth.sql"
+  ],
+  [
+    "037_checkout_attempt_fingerprint",
+    "../database/037_checkout_attempt_fingerprint.sql"
+  ],
+  [
+    "038_customer_addresses",
+    "../database/038_customer_addresses.sql"
+  ],
+  [
+    "039_customer_favorites",
+    "../database/039_customer_favorites.sql"
   ]
 ]
