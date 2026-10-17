@@ -246,7 +246,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
           (order_id, fulfillment_type, status, assigned_to, assigned_at, notes,
            idempotency_key, metadata)
          VALUES ($1, 'DELIVERY', 'ASSIGNED', $2, NOW(), $3, $4, $5::jsonb)
-         ON CONFLICT (idempotency_key) DO NOTHING
+         ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
          RETURNING *`,
         [
           orderId,
