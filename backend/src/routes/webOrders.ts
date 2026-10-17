@@ -4,7 +4,7 @@ import { WebOrderService } from "../services/webOrderService.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
 import { requireStoreAccess } from "../plugins/authorization.js";
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
 import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
 
 const webOrderService = new WebOrderService();
@@ -199,6 +199,149 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       return reply.send(items);
     } catch {
       return reply.status(500).send({ error: "Failed to get order items" });
+    }
+  });
+
+  // Web Order: Assign delivery. web_orders remains the lifecycle source of truth;
+  // order_fulfillment stores assignment/tracking evidence only.
+  fastify.post("/web-orders/:orderId/fulfillment/assign", async (request, reply) => {
+    const { orderId } = z.object({ orderId: z.string().uuid() }).parse(request.params);
+    const body = z.object({
+      assigned_to: z.string().trim().min(1).max(100),
+      idempotency_key: z.string().trim().min(8).max(200),
+      notes: z.string().trim().max(500).optional(),
+    }).parse(request.body);
+
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const orderResult = await client.query(
+        "SELECT id, status, delivery_type FROM web_orders WHERE id = $1 FOR UPDATE",
+        [orderId],
+      );
+      const order = orderResult.rows[0];
+      if (!order) return reply.status(404).send({ error: "Order not found" });
+      if (order.delivery_type !== "DELIVERY") {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "Pickup orders do not require delivery assignment" });
+      }
+      if (order.status !== "PACKED") {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "Order must be PACKED before delivery assignment" });
+      }
+
+      const existing = await client.query(
+        `SELECT * FROM order_fulfillment
+          WHERE order_id = $1 AND status <> 'CANCELLED'
+          ORDER BY created_at DESC LIMIT 1`,
+        [orderId],
+      );
+      if (existing.rows.length) {
+        await client.query("COMMIT");
+        return reply.send(existing.rows[0]);
+      }
+
+      const result = await client.query(
+        `INSERT INTO order_fulfillment
+          (order_id, fulfillment_type, status, assigned_to, assigned_at, notes,
+           idempotency_key, metadata)
+         VALUES ($1, 'DELIVERY', 'ASSIGNED', $2, NOW(), $3, $4, $5::jsonb)
+         ON CONFLICT (idempotency_key) DO NOTHING
+         RETURNING *`,
+        [
+          orderId,
+          body.assigned_to,
+          body.notes || null,
+          body.idempotency_key,
+          JSON.stringify({ assigned_by: (request.user as { id: string }).id }),
+        ],
+      );
+      if (!result.rows.length) {
+        const replay = await client.query(
+          "SELECT * FROM order_fulfillment WHERE idempotency_key = $1",
+          [body.idempotency_key],
+        );
+        if (replay.rows[0]?.order_id !== orderId) {
+          throw new Error("Idempotency key already belongs to another order");
+        }
+        await client.query("COMMIT");
+        return reply.send(replay.rows[0]);
+      }
+      await client.query("COMMIT");
+      return reply.status(201).send(result.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      request.log.error({ err: error, orderId }, "Delivery assignment failed");
+      return reply.status(500).send({ error: "Failed to assign delivery" });
+    } finally {
+      client.release();
+    }
+  });
+
+  fastify.post("/web-orders/:orderId/cod-settlement", async (request, reply) => {
+    const { orderId } = z.object({ orderId: z.string().uuid() }).parse(request.params);
+    const body = z.object({
+      counted_amount: z.coerce.number().nonnegative(),
+      idempotency_key: z.string().trim().min(8).max(200),
+      reason: z.string().trim().min(1).max(500).optional(),
+    }).parse(request.body);
+    const user = request.user as { id: string; roleKey?: string; capabilities?: string[] };
+    const allowed = user.roleKey === "platform_admin" ||
+      user.capabilities?.includes("system.manage") ||
+      user.capabilities?.includes("reconciliation.manage");
+    if (!allowed) return reply.status(403).send({ error: "COD reconciliation permission required" });
+
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const found = await client.query(
+        "SELECT * FROM cod_cash_collections WHERE order_id = $1 FOR UPDATE", [orderId],
+      );
+      const collection = found.rows[0];
+      if (!collection) {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "COD cash has not been collected for this order" });
+      }
+      const prior = await client.query(
+        "SELECT * FROM cod_cash_settlements WHERE collection_id = $1", [collection.id],
+      );
+      if (prior.rows.length) {
+        await client.query("COMMIT");
+        return reply.send(prior.rows[0]);
+      }
+      const expected = Number(collection.amount);
+      const variance = body.counted_amount - expected;
+      const status = Math.abs(variance) < 0.005 ? "MATCHED" : "DISCREPANCY";
+      if (status === "DISCREPANCY" && !body.reason) {
+        await client.query("ROLLBACK");
+        return reply.status(400).send({ error: "Reason is required for a COD cash discrepancy" });
+      }
+      const inserted = await client.query(
+        `INSERT INTO cod_cash_settlements
+          (collection_id, store_id, settled_by, expected_amount, counted_amount,
+           variance, status, reason, idempotency_key, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
+         ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`,
+        [collection.id, collection.store_id, user.id, expected, body.counted_amount,
+         variance, status, body.reason || null, body.idempotency_key,
+         JSON.stringify({ order_id: orderId })],
+      );
+      if (!inserted.rows.length) {
+        const replay = await client.query(
+          "SELECT * FROM cod_cash_settlements WHERE idempotency_key = $1", [body.idempotency_key],
+        );
+        if (replay.rows[0]?.collection_id !== collection.id) throw new Error("Idempotency conflict");
+        await client.query("COMMIT");
+        return reply.send(replay.rows[0]);
+      }
+      await client.query("COMMIT");
+      return reply.status(201).send(inserted.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      request.log.error({ err: error, orderId }, "COD settlement failed");
+      return reply.status(500).send({ error: "Failed to reconcile COD cash" });
+    } finally {
+      client.release();
     }
   });
 
