@@ -69,6 +69,8 @@ export function LiveOrderConsole() {
   const [loading, setLoading] = useState(true);
   const [busyOrderId, setBusyOrderId] = useState('');
   const [error, setError] = useState('');
+  const [assigningOrder, setAssigningOrder] = useState<OrderRow | null>(null);
+  const [deliveryPerson, setDeliveryPerson] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(false);
   const firstLoad = useRef(true);
   const lastAlertId = useRef('');
@@ -151,9 +153,61 @@ export function LiveOrderConsole() {
     setSoundEnabled(false);
   }, []);
 
+  const assignDelivery = useCallback(async () => {
+    if (!assigningOrder) return;
+    const id = value(assigningOrder, 'id', '');
+    const assignedTo = deliveryPerson.trim();
+    if (!id || !assignedTo) {
+      setError('Enter the delivery person name before assigning.');
+      return;
+    }
+    setBusyOrderId(id);
+    setError('');
+    try {
+      const response = await resilientFetch(`/api/web-orders/${encodeURIComponent(id)}/fulfillment/assign`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': readCsrfToken() },
+        body: JSON.stringify({
+          assigned_to: assignedTo,
+          idempotency_key: `delivery-assign:${id}:${assignedTo.toLowerCase()}`,
+        }),
+        timeoutMs: 10000,
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Delivery assignment failed');
+      setAssigningOrder(null);
+      setDeliveryPerson('');
+      await loadOrders(true);
+      await transitionAfterAssignment(assigningOrder);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delivery assignment failed');
+    } finally {
+      setBusyOrderId('');
+    }
+  }, [assigningOrder, deliveryPerson, loadOrders]);
+
+  const transitionAfterAssignment = useCallback(async (order: OrderRow) => {
+    const id = value(order, 'id', '');
+    if (!id) return;
+    const response = await resilientFetch(`/api/web-orders/${encodeURIComponent(id)}/status`, {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': readCsrfToken() },
+      body: JSON.stringify({ status: 'OUT_FOR_DELIVERY', cod_received: false }), timeoutMs: 10000,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Order dispatch failed');
+    await loadOrders(true);
+  }, [loadOrders]);
+
   const transition = useCallback(async (order: OrderRow, status: string) => {
     const id = value(order, 'id', '');
     if (!id) return;
+    if (status === 'OUT_FOR_DELIVERY') {
+      setDeliveryPerson('');
+      setAssigningOrder(order);
+      return;
+    }
     setBusyOrderId(id);
     setError('');
     try {
@@ -266,6 +320,21 @@ export function LiveOrderConsole() {
           </div>
         )}
       </section>
+
+      {assigningOrder && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 p-4" role="dialog" aria-modal="true" aria-labelledby="assign-delivery-title">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <h2 id="assign-delivery-title" className="text-2xl font-black">Assign delivery person</h2>
+            <p className="mt-2 text-sm text-slate-600">Order {value(assigningOrder, 'order_number')}. Assignment is required before dispatch.</p>
+            <label className="mt-5 block text-sm font-semibold" htmlFor="delivery-person">Delivery person / rider</label>
+            <input id="delivery-person" autoFocus value={deliveryPerson} onChange={(event) => setDeliveryPerson(event.target.value)} placeholder="Enter rider name" className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3" />
+            <div className="mt-5 flex gap-3">
+              <button type="button" onClick={() => { setAssigningOrder(null); setDeliveryPerson(''); }} className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-semibold">Cancel</button>
+              <button type="button" disabled={!deliveryPerson.trim() || busyOrderId === value(assigningOrder, 'id', '')} onClick={() => void assignDelivery()} className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 font-bold text-white disabled:opacity-60">{busyOrderId === value(assigningOrder, 'id', '') ? 'Assigning…' : 'Assign & dispatch'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {alertOrder && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="new-order-title">
