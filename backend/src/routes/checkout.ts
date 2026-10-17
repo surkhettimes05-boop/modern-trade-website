@@ -5,13 +5,43 @@ import {
   customerId,
 } from "../middleware/customerAuthentication.js";
 import { CheckoutService } from "../services/checkoutService.js";
-import { CodCheckoutBodySchema } from "../contracts/checkout.js";
+import {
+  CartValidationBodySchema,
+  CodCheckoutBodySchema,
+} from "../contracts/checkout.js";
 import { DeliveryZoneService } from "../services/deliveryZoneService.js";
+import { AddressService } from "../services/addressService.js";
+import { CartValidationService } from "../services/cartValidationService.js";
 
 const checkout = new CheckoutService();
 const deliveryZones = new DeliveryZoneService();
+const addresses = new AddressService();
+const cartValidation = new CartValidationService();
 export async function checkoutRoutes(fastify: FastifyInstance) {
   fastify.addHook("onRequest", authenticateCustomer);
+  fastify.post("/checkout/cart/validate", async (request, reply) => {
+    const body = CartValidationBodySchema.parse(request.body);
+    if (new Set(body.items.map((item) => item.product_id)).size !== body.items.length) {
+      return reply.status(400).send({ error: "Duplicate cart products" });
+    }
+    return reply.send(
+      await cartValidation.validate({
+        customerId: customerId(request),
+        addressId: body.address_id,
+        items: body.items,
+      }),
+    );
+  });
+  fastify.get("/checkout/order-attempt/:idempotencyKey", async (request, reply) => {
+    const { idempotencyKey } = z
+      .object({ idempotencyKey: z.string().min(8).max(100) })
+      .parse(request.params);
+    const order = await checkout.getOrderAttempt(
+      customerId(request),
+      idempotencyKey,
+    );
+    return reply.send(order ? { status: "CONFIRMED", order } : { status: "NOT_FOUND" });
+  });
   fastify.get("/customer/orders", async (request) => {
     const { limit, offset } = z
       .object({
@@ -23,7 +53,17 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     const result = await (
       await import("../database/connection.js")
     ).query(
-      "SELECT * FROM web_orders WHERE customer_id = $1 ORDER BY order_date DESC LIMIT $2 OFFSET $3",
+      `SELECT wo.*,
+              COALESCE(items.item_count, 0)::integer AS item_count
+         FROM web_orders wo
+         LEFT JOIN LATERAL (
+           SELECT SUM(quantity) AS item_count
+             FROM web_order_items
+            WHERE order_id = wo.id
+         ) items ON TRUE
+        WHERE wo.customer_id = $1
+        ORDER BY wo.order_date DESC
+        LIMIT $2 OFFSET $3`,
       [customerId(request), limit, offset],
     );
     return result.rows;
@@ -73,6 +113,63 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       request.log.error({ error }, "Customer order cancellation failed");
       return reply.status(500).send({ error: "Failed to cancel order" });
     }
+  });
+
+  fastify.post("/checkout/serviceability", async (request, reply) => {
+    const body = z
+      .object({
+        address_id: z.string().uuid(),
+        order_value: z.coerce.number().nonnegative().default(0),
+      })
+      .strict()
+      .parse(request.body);
+    const address = await addresses.getAddress(
+      body.address_id,
+      customerId(request),
+    );
+    if (!address) {
+      return reply.status(404).send({ error: "Address not found" });
+    }
+    if (!address.municipality_id || !address.ward_id) {
+      return reply.send({
+        serviceable: false,
+        fulfillment_store_id: null,
+        delivery_fee: null,
+        estimated_delivery_hours: null,
+        reason: "ADDRESS_MISSING_MUNICIPALITY_OR_WARD",
+      });
+    }
+
+    const geography = await (
+      await import("../database/connection.js")
+    ).query(
+      `SELECT 1
+         FROM nepal_wards
+        WHERE id = $1 AND municipality_id = $2`,
+      [address.ward_id, address.municipality_id],
+    );
+    if (!geography.rows[0]) {
+      return reply.send({
+        serviceable: false,
+        fulfillment_store_id: null,
+        delivery_fee: null,
+        estimated_delivery_hours: null,
+        reason: "INVALID_ADDRESS_GEOGRAPHY",
+      });
+    }
+
+    const assignment = await deliveryZones.resolveFulfillmentStore({
+      municipality_id: address.municipality_id,
+      ward_id: address.ward_id,
+      order_value: body.order_value,
+    });
+    return reply.send({
+      serviceable: assignment.serviceable,
+      fulfillment_store_id: assignment.fulfillment_store_id,
+      delivery_fee: assignment.delivery_fee,
+      estimated_delivery_hours: assignment.estimated_delivery_hours,
+      reason: assignment.reason,
+    });
   });
   fastify.get("/checkout/service-areas", async (request) => {
     const { store_id } = z
@@ -149,6 +246,8 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
           ...body,
           customerId: customerId(request),
           storeId: body.store_id,
+          addressId:
+            body.delivery_type === "DELIVERY" ? body.address_id : undefined,
           cartId: body.cart_id,
           idempotencyKey: body.idempotency_key,
           deliveryType: body.delivery_type,
@@ -179,6 +278,12 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Checkout failed";
+      if (message === "IDEMPOTENCY_CONFLICT") {
+        return reply.status(409).send({
+          error: "IDEMPOTENCY_CONFLICT",
+          code: "IDEMPOTENCY_CONFLICT",
+        });
+      }
       const clientError =
         message.includes("stock") ||
         message.includes("Cart") ||
@@ -189,7 +294,7 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         message.includes("Address");
       if (!clientError) request.log.error({ error }, "COD checkout failed");
       return reply
-        .status(clientError ? 400 : 500)
+        .status(clientError ? 409 : 500)
         .send({ error: clientError ? message : "Checkout failed" });
     }
   });
