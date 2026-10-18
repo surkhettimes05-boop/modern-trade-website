@@ -45,7 +45,7 @@ export class PaymentService {
    * Create payment intent
    */
   async createPaymentIntent(paymentData: {
-    provider: "ESEWA" | "KHALTI" | "CASH" | "CARD";
+    provider: "ESEWA" | "KHALTI" | "CASH" | "CARD" | "MOCK_QR";
     amount_npr: number;
     currency?: string;
     order_reference?: string;
@@ -107,6 +107,11 @@ export class PaymentService {
       );
       providerPaymentUrl = khaltiData.paymentUrl;
       providerMetadata = khaltiData.metadata;
+    } else if (paymentData.provider === "MOCK_QR") {
+      providerMetadata = {
+        sandbox: true,
+        qr_payload: `pasalho://pay?intent=${encodeURIComponent(intentNumber)}&amount=${paymentData.amount_npr}&currency=${MARKET.currencyCode}`,
+      };
     }
 
     const result = await query(
@@ -876,9 +881,18 @@ export class PaymentService {
   }
 
   private assertProviderAvailable(
-    provider: "ESEWA" | "KHALTI" | "CASH" | "CARD",
+    provider: "ESEWA" | "KHALTI" | "CASH" | "CARD" | "MOCK_QR",
   ): void {
     if (provider === "CASH") return;
+    if (provider === "MOCK_QR") {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("Mock QR payments are disabled in production");
+      }
+      if (process.env.ENABLE_PAYMENT_MOCK !== "true") {
+        throw new Error("Mock QR payments are disabled");
+      }
+      return;
+    }
     if (process.env.ENABLE_ELECTRONIC_PAYMENTS !== "true") {
       throw new Error("Electronic payments are disabled for the Nepal pilot");
     }
