@@ -220,7 +220,10 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         [orderId],
       );
       const order = orderResult.rows[0];
-      if (!order) return reply.status(404).send({ error: "Order not found" });
+      if (!order) {
+        await client.query("ROLLBACK");
+        return reply.status(404).send({ error: "Order not found" });
+      }
       if (order.delivery_type !== "DELIVERY") {
         await client.query("ROLLBACK");
         return reply.status(409).send({ error: "Pickup orders do not require delivery assignment" });
@@ -246,7 +249,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
           (order_id, fulfillment_type, status, assigned_to, assigned_at, notes,
            idempotency_key, metadata)
          VALUES ($1, 'DELIVERY', 'ASSIGNED', $2, NOW(), $3, $4, $5::jsonb)
-         ON CONFLICT (idempotency_key) DO NOTHING
+         ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
          RETURNING *`,
         [
           orderId,
