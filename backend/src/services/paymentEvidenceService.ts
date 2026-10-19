@@ -41,7 +41,7 @@ export class PaymentEvidenceService {
     }
 
     const intent = await query(
-      "SELECT id, provider, amount_npr, currency, status FROM payment_intents WHERE id = $1",
+      "SELECT id, provider, amount AS amount_npr, currency, status FROM payment_intents WHERE id = $1",
       [input.paymentIntentId],
     );
     if (!intent.rows[0]) throw new Error("Payment intent not found");
@@ -128,7 +128,7 @@ export class PaymentEvidenceService {
       if (intent.provider !== "MOCK_QR") {
         throw new Error("Only MOCK_QR intents can be mock-confirmed");
       }
-      if (Number(intent.amount_npr) !== params.amountNpr) {
+      if (Number(intent.amount) !== params.amountNpr) {
         throw new Error("Payment amount does not match payment intent");
       }
 
@@ -167,7 +167,7 @@ export class PaymentEvidenceService {
       await client.query(
         `UPDATE payment_intents
             SET status = 'COMPLETED',
-                provider_transaction_id = $2,
+                provider_intent_id = $2,
                 completed_at = COALESCE(completed_at, NOW()),
                 updated_at = NOW()
           WHERE id = $1 AND status IN ('CREATED','PENDING','PROCESSING','COMPLETED')`,
@@ -175,7 +175,9 @@ export class PaymentEvidenceService {
       );
 
       const updated = await client.query(
-        "SELECT * FROM payment_intents WHERE id = $1",
+        `SELECT *, intent_id AS intent_number, amount AS amount_npr,
+                provider_intent_id AS provider_transaction_id
+           FROM payment_intents WHERE id = $1`,
         [params.paymentIntentId],
       );
       await client.query("COMMIT");

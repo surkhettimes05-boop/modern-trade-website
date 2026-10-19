@@ -70,9 +70,7 @@ describe("PaymentService", () => {
         provider_payment_url: null,
       };
 
-      (query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ number: "PAY-20240115-000003" }] })
-        .mockResolvedValueOnce({ rows: [mockIntent] });
+      (query as jest.Mock).mockResolvedValueOnce({ rows: [mockIntent] });
 
       const result = await paymentService.createPaymentIntent({
         provider: "CASH",
