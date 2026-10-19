@@ -116,27 +116,33 @@ export class PaymentService {
 
     const result = await query(
       `INSERT INTO payment_intents (
-        intent_number, provider, amount_npr, currency, status,
-        order_reference, customer_id, store_id, device_id,
-        provider_payment_url, provider_metadata, signature,
+        intent_id, provider, amount, currency, status,
+        customer_id, store_id, provider_payment_url, provider_metadata,
         idempotency_key, metadata, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      RETURNING *`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING *,
+        intent_id AS intent_number,
+        amount AS amount_npr,
+        provider_intent_id AS provider_transaction_id`,
       [
         intentNumber,
         paymentData.provider,
         paymentData.amount_npr,
         paymentData.currency || MARKET.currencyCode,
         "CREATED",
-        paymentData.order_reference || null,
         paymentData.customer_id || null,
         paymentData.store_id,
-        paymentData.device_id || null,
         providerPaymentUrl,
         JSON.stringify(providerMetadata),
-        signature,
         paymentData.idempotency_key || null,
-        JSON.stringify(paymentData.metadata || {}),
+        JSON.stringify({
+          ...(paymentData.metadata || {}),
+          ...(paymentData.order_reference
+            ? { order_reference: paymentData.order_reference }
+            : {}),
+          ...(paymentData.device_id ? { device_id: paymentData.device_id } : {}),
+          signature,
+        }),
         paymentData.created_by || "system",
       ],
     );
@@ -510,7 +516,7 @@ export class PaymentService {
     const status = webhookData.status || "FAILED";
 
     const intent = await query(
-      "SELECT * FROM payment_intents WHERE intent_number = $1",
+      "SELECT * FROM payment_intents WHERE intent_id = $1",
       [intentNumber],
     );
 
@@ -530,8 +536,8 @@ export class PaymentService {
 
     await query(
       `UPDATE payment_intents
-       SET status = $1, provider_transaction_id = $2, completed_at = NOW()
-       WHERE intent_number = $3`,
+       SET status = $1, provider_intent_id = $2, completed_at = NOW()
+       WHERE intent_id = $3`,
       [
         status === "COMPLETE" ? "COMPLETED" : "FAILED",
         webhookData.transaction_code || webhookData.transactionId,
@@ -558,7 +564,7 @@ export class PaymentService {
     url.search = new URLSearchParams({
       product_code: this.ESEWA_MERCHANT_CODE,
       total_amount: String(paymentIntent.amount_npr),
-      transaction_uuid: paymentIntent.intent_number,
+      transaction_uuid: paymentIntent.intent_id || paymentIntent.intent_number,
     }).toString();
     const response = await fetch(url);
     if (!response.ok)
@@ -573,7 +579,7 @@ export class PaymentService {
     }
     if (
       data.transaction_uuid &&
-      data.transaction_uuid !== paymentIntent.intent_number
+      data.transaction_uuid !== paymentIntent.intent_id || paymentIntent.intent_number
     ) {
       throw new Error("eSewa verification transaction mismatch");
     }
@@ -682,7 +688,7 @@ export class PaymentService {
     const idx = webhookData.idx;
 
     const intent = await query(
-      "SELECT * FROM payment_intents WHERE intent_number = $1",
+      "SELECT * FROM payment_intents WHERE intent_id = $1",
       [purchaseOrderId],
     );
 
@@ -696,8 +702,8 @@ export class PaymentService {
 
     await query(
       `UPDATE payment_intents
-       SET status = $1, provider_transaction_id = $2, completed_at = NOW()
-       WHERE intent_number = $3`,
+       SET status = $1, provider_intent_id = $2, completed_at = NOW()
+       WHERE intent_id = $3`,
       [verified, idx, purchaseOrderId],
     );
 
