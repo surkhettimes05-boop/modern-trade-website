@@ -1,9 +1,11 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { PaymentService } from "../services/paymentService.js";
+import { PaymentEvidenceService } from "../services/paymentEvidenceService.js";
 import { query } from "../database/connection.js";
 
 const paymentService = new PaymentService();
+const paymentEvidenceService = new PaymentEvidenceService();
 
 export async function paymentWebhookRoutes(fastify: FastifyInstance) {
   const options = {
@@ -45,7 +47,7 @@ export async function paymentWebhookRoutes(fastify: FastifyInstance) {
 export async function paymentRoutes(fastify: FastifyInstance) {
   fastify.get("/payments/intents", async (request, reply) => {
     const schema = z.object({
-      provider: z.enum(["ESEWA", "KHALTI", "CASH", "CARD"]).optional(),
+      provider: z.enum(["ESEWA", "KHALTI", "CASH", "CARD", "MOCK_QR"]).optional(),
       status: z.string().optional(),
       store_id: z.string().uuid().optional(),
       limit: z.coerce.number().min(1).max(200).default(50),
@@ -71,7 +73,7 @@ export async function paymentRoutes(fastify: FastifyInstance) {
   // Payment: Create payment intent
   fastify.post("/payments/intents", async (request, reply) => {
     const schema = z.object({
-      provider: z.enum(["ESEWA", "KHALTI", "CASH", "CARD"]),
+      provider: z.enum(["ESEWA", "KHALTI", "CASH", "CARD", "MOCK_QR"]),
       amount_npr: z.number().positive(),
       currency: z.string().optional(),
       order_reference: z.string().optional(),
@@ -140,6 +142,37 @@ export async function paymentRoutes(fastify: FastifyInstance) {
       return reply
         .status(500)
         .send({ error: "Failed to verify payment status" });
+    }
+  });
+
+  // Payment evidence: append-only audit trail for an intent.
+  fastify.get("/payments/intents/:intentId/evidence", async (request, reply) => {
+    const { intentId } = z.object({ intentId: z.string().uuid() }).parse(request.params);
+    const evidence = await paymentEvidenceService.listForIntent(intentId);
+    return reply.send(evidence);
+  });
+
+  // Sandbox only: simulate a provider-confirmed QR payment without credentials.
+  // This endpoint cannot run in production and cannot confirm non-MOCK_QR intents.
+  fastify.post("/payments/intents/:intentId/mock-confirm", async (request, reply) => {
+    const { intentId } = z.object({ intentId: z.string().uuid() }).parse(request.params);
+    const body = z.object({
+      source_reference: z.string().min(8).max(160),
+      amount_npr: z.number().positive(),
+    }).parse(request.body);
+
+    try {
+      const result = await paymentEvidenceService.confirmMockPayment({
+        paymentIntentId: intentId,
+        sourceReference: body.source_reference,
+        amountNpr: body.amount_npr,
+        createdBy: (request.user as { id: string }).id,
+      });
+      return reply.send(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Mock confirmation failed";
+      const status = message === "Payment intent not found" ? 404 : 400;
+      return reply.status(status).send({ error: message });
     }
   });
 
