@@ -84,7 +84,11 @@ describe("checkout query batching", () => {
     });
 
     expect(order.id).toBe("order-1");
+    expect(order.status).toBe("RECEIVED");
+    expect(order.payment_status).toBe("PENDING");
     const calls = clientQuery.mock.calls.map(([sql]) => String(sql));
+    expect(calls.some((sql) => sql.includes("'RECEIVED'") && sql.includes("'COD'") && sql.includes("'PENDING'"))).toBe(true);
+    expect(calls.some((sql) => sql.includes("NULL, 'RECEIVED', 'COD checkout submitted'"))).toBe(true);
     expect(
       calls.filter((sql) => sql.includes("pg_advisory_xact_lock")),
     ).toHaveLength(2);
