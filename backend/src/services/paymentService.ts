@@ -4,6 +4,7 @@ import { MARKET } from "../config/market.js";
 
 interface PaymentIntent {
   id: string;
+  intent_id?: string;
   intent_number: string;
   provider: string;
   amount_npr: number;
@@ -13,6 +14,7 @@ interface PaymentIntent {
   customer_id: string;
   store_id: string;
   device_id: string;
+  provider_intent_id?: string;
   provider_transaction_id: string;
   provider_payment_url: string;
   provider_metadata: any;
@@ -72,7 +74,9 @@ export class PaymentService {
     // Check idempotency
     if (paymentData.idempotency_key) {
       const existing = await query(
-        "SELECT * FROM payment_intents WHERE idempotency_key = $1",
+        `SELECT *, intent_id AS intent_number, amount AS amount_npr,
+                provider_intent_id AS provider_transaction_id
+           FROM payment_intents WHERE idempotency_key = $1`,
         [paymentData.idempotency_key],
       );
       if (existing.rows.length > 0) {
