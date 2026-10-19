@@ -15,3 +15,20 @@ Required before enablement: approved secret/public keys, UAT initiation/lookup e
 Required before implementation: official merchant API/QR contract, signing/verification specification, sandbox credentials/endpoints, callback schema, status/refund/reconciliation contracts and public HTTPS callback requirements. The retained legacy adapter is deliberately fail-closed.
 
 Credentials must be stored outside Git and never exposed to the browser or logs. Provider promotion also requires idempotency and valid/tampered/duplicate/expired/mismatched event tests plus live sandbox evidence. No live sandbox result is claimed.
+
+
+## Pasalho payment-engine sandbox
+
+Development can proceed before provider credentials are issued. With
+`ENABLE_ELECTRONIC_PAYMENTS=true` and `ENABLE_PAYMENT_MOCK=true` in a
+non-production environment, staff can create `MOCK_QR` payment intents and
+confirm them through the protected mock-confirm route.
+
+Mock confirmation writes append-only `payment_evidence`, requires an exact
+amount match, is idempotent by provider/source reference, and locks the payment
+intent while completing it. Production rejects `MOCK_QR` even if the flag is
+accidentally configured.
+
+Promotion to a real provider must replace sandbox confirmation with the
+provider's certified callback/status contract. Observer or customer evidence
+may be retained for investigation but must not independently release goods.

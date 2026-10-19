@@ -154,5 +154,9 @@
   [
     "040_cod_fulfillment_cash",
     "../database/040_cod_fulfillment_cash.sql"
+  ],
+  [
+    "041_payment_evidence_engine",
+    "../database/041_payment_evidence_engine.sql"
   ]
 ]
