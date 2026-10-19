@@ -764,10 +764,11 @@ export class PaymentService {
   // ============================================
 
   private async generateIntentNumber(): Promise<string> {
-    const result = await query(
-      "SELECT generate_payment_intent_number() as number",
-    );
-    return result.rows[0].number;
+    // Intent numbers must be portable across freshly migrated databases.
+    // Do not depend on an out-of-band database function that is absent from
+    // the migration manifest. UUID entropy also makes concurrent collisions
+    // negligible without a database sequence.
+    return `PI-${Date.now()}-${crypto.randomUUID()}`;
   }
 
   private calculatePaymentSignature(
