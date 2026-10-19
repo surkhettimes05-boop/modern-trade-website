@@ -108,7 +108,7 @@ test("MOCK_QR payment evidence completes exactly once and rejects mismatches", a
     }),
   ).rejects.toThrow("Payment amount does not match payment intent");
   const mismatchState = await query(
-    "SELECT status, provider_transaction_id FROM payment_intents WHERE id = $1",
+    "SELECT status, provider_intent_id AS provider_transaction_id FROM payment_intents WHERE id = $1",
     [mismatchIntent.id],
   );
   expect(mismatchState.rows[0].status).toBe("CREATED");
@@ -130,7 +130,7 @@ test("MOCK_QR payment evidence completes exactly once and rejects mismatches", a
     }),
   ).rejects.toThrow("Payment evidence reference belongs to another intent");
   const secondState = await query(
-    "SELECT status, provider_transaction_id FROM payment_intents WHERE id = $1",
+    "SELECT status, provider_intent_id AS provider_transaction_id FROM payment_intents WHERE id = $1",
     [secondIntent.id],
   );
   expect(secondState.rows[0].status).toBe("CREATED");
