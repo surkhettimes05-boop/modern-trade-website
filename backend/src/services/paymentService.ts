@@ -282,7 +282,9 @@ export class PaymentService {
    * Verify payment status with provider
    */
   async verifyPaymentStatus(intentId: string): Promise<PaymentIntent> {
-    const intent = await query("SELECT * FROM payment_intents WHERE id = $1", [
+    const intent = await query(`SELECT *, intent_id AS intent_number, amount AS amount_npr,
+              provider_intent_id AS provider_transaction_id
+         FROM payment_intents WHERE id = $1`, [
       intentId,
     ]);
 
@@ -300,7 +302,9 @@ export class PaymentService {
       await this.updatePaymentStatus(intentId, status);
     }
 
-    const updated = await query("SELECT * FROM payment_intents WHERE id = $1", [
+    const updated = await query(`SELECT *, intent_id AS intent_number, amount AS amount_npr,
+              provider_intent_id AS provider_transaction_id
+         FROM payment_intents WHERE id = $1`, [
       intentId,
     ]);
     return updated.rows[0];
@@ -319,7 +323,9 @@ export class PaymentService {
     if (process.env.NODE_ENV === "production") {
       throw new Error("Provider refunds require a verified provider contract");
     }
-    const intent = await query("SELECT * FROM payment_intents WHERE id = $1", [
+    const intent = await query(`SELECT *, intent_id AS intent_number, amount AS amount_npr,
+              provider_intent_id AS provider_transaction_id
+         FROM payment_intents WHERE id = $1`, [
       intentId,
     ]);
 
@@ -339,11 +345,11 @@ export class PaymentService {
     // Check idempotency
     if (idempotencyKey) {
       const existing = await query(
-        "SELECT * FROM payment_refunds WHERE idempotency_key = $1",
+        "SELECT * FROM payment_refunds WHERE metadata->>'idempotency_key' = $1",
         [idempotencyKey],
       );
       if (existing.rows.length > 0) {
-        return existing.rows[0].refund_number;
+        return existing.rows[0].refund_id;
       }
     }
 
@@ -364,10 +370,10 @@ export class PaymentService {
 
     const result = await query(
       `INSERT INTO payment_refunds (
-        refund_number, payment_intent_id, provider, amount_npr,
-        reason, provider_refund_id, idempotency_key, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING refund_number`,
+        refund_id, payment_intent_id, provider, amount,
+        reason, provider_refund_id, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING refund_id AS refund_number`,
       [
         refundNumber,
         intentId,
@@ -375,7 +381,6 @@ export class PaymentService {
         amount_npr,
         reason,
         providerRefundId,
-        idempotencyKey || null,
         createdBy,
       ],
     );
@@ -410,13 +415,13 @@ export class PaymentService {
     const storesyncResult = await query(
       `SELECT 
         COUNT(*) as transaction_count,
-        SUM(amount_npr) as total_amount,
+        SUM(amount) as total_amount,
         COUNT(*) FILTER (WHERE status = 'COMPLETED') as successful_count,
-        SUM(amount_npr) FILTER (WHERE status = 'COMPLETED') as successful_amount,
+        SUM(amount) FILTER (WHERE status = 'COMPLETED') as successful_amount,
         COUNT(*) FILTER (WHERE status = 'FAILED') as failed_count,
-        SUM(amount_npr) FILTER (WHERE status = 'FAILED') as failed_amount,
+        SUM(amount) FILTER (WHERE status = 'FAILED') as failed_amount,
         COUNT(*) FILTER (WHERE status = 'REFUNDED') as refunded_count,
-        SUM(amount_npr) FILTER (WHERE status = 'REFUNDED') as refunded_amount
+        SUM(amount) FILTER (WHERE status = 'REFUNDED') as refunded_amount
       FROM payment_intents
       WHERE provider = $1
         AND DATE(created_at) = $2
@@ -520,7 +525,9 @@ export class PaymentService {
     const status = webhookData.status || "FAILED";
 
     const intent = await query(
-      "SELECT * FROM payment_intents WHERE intent_id = $1",
+      `SELECT *, intent_id AS intent_number, amount AS amount_npr,
+              provider_intent_id AS provider_transaction_id
+         FROM payment_intents WHERE intent_id = $1`,
       [intentNumber],
     );
 
@@ -583,7 +590,7 @@ export class PaymentService {
     }
     if (
       data.transaction_uuid &&
-      data.transaction_uuid !== paymentIntent.intent_id || paymentIntent.intent_number
+      data.transaction_uuid !== (paymentIntent.intent_id || paymentIntent.intent_number)
     ) {
       throw new Error("eSewa verification transaction mismatch");
     }
@@ -692,7 +699,9 @@ export class PaymentService {
     const idx = webhookData.idx;
 
     const intent = await query(
-      "SELECT * FROM payment_intents WHERE intent_id = $1",
+      `SELECT *, intent_id AS intent_number, amount AS amount_npr,
+              provider_intent_id AS provider_transaction_id
+         FROM payment_intents WHERE intent_id = $1`,
       [purchaseOrderId],
     );
 
