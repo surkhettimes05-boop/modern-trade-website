@@ -349,7 +349,7 @@ export class PaymentService {
         [idempotencyKey],
       );
       if (existing.rows.length > 0) {
-        return existing.rows[0].refund_id;
+        return existing.rows[0].refund_id || existing.rows[0].refund_number;
       }
     }
 
