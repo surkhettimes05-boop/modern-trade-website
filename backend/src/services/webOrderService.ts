@@ -53,6 +53,7 @@ export class WebOrderService {
   private readonly validStatusTransitions: Record<string, string[]> = {
     PENDING: ["CONFIRMED", "CANCELLED"],
     PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
+    RECEIVED: ["CONFIRMED", "CANCELLED"],
     CONFIRMED: ["PICKING", "CANCELLED"],
     PICKING: ["PACKED", "CANCELLED"],
     PACKED: ["OUT_FOR_DELIVERY", "CANCELLED"],
