@@ -68,7 +68,7 @@ describe("checkout query batching", () => {
         };
       }
       if (sql.includes("INSERT INTO web_orders")) {
-        return { rows: [{ id: "order-1", status: "PENDING_PAYMENT" }] };
+        return { rows: [{ id: "order-1", status: "RECEIVED", payment_status: "PENDING" }] };
       }
       return { rows: [], rowCount: 1 };
     });
