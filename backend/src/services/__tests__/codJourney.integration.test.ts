@@ -112,7 +112,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     migration_037_count: "1",
     fingerprint_nullable: "YES",
   });
-  expect(Number(migrationState.rows[0].migration_count)).toBe(39); // 019 is intentionally absent from this project's manifest.
+  expect(Number(migrationState.rows[0].migration_count)).toBe(40); // 019 is intentionally absent from this project's manifest.
   const migrationIds = await query(
     "SELECT migration_id FROM schema_migrations ORDER BY migration_id",
   );
@@ -122,7 +122,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       (_, index) => `${String(index + 1).padStart(3, "0")}_`,
     ),
     ...Array.from(
-      { length: 21 },
+      { length: 22 },
       (_, index) => `${String(index + 20).padStart(3, "0")}_`,
     ),
   ];
