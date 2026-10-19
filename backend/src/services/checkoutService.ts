@@ -301,7 +301,7 @@ export class CheckoutService {
         )
         VALUES (
           'WO-' || TO_CHAR(NOW(), 'YYYYMMDDHH24MISS') || '-' || SUBSTRING($1, 1, 8),
-          $2, $3, $3, $4, $1, $5, 'PENDING_PAYMENT', $6, $7, $8, $8, 0, $9,
+          $2, $3, $3, $4, $1, $5, 'RECEIVED', $6, $7, $8, $8, 0, $9,
           '${MARKET.currencyCode}', 'COD', 'PENDING', $10, $11, $12, $13, $14,
           $15, $16, $17, $18, $19, $20, $21::jsonb, $22
         )
@@ -387,7 +387,7 @@ export class CheckoutService {
         `INSERT INTO order_events
           (order_id, event_type, from_status, to_status, reason, metadata, created_by)
          VALUES (
-           $1, 'CREATED', NULL, 'PENDING_PAYMENT', 'COD checkout submitted',
+           $1, 'CREATED', NULL, 'RECEIVED', 'COD checkout submitted',
            $2::jsonb, $3
          )`,
         [
@@ -458,7 +458,7 @@ export class CheckoutService {
       const order = current.rows[0];
       if (
         !order ||
-        !["PENDING", "PENDING_PAYMENT", "CONFIRMED"].includes(order.status)
+        !["PENDING", "PENDING_PAYMENT", "RECEIVED", "CONFIRMED"].includes(order.status)
       ) {
         throw new Error("Order cannot be cancelled");
       }
