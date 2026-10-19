@@ -158,5 +158,9 @@
   [
     "041_payment_evidence_engine",
     "../database/041_payment_evidence_engine.sql"
+  ],
+  [
+    "042_payment_intent_runtime_contract",
+    "../database/042_payment_intent_runtime_contract.sql"
   ]
 ]
