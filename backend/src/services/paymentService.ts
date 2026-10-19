@@ -371,8 +371,8 @@ export class PaymentService {
     const result = await query(
       `INSERT INTO payment_refunds (
         refund_id, payment_intent_id, provider, amount,
-        reason, provider_refund_id, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        reason, provider_refund_id, created_by, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING refund_id AS refund_number`,
       [
         refundNumber,
@@ -382,13 +382,14 @@ export class PaymentService {
         reason,
         providerRefundId,
         createdBy,
+        JSON.stringify(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
       ],
     );
 
     // Update payment intent status
     await query(
       `UPDATE payment_intents
-       SET status = 'REFUNDED', refunded_at = NOW()
+       SET status = 'REFUNDED', updated_at = NOW()
        WHERE id = $1`,
       [intentId],
     );
