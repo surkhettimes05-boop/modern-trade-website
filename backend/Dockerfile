@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app/backend
 
@@ -11,7 +11,7 @@ RUN npm run build
 RUN mkdir -p dist/database && cp src/database/schema.sql dist/database/schema.sql
 RUN npm prune --omit=dev
 
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 
 WORKDIR /app/backend
 RUN apk add --no-cache postgresql-client
