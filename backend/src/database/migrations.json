@@ -170,5 +170,9 @@
   [
     "044_creator_purchase_cost_evidence",
     "../database/044_creator_purchase_cost_evidence.sql"
+  ],
+  [
+    "045_creator_manual_payouts",
+    "../database/045_creator_manual_payouts.sql"
   ]
 ]
