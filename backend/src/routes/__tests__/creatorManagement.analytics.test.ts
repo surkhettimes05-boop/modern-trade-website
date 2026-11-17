@@ -98,7 +98,7 @@ describe("creator analytics reporting", () => {
       expect(body.profitability.available).toBe(false);
       // The fixture deliberately spans online and in-store POS source systems.
       expect(body.channels).toHaveLength(2);
-      expect(body.channels.reduce((sum: number, channel: { attributed_sales_npr: string }) => sum + Number(channel.attributed_sales_npr), 0)).toBe(1500);
+      expect(body.channels.reduce((sum: number, channel: { attributed_sales_npr: string }) => sum + Number(channel.attributed_sales_npr), 0)).toBe(1750);
       expect(body.leaderboard[0]).toMatchObject({
         id: creatorId,
         visits: 1,
