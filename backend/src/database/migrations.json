@@ -162,5 +162,9 @@
   [
     "042_creator_attribution_rewards",
     "../database/042_creator_attribution_rewards.sql"
+  ],
+  [
+    "043_creator_profitability_cogs",
+    "../database/043_creator_profitability_cogs.sql"
   ]
 ]
