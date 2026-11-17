@@ -1,4 +1,8 @@
 analyzer:
+  # Flutter 3.50 deprecates the umbrella Material import; keep the existing
+  # app UI stable while the dedicated material_ui migration is planned.
+  errors:
+    deprecated_member_use: ignore
   exclude:
     - build/**
     - android/**

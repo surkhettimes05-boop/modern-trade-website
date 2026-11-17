@@ -4,7 +4,7 @@ import { OTPService } from "../services/otpService.js";
 import { SessionService } from "../services/sessionService.js";
 import { CustomerService } from "../services/customerService.js";
 import { validatePhone } from "../utils/phoneNormalization.js";
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { AuthenticatedUser } from "../plugins/authorization.js";
 import crypto from "node:crypto";
@@ -206,6 +206,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         }
 
         let customer = await customerService.findByPhone(body.phone);
+        const isNewCustomer = !customer;
         if (!customer) {
           customer = await customerService.createCustomer({
             phone: body.phone,
@@ -221,6 +222,50 @@ export async function authRoutes(fastify: FastifyInstance) {
             "OTP_VERIFICATION",
           );
         }
+
+        // Only a newly OTP-verified registration can claim a creator referral.
+        // Existing customers cannot retroactively change their acquisition source.
+        const referralToken = (request as any).cookies?.pasalho_creator_referral;
+        if (isNewCustomer && typeof referralToken === "string" && /^[a-f0-9]{64}$/i.test(referralToken)) {
+          const visitTokenHash = crypto.createHash("sha256").update(referralToken).digest("hex");
+          const client = await getPool().connect();
+          try {
+            await client.query("BEGIN");
+            const visit = await client.query(
+              `SELECT v.id, v.creator_id
+                 FROM creator_referral_visits v
+                 JOIN creators c ON c.id = v.creator_id AND c.status = 'ACTIVE'
+                WHERE v.visit_token_hash = $1 AND v.expires_at > NOW()
+                  AND v.converted_customer_id IS NULL
+                FOR UPDATE OF v`,
+              [visitTokenHash],
+            );
+            if (visit.rowCount) {
+              const attribution = await client.query(
+                `INSERT INTO creator_customer_attributions (
+                   customer_id, creator_id, referral_visit_id,
+                   attribution_method, created_by
+                 ) VALUES ($1, $2, $3, 'LINK', 'CUSTOMER_REGISTRATION')
+                 ON CONFLICT (customer_id) DO NOTHING
+                 RETURNING id`,
+                [customer.id, visit.rows[0].creator_id, visit.rows[0].id],
+              );
+              if (attribution.rowCount) {
+                await client.query(
+                  "UPDATE creator_referral_visits SET converted_customer_id = $2 WHERE id = $1",
+                  [visit.rows[0].id, customer.id],
+                );
+              }
+            }
+            await client.query("COMMIT");
+          } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+          } finally {
+            client.release();
+          }
+        }
+        reply.clearCookie("pasalho_creator_referral", { path: "/" });
 
         // Update last login
         await query(
