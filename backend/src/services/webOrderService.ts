@@ -392,10 +392,10 @@ export class WebOrderService {
       // the reservations in the same database transaction.
       if (status === "DELIVERED") {
         const orderItems = await client.query(
-          `SELECT product_id, quantity
+          `SELECT id, product_id, quantity
              FROM web_order_items
             WHERE order_id = $1
-            ORDER BY product_id`,
+            ORDER BY product_id, id`,
           [orderId],
         );
         if (!orderItems.rows.length) {
@@ -407,8 +407,10 @@ export class WebOrderService {
             `${item.product_id}:${order.store_id}`,
           ]);
           let remaining = Number(item.quantity);
+          let costTotal = 0;
+          let costEvidenceComplete = true;
           const batches = await client.query(
-            `SELECT id, batch_id, quantity
+            `SELECT id, batch_id, quantity, cost
                FROM batch_inventory
               WHERE store_id = $1
                 AND product_id = $2
@@ -423,6 +425,12 @@ export class WebOrderService {
             const available = Number(batch.quantity);
             const deduct = Math.min(available, remaining);
             if (deduct <= 0) continue;
+            const unitCost = batch.cost === null ? null : Number(batch.cost);
+            if (unitCost === null || !Number.isFinite(unitCost) || unitCost < 0) {
+              costEvidenceComplete = false;
+            } else {
+              costTotal += deduct * unitCost;
+            }
             await client.query(
               `UPDATE batch_inventory
                   SET quantity = quantity - $1,
@@ -452,6 +460,17 @@ export class WebOrderService {
               `Insufficient inventory to complete delivery for product ${item.product_id}`,
             );
           }
+          await client.query(
+            `UPDATE web_order_items
+                SET cost_total_snapshot = $1::numeric,
+                    cost_evidence_status = $2
+              WHERE id = $3`,
+            [
+              costEvidenceComplete ? (Math.round(costTotal * 100) / 100).toFixed(2) : null,
+              costEvidenceComplete ? "AVAILABLE" : "MISSING_COST",
+              item.id,
+            ],
+          );
         }
       }
 
@@ -575,12 +594,15 @@ export class WebOrderService {
           `INSERT INTO creator_purchase_events (
              creator_id, customer_id, source_system, source_transaction_id,
              source_transaction_number, currency, eligible_spend_npr,
+             cost_of_goods_npr, cost_evidence_status,
              reward_rate_percent, reward_amount_npr, event_status, eligible_at,
              available_at, payload_hash
            )
            SELECT a.creator_id, wo.customer_id, 'COMMERCE', wo.id::text,
                   wo.order_number, 'NPR',
                   GREATEST(wo.subtotal - wo.discount_amount, 0)::numeric,
+                  costs.cost_total,
+                  costs.cost_status,
                   settings.default_rate_percent,
                   ROUND(GREATEST(wo.subtotal - wo.discount_amount, 0)::numeric
                         * settings.default_rate_percent / 100, 2),
@@ -598,6 +620,23 @@ export class WebOrderService {
              JOIN creators creator
                ON creator.id = a.creator_id AND creator.status = 'ACTIVE'
              CROSS JOIN creator_reward_settings settings
+             CROSS JOIN LATERAL (
+               SELECT
+                 CASE
+                   WHEN COUNT(*) > 0
+                    AND COUNT(*) FILTER (WHERE cost_evidence_status <> 'AVAILABLE') = 0
+                   THEN SUM(cost_total_snapshot)
+                   ELSE NULL
+                 END AS cost_total,
+                 CASE
+                   WHEN COUNT(*) > 0
+                    AND COUNT(*) FILTER (WHERE cost_evidence_status <> 'AVAILABLE') = 0
+                   THEN 'AVAILABLE'
+                   ELSE 'MISSING_COST'
+                 END AS cost_status
+                 FROM web_order_items
+                WHERE order_id = wo.id
+             ) costs
             WHERE wo.id = $1 AND wo.status = 'DELIVERED'
               AND wo.payment_status = 'PAID' AND settings.id = 1
            ON CONFLICT (source_system, source_transaction_id) DO NOTHING
