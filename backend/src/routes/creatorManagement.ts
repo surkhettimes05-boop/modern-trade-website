@@ -53,6 +53,122 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
   });
 
 
+  fastify.get("/creator-analytics", async (request) => {
+    const range = z.object({
+      from: z.string().date().optional(),
+      to: z.string().date().optional(),
+    }).parse(request.query);
+    const to = range.to ?? new Date().toISOString().slice(0, 10);
+    const from = range.from ?? new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+    if (from > to) throw new Error("The from date must be on or before the to date");
+    const params = [from, to];
+
+    const [summary, channel, trend, leaderboard] = await Promise.all([
+      query(
+        `SELECT
+           (SELECT COUNT(*)::int FROM creators WHERE created_at < ($2::date + INTERVAL '1 day')) AS total_creators,
+           (SELECT COUNT(*)::int FROM creators WHERE status = 'ACTIVE') AS active_creators,
+           (SELECT COUNT(*)::int FROM creator_referral_visits WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')) AS visits,
+           (SELECT COUNT(*)::int FROM creator_customer_attributions WHERE attributed_at >= $1::date AND attributed_at < ($2::date + INTERVAL '1 day')) AS registrations,
+           (SELECT COUNT(DISTINCT customer_id)::int FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED') AS purchasing_customers,
+           (SELECT COUNT(*)::int FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED') AS completed_purchase_events,
+           (SELECT COALESCE(SUM(eligible_spend_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED') AS attributed_sales_npr,
+           (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PENDING') AS pending_rewards_npr,
+           (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'APPROVED') AS approved_rewards_npr,
+           (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PAID') AS paid_rewards_npr,
+           (SELECT COUNT(*)::int FROM creator_customer_attributions a WHERE a.attributed_at >= $1::date AND a.attributed_at < ($2::date + INTERVAL '1 day') AND EXISTS (SELECT 1 FROM creator_purchase_events p WHERE p.customer_id = a.customer_id AND p.event_status <> 'REVERSED')) AS converted_customers`,
+        params,
+      ),
+      query(
+        `SELECT source_system, COUNT(*)::int AS purchase_events,
+                COALESCE(SUM(eligible_spend_npr), 0)::text AS attributed_sales_npr,
+                COUNT(DISTINCT customer_id)::int AS purchasing_customers
+           FROM creator_purchase_events
+          WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
+            AND event_status <> 'REVERSED'
+          GROUP BY source_system ORDER BY source_system`,
+        params,
+      ),
+      query(
+        `SELECT TO_CHAR(day, 'YYYY-MM-DD') AS day,
+                COALESCE(v.visits, 0)::int AS visits,
+                COALESCE(a.registrations, 0)::int AS registrations,
+                COALESCE(p.orders, 0)::int AS purchase_events,
+                COALESCE(p.sales_npr, 0)::text AS attributed_sales_npr
+           FROM generate_series($1::date, $2::date, INTERVAL '1 day') AS day
+           LEFT JOIN (
+             SELECT created_at::date AS day, COUNT(*) AS visits
+               FROM creator_referral_visits
+              WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
+              GROUP BY created_at::date
+           ) v USING (day)
+           LEFT JOIN (
+             SELECT attributed_at::date AS day, COUNT(*) AS registrations
+               FROM creator_customer_attributions
+              WHERE attributed_at >= $1::date AND attributed_at < ($2::date + INTERVAL '1 day')
+              GROUP BY attributed_at::date
+           ) a USING (day)
+           LEFT JOIN (
+             SELECT created_at::date AS day, COUNT(*) AS orders,
+                    SUM(eligible_spend_npr) AS sales_npr
+               FROM creator_purchase_events
+              WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
+                AND event_status <> 'REVERSED'
+              GROUP BY created_at::date
+           ) p USING (day)
+          ORDER BY day`,
+        params,
+      ),
+      query(
+        `SELECT c.id, c.display_name, c.creator_code, c.status,
+                COUNT(DISTINCT v.id)::int AS visits,
+                COUNT(DISTINCT a.customer_id)::int AS registered_customers,
+                COUNT(DISTINCT p.customer_id)::int AS purchasing_customers,
+                COUNT(DISTINCT p.id)::int AS purchase_events,
+                COALESCE(SUM(p.eligible_spend_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0)::text AS attributed_sales_npr,
+                COALESCE(SUM(p.reward_amount_npr) FILTER (WHERE p.event_status IN ('PENDING','APPROVED','PAID')), 0)::text AS reward_cost_npr
+           FROM creators c
+           LEFT JOIN creator_referral_visits v ON v.creator_id = c.id AND v.created_at >= $1::date AND v.created_at < ($2::date + INTERVAL '1 day')
+           LEFT JOIN creator_customer_attributions a ON a.creator_id = c.id AND a.attributed_at >= $1::date AND a.attributed_at < ($2::date + INTERVAL '1 day')
+           LEFT JOIN creator_purchase_events p ON p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day')
+          GROUP BY c.id
+          ORDER BY SUM(p.eligible_spend_npr) FILTER (WHERE p.event_status <> 'REVERSED') DESC NULLS LAST,
+                   COUNT(DISTINCT p.customer_id) DESC
+          LIMIT 20`,
+        params,
+      ),
+    ]);
+
+    const metrics = summary.rows[0] ?? {};
+    const visits = Number(metrics.visits ?? 0);
+    const registrations = Number(metrics.registrations ?? 0);
+    const purchasingCustomers = Number(metrics.purchasing_customers ?? 0);
+    return {
+      period: { from, to },
+      metrics: {
+        total_creators: Number(metrics.total_creators ?? 0),
+        active_creators: Number(metrics.active_creators ?? 0),
+        visits,
+        registrations,
+        purchasing_customers: purchasingCustomers,
+        completed_purchase_events: Number(metrics.completed_purchase_events ?? 0),
+        attributed_sales_npr: String(metrics.attributed_sales_npr ?? "0.00"),
+        pending_rewards_npr: String(metrics.pending_rewards_npr ?? "0.00"),
+        approved_rewards_npr: String(metrics.approved_rewards_npr ?? "0.00"),
+        paid_rewards_npr: String(metrics.paid_rewards_npr ?? "0.00"),
+        visit_to_registration_percent: visits ? Number((registrations / visits * 100).toFixed(2)) : 0,
+        registration_to_purchase_percent: registrations ? Number((Number(metrics.converted_customers ?? 0) / registrations * 100).toFixed(2)) : 0,
+      },
+      channels: channel.rows,
+      daily: trend.rows,
+      leaderboard: leaderboard.rows,
+      profitability: {
+        available: false,
+        reason: "Order-level cost of goods sold and contribution margin are not yet connected to creator purchase events. Attributed sales and reward cost are reported; profit and ROI are intentionally not estimated.",
+      },
+    };
+  });
+
   fastify.get("/creators", async () => {
     const result = await query(
       `SELECT c.id, c.creator_code, c.display_name, c.contact_phone,
