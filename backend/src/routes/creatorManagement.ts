@@ -152,8 +152,12 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                   WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') AS attributed_sales_npr,
                 (SELECT COALESCE(SUM(p.cost_of_goods_npr), 0)::text FROM creator_purchase_events p
                   WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status = 'AVAILABLE') AS cost_of_goods_npr,
-                (SELECT COALESCE(SUM(p.eligible_spend_npr - p.cost_of_goods_npr), 0)::text FROM creator_purchase_events p
-                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status = 'AVAILABLE') AS measured_gross_profit_npr,
+                CASE
+                  WHEN (SELECT COUNT(*) FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') > 0
+                   AND (SELECT COUNT(*) FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status <> 'AVAILABLE') = 0
+                  THEN (SELECT COALESCE(SUM(p.eligible_spend_npr - p.cost_of_goods_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED')
+                  ELSE NULL
+                END AS measured_gross_profit_npr,
                 (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p
                   WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr,
                 (SELECT COUNT(*)::int FROM creator_purchase_events p
