@@ -24,7 +24,13 @@ export function CreatorManualPayouts() {
     setData(body);
   }, []);
 
-  useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to load payouts')); }, [load]);
+  useEffect(() => {
+    let active = true;
+    Promise.resolve().then(load).catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : 'Unable to load payouts');
+    });
+    return () => { active = false; };
+  }, [load]);
 
   async function recordSettlement(creator: Eligible) {
     const reference = (refs[creator.creator_id] || '').trim();
