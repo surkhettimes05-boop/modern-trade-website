@@ -88,7 +88,7 @@ export default function CreatorPortalPage() {
         ].map(([label, value]) => <article key={String(label)} className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></article>)}
       </section>
       <section className="mt-6 grid gap-4 sm:grid-cols-2">
-        <article className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Creator ledger balance</p><p className="mt-2 text-3xl font-bold">{money(data.ledger.balance_npr)}</p><p className="mt-2 text-xs text-slate-500">Earned {money(data.ledger.earned_npr)} · Reversed {money(data.ledger.reversed_npr)} · Paid {money(data.ledger.paid_npr)}</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Net rewards ledger (includes pending)</p><p className="mt-2 text-3xl font-bold">{money(data.ledger.balance_npr)}</p><p className="mt-2 text-xs text-slate-500">Earned {money(data.ledger.earned_npr)} · Reversed {money(data.ledger.reversed_npr)} · Paid {money(data.ledger.paid_npr)} · Cash-out settlement is not enabled yet</p></article>
         <article className="rounded-xl border border-amber-200 bg-amber-50 p-5"><p className="font-semibold text-amber-900">Profitability reporting is not ready</p><p className="mt-2 text-sm text-amber-800">Sales and reward figures are separate. Pasalho has not completed order-level COGS and refund reconciliation, so this dashboard does not claim creator profit or ROI.</p></article>
       </section>
       <section className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white">
