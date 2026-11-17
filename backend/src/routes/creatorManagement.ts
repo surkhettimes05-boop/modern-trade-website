@@ -85,9 +85,15 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                  status, referral_slug, created_at`,
       [creatorCode, input.display_name, input.contact_phone ?? null, input.contact_email ?? null, referralSlug, actor],
     );
-    const webBase = process.env.CUSTOMER_WEB_URL || process.env.CORS_ORIGIN || "";
-    const referralUrl = `${webBase.replace(/\/$/, "")}/api/public/creators/${referralSlug}/visit`;
-    return reply.status(201).send({ creator: created.rows[0], referral_url: referralUrl });
+    const apiBase = process.env.PUBLIC_API_BASE_URL || "";
+    const referralPath = `/api/public/creators/${referralSlug}/visit`;
+    const referralUrl = apiBase ? new URL(referralPath, apiBase).toString() : null;
+    return reply.status(201).send({
+      creator: created.rows[0],
+      referral_url: referralUrl,
+      referral_path: referralPath,
+      qr_code_ready: Boolean(referralUrl),
+    });
   });
 
   fastify.patch("/creators/:id/status", async (request, reply) => {
