@@ -64,14 +64,21 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
               (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status <> 'REVERSED') AS lifetime_reward_npr,
               (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status = 'PENDING') AS pending_reward_npr
          FROM creators c
-        ORDER BY c.created_at DESC`,
+        ORDER BY purchasing_customers DESC, attributed_spend_npr DESC, c.created_at DESC`,
     );
     const apiBase = process.env.PUBLIC_API_BASE_URL || "";
     return {
-      items: result.rows.map((row) => {
+      items: result.rows.map((row, index) => {
         const referralPath = "/api/public/creators/" + row.referral_slug + "/visit";
+        const purchasingCustomers = Number(row.purchasing_customers ?? 0);
+        const creatorLevel =
+          purchasingCustomers >= 150 ? "ELITE" :
+          purchasingCustomers >= 51 ? "PRO" :
+          purchasingCustomers >= 21 ? "RISING" : "STARTER";
         return {
           ...row,
+          rank: index + 1,
+          creator_level: creatorLevel,
           referral_path: referralPath,
           referral_url: apiBase ? new URL(referralPath, apiBase).toString() : null,
         };
