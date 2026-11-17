@@ -152,7 +152,7 @@ BEGIN
        ) THEN
       EXECUTE format(
         'CREATE POLICY storesync_backend_access ON public.%I FOR ALL TO storesync_app USING (true) WITH CHECK (true)',
-        table_name
+        target_table
       );
     END IF;
   END LOOP;
