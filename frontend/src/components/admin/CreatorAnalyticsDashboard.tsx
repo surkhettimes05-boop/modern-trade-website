@@ -129,10 +129,10 @@ export function CreatorAnalyticsDashboard() {
             {!data.channels.length && <p className="text-sm text-slate-500">No attributed purchases in this period.</p>}
           </div>
         </div>
-        <div className={`rounded-xl border p-4 ${data.profitability.available ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-          <h3 className={`font-semibold ${data.profitability.available ? 'text-emerald-950' : 'text-amber-950'}`}>Creator contribution — not net profit</h3>
-          <p className={`mt-2 text-sm ${data.profitability.available ? 'text-emerald-900' : 'text-amber-900'}`}>{data.profitability.definition}</p>
-          <p className={`mt-2 text-xs ${data.profitability.available ? 'text-emerald-800' : 'text-amber-800'}`}>{data.profitability.reason}</p>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <h3 className="font-semibold text-slate-900">Creator contribution — not net profit</h3>
+          <p className="mt-2 text-sm text-slate-700">{data.profitability.definition}</p>
+          <p className="mt-2 text-xs text-slate-600">{data.profitability.reason}</p>
           <p className="mt-2 text-xs text-slate-600">Refunds/returns, delivery costs, payment fees and store overhead are not yet included. Do not interpret this measure as final net profit.</p>
         </div>
       </div>
