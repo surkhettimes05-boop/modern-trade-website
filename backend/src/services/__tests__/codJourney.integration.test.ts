@@ -112,7 +112,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     migration_037_count: "1",
     fingerprint_nullable: "YES",
   });
-  expect(Number(migrationState.rows[0].migration_count)).toBe(43); // 019 is intentionally absent; creator programme migrations 042-044 are included.
+  expect(Number(migrationState.rows[0].migration_count)).toBe(44); // 019 is intentionally absent; creator programme migrations 042-045 are included.
   const migrationIds = await query(
     "SELECT migration_id FROM schema_migrations ORDER BY migration_id",
   );
