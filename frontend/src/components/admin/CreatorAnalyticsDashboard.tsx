@@ -39,22 +39,32 @@ export function CreatorAnalyticsDashboard() {
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const query = new URLSearchParams({ from, to });
-      const response = await resilientFetch(`/api/creator-analytics?${query.toString()}`, { credentials: 'include', cache: 'no-store' });
-      const body = await response.json() as CreatorAnalytics & { error?: string };
-      if (!response.ok) throw new Error(body.error || 'Unable to load creator analytics');
-      setData(body);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to load creator analytics');
-    } finally {
-      setLoading(false);
-    }
+    const query = new URLSearchParams({ from, to });
+    const response = await resilientFetch(`/api/creator-analytics?${query.toString()}`, { credentials: 'include', cache: 'no-store' });
+    const body = await response.json() as CreatorAnalytics & { error?: string };
+    if (!response.ok) throw new Error(body.error || 'Unable to load creator analytics');
+    return body;
   }, [from, to]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    void load()
+      .then((body) => { if (active) setData(body); })
+      .catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : 'Unable to load creator analytics');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [load]);
+
+  const refresh = () => {
+    setLoading(true);
+    setError('');
+    void load()
+      .then(setData)
+      .catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to load creator analytics'))
+      .finally(() => setLoading(false));
+  };
 
   const metrics = data?.metrics;
   const daily = data?.daily ?? [];
@@ -70,9 +80,9 @@ export function CreatorAnalyticsDashboard() {
         <p className="mt-1 text-sm text-slate-600">Track creator acquisition, attributed commerce and reward exposure across online and POS.</p>
       </div>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs font-semibold text-slate-600">From<input type="date" value={from} max={to} onChange={(event) => setFrom(event.target.value)} className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" /></label>
-        <label className="text-xs font-semibold text-slate-600">To<input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" /></label>
-        <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{loading ? 'Refreshing…' : 'Refresh'}</button>
+        <label className="text-xs font-semibold text-slate-600">From<input type="date" value={from} max={to} onChange={(event) => { setFrom(event.target.value); setLoading(true); setError(''); }} className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" /></label>
+        <label className="text-xs font-semibold text-slate-600">To<input type="date" value={to} min={from} onChange={(event) => { setTo(event.target.value); setLoading(true); setError(''); }} className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" /></label>
+        <button type="button" onClick={refresh} disabled={loading} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{loading ? 'Refreshing…' : 'Refresh'}</button>
       </div>
     </div>
 
