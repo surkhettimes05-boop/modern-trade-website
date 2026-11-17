@@ -83,11 +83,13 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
   fastify.get("/me", async (request, reply) => {
     const creator = await currentCreator(request);
     if (!creator) return reply.status(401).send({ error: "Creator login required." });
+    const referralPath = "/api/public/creators/" + encodeURIComponent(creator.referral_slug) + "/visit";
+    const apiBase = process.env.PUBLIC_API_BASE_URL || "";
     return { creator: {
       id: creator.id, code: creator.creator_code, name: creator.display_name,
       phone_masked: String(creator.contact_phone ?? "").replace(/.(?=.{4})/g, "•"),
       referral_slug: creator.referral_slug,
-      referral_url: `\${process.env.CUSTOMER_WEB_URL ?? ""}/r/\${encodeURIComponent(creator.referral_slug)}`,
+      referral_url: apiBase ? new URL(referralPath, apiBase).toString() : referralPath,
     } };
   });
 
