@@ -18,17 +18,13 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
     const result = await query(
       `SELECT c.id, c.creator_code, c.display_name, c.contact_phone,
               c.contact_email, c.status, c.referral_slug, c.created_at,
-              COUNT(DISTINCT v.id)::int AS scans,
-              COUNT(DISTINCT a.customer_id)::int AS registered_customers,
-              COUNT(DISTINCT CASE WHEN p.id IS NOT NULL THEN p.customer_id END)::int AS purchasing_customers,
-              COALESCE(SUM(p.eligible_spend_npr), 0)::text AS attributed_spend_npr,
-              COALESCE(SUM(p.reward_amount_npr), 0)::text AS lifetime_reward_npr,
-              COALESCE(SUM(p.reward_amount_npr) FILTER (WHERE p.event_status = 'PENDING'), 0)::text AS pending_reward_npr
+              (SELECT COUNT(*)::int FROM creator_referral_visits v WHERE v.creator_id = c.id) AS scans,
+              (SELECT COUNT(*)::int FROM creator_customer_attributions a WHERE a.creator_id = c.id) AS registered_customers,
+              (SELECT COUNT(DISTINCT p.customer_id)::int FROM creator_purchase_events p WHERE p.creator_id = c.id) AS purchasing_customers,
+              (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status <> 'REVERSED') AS attributed_spend_npr,
+              (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status <> 'REVERSED') AS lifetime_reward_npr,
+              (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status = 'PENDING') AS pending_reward_npr
          FROM creators c
-         LEFT JOIN creator_referral_visits v ON v.creator_id = c.id
-         LEFT JOIN creator_customer_attributions a ON a.creator_id = c.id
-         LEFT JOIN creator_purchase_events p ON p.creator_id = c.id
-        GROUP BY c.id
         ORDER BY c.created_at DESC`,
     );
     return { creators: result.rows };
@@ -70,17 +66,13 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     const creator = await query(
       `SELECT c.id, c.creator_code, c.display_name, c.status, c.referral_slug,
-              COUNT(DISTINCT v.id)::int AS scans,
-              COUNT(DISTINCT a.customer_id)::int AS registered_customers,
-              COUNT(DISTINCT p.customer_id)::int AS purchasing_customers,
-              COALESCE(SUM(p.eligible_spend_npr), 0)::text AS attributed_spend_npr,
-              COALESCE(SUM(p.reward_amount_npr), 0)::text AS earned_reward_npr
+              (SELECT COUNT(*)::int FROM creator_referral_visits v WHERE v.creator_id = c.id) AS scans,
+              (SELECT COUNT(*)::int FROM creator_customer_attributions a WHERE a.creator_id = c.id) AS registered_customers,
+              (SELECT COUNT(DISTINCT p.customer_id)::int FROM creator_purchase_events p WHERE p.creator_id = c.id) AS purchasing_customers,
+              (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status <> 'REVERSED') AS attributed_spend_npr,
+              (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status <> 'REVERSED') AS earned_reward_npr
          FROM creators c
-         LEFT JOIN creator_referral_visits v ON v.creator_id = c.id
-         LEFT JOIN creator_customer_attributions a ON a.creator_id = c.id
-         LEFT JOIN creator_purchase_events p ON p.creator_id = c.id
-        WHERE c.id = $1
-        GROUP BY c.id`,
+        WHERE c.id = $1`,
       [params.id],
     );
     if (!creator.rowCount) return reply.status(404).send({ error: "Creator not found" });
