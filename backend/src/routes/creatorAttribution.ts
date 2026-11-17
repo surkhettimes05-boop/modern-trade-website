@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getPool } from "../database/connection.js";
@@ -32,6 +32,46 @@ function verifySignature(timestamp: string, signature: string, body: string) {
 }
 
 export async function creatorAttributionRoutes(fastify: FastifyInstance) {
+  fastify.get(
+    "/public/creators/:slug/visit",
+    { config: { rateLimit: { max: 20, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const params = z.object({ slug: z.string().min(2).max(48) }).parse(request.params);
+      const creator = await getPool().query(
+        "SELECT id FROM creators WHERE referral_slug = $1 AND status = 'ACTIVE' LIMIT 1",
+        [params.slug],
+      );
+      if (!creator.rowCount) {
+        return reply.status(404).send({ error: "Creator referral is unavailable" });
+      }
+
+      const token = randomBytes(32).toString("hex");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
+      const queryParams = z.object({ next: z.string().optional() }).safeParse(request.query);
+      const nextPath = queryParams.success && queryParams.data.next?.startsWith("/") && !queryParams.data.next.startsWith("//")
+        ? queryParams.data.next
+        : "/";
+      await getPool().query(
+        `INSERT INTO creator_referral_visits (
+           creator_id, visit_token_hash, landing_path, expires_at
+         ) VALUES ($1, $2, $3, NOW() + INTERVAL '30 days')`,
+        [creator.rows[0].id, tokenHash, nextPath],
+      );
+      reply.setCookie("pasalho_creator_referral", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 30 * 24 * 60 * 60,
+      });
+      reply.header("cache-control", "no-store");
+      const webBase = process.env.CUSTOMER_WEB_URL || process.env.CORS_ORIGIN || "/";
+      const destination = webBase === "/" ? nextPath : new URL(nextPath, webBase).toString();
+      return reply.redirect(destination);
+    },
+  );
+
+
   fastify.post("/creator-attribution/pos-sales", async (request, reply) => {
     const timestamp = String(request.headers["x-pasalho-timestamp"] ?? "");
     const signature = String(request.headers["x-pasalho-signature"] ?? "");
