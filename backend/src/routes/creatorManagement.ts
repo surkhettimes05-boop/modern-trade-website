@@ -66,7 +66,17 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
          FROM creators c
         ORDER BY c.created_at DESC`,
     );
-    return { items: result.rows };
+    const apiBase = process.env.PUBLIC_API_BASE_URL || "";
+    return {
+      items: result.rows.map((row) => {
+        const referralPath = "/api/public/creators/" + row.referral_slug + "/visit";
+        return {
+          ...row,
+          referral_path: referralPath,
+          referral_url: apiBase ? new URL(referralPath, apiBase).toString() : null,
+        };
+      }),
+    };
   });
 
   fastify.post("/creators", async (request, reply) => {
