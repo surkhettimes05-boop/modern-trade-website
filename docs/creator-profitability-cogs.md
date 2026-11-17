@@ -8,6 +8,10 @@
 - **Physical POS:** Pasalho Lite maintains a moving weighted-average unit cost per stock location. Purchase receipts update the warehouse average, transfers snapshot and carry that cost into store stock, and finalized POS sale items snapshot the store average. COGS is the sum of each sale-time `SaleItem.unitCostSnapshot × quantity`; if any item lacks a verified average cost, the signed outbox marks the entire sale `MISSING_COST` instead of falling back to catalog `costPrice`.
 - **Historical events:** Existing order lines and creator purchase events are marked `MISSING_COST`; no cost is backfilled from retail price, current catalog cost, or an estimate.
 
+## Costing consistency
+
+Both online and POS use moving weighted-average valuation so cross-channel creator contribution is measured under one cost method.
+
 ## Calculation
 
 For cost-covered purchase events:
