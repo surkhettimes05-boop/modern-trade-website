@@ -64,7 +64,7 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
               (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status <> 'REVERSED') AS lifetime_reward_npr,
               (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.event_status = 'PENDING') AS pending_reward_npr
          FROM creators c
-        ORDER BY purchasing_customers DESC, attributed_spend_npr DESC, c.created_at DESC`,
+        ORDER BY purchasing_customers DESC, attributed_spend_npr::numeric DESC, c.created_at DESC`,
     );
     const apiBase = process.env.PUBLIC_API_BASE_URL || "";
     return {
