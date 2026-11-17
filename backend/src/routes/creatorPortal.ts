@@ -43,7 +43,7 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
     if (!parsed.success || !validatePhone(parsed.data.phone)) return reply.status(400).send({ error: "Enter a valid Nepal mobile number." });
     const phone = normalizePhone(parsed.data.phone);
     const creator = await query(
-      "SELECT id FROM creators WHERE regexp_replace(contact_phone, '\\\\D', '', 'g') = $1 AND status = 'ACTIVE' LIMIT 1",
+      "SELECT id FROM creators WHERE RIGHT(regexp_replace(contact_phone, '\\\\D', '', 'g'), 10) = $1 AND status = 'ACTIVE' LIMIT 1",
       [phone],
     );
     // Keep the response identical for registered and unregistered numbers.
@@ -59,7 +59,7 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
     if (!parsed.success || !validatePhone(parsed.data.phone)) return reply.status(400).send({ error: "Invalid phone number or code." });
     const phone = normalizePhone(parsed.data.phone);
     const creator = await query(
-      "SELECT id FROM creators WHERE regexp_replace(contact_phone, '\\\\D', '', 'g') = $1 AND status = 'ACTIVE' LIMIT 1",
+      "SELECT id FROM creators WHERE RIGHT(regexp_replace(contact_phone, '\\\\D', '', 'g'), 10) = $1 AND status = 'ACTIVE' LIMIT 1",
       [phone],
     );
     if (!creator.rowCount) return reply.status(401).send({ error: "Invalid or expired code." });
