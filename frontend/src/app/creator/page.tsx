@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 
 type Creator = { id: string; code: string; name: string; phone_masked: string; referral_slug: string; referral_url: string };
-type Purchase = { source_system: string; source_transaction_number: string; eligible_spend_npr: string; reward_amount_npr: string; event_status: string; eligible_at: string; available_at: string };
+type Purchase = { source_system: string; source_transaction_number: string; eligible_spend_npr: string; reward_amount_npr: string; cogs_npr: string | null; cost_status: string; event_status: string; eligible_at: string; available_at: string };
 type Dashboard = {
-  summary: { clicks: number; registrations: number; purchases: number; purchasing_customers: number; attributed_sales_npr: string; gross_rewards_npr: string };
+  summary: { clicks: number; registrations: number; purchases: number; purchasing_customers: number; attributed_sales_npr: string; gross_rewards_npr: string; verified_cogs_npr: string; purchases_missing_cogs: number; contribution_after_cogs_and_rewards_npr: string | null };
   ledger: { balance_npr: string; earned_npr: string; reversed_npr: string; paid_npr: string };
   purchases: Purchase[];
   profitability_status: string;
@@ -92,11 +92,11 @@ export default function CreatorPortalPage() {
       </section>
       <section className="mt-6 grid gap-4 sm:grid-cols-2">
         <article className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Net rewards ledger (includes pending)</p><p className="mt-2 text-3xl font-bold">{money(data.ledger.balance_npr)}</p><p className="mt-2 text-xs text-slate-500">Earned {money(data.ledger.earned_npr)} · Reversed {money(data.ledger.reversed_npr)} · Paid {money(data.ledger.paid_npr)} · Cash-out settlement is not enabled yet</p></article>
-        <article className="rounded-xl border border-amber-200 bg-amber-50 p-5"><p className="font-semibold text-amber-900">Profitability reporting is not ready</p><p className="mt-2 text-sm text-amber-800">Sales and reward figures are separate. Pasalho has not completed order-level COGS and refund reconciliation, so this dashboard does not claim creator profit or ROI.</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">Contribution after verified COGS and creator rewards</p><p className="mt-2 text-3xl font-bold">{data.summary.contribution_after_cogs_and_rewards_npr === null ? "Not yet measurable" : money(data.summary.contribution_after_cogs_and_rewards_npr)}</p><p className="mt-2 text-xs text-slate-500">{data.summary.purchases_missing_cogs > 0 ? `${data.summary.purchases_missing_cogs} attributed purchases are missing cost evidence.` : "Based on verified POS cost snapshots only. This is before delivery, staff, rent, tax and other operating expenses; it is not net profit or ROI."}</p></article>
       </section>
       <section className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="border-b border-slate-200 p-5"><h2 className="font-bold">Recent attributed purchases</h2></div>
-        <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Date</th><th className="p-3">Channel</th><th className="p-3">Order</th><th className="p-3">Sales</th><th className="p-3">Reward</th><th className="p-3">Status</th></tr></thead><tbody>{data.purchases.map((p, i) => <tr key={p.source_system + p.source_transaction_number + i} className="border-t border-slate-100"><td className="p-3">{new Date(p.eligible_at).toLocaleDateString('en-NP')}</td><td className="p-3">{p.source_system}</td><td className="p-3">{p.source_transaction_number || '—'}</td><td className="p-3">{money(p.eligible_spend_npr)}</td><td className="p-3">{money(p.reward_amount_npr)}</td><td className="p-3">{p.event_status}</td></tr>)}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Date</th><th className="p-3">Channel</th><th className="p-3">Order</th><th className="p-3">Sales</th><th className="p-3">COGS</th><th className="p-3">Reward</th><th className="p-3">Status</th></tr></thead><tbody>{data.purchases.map((p, i) => <tr key={p.source_system + p.source_transaction_number + i} className="border-t border-slate-100"><td className="p-3">{new Date(p.eligible_at).toLocaleDateString('en-NP')}</td><td className="p-3">{p.source_system}</td><td className="p-3">{p.source_transaction_number || '—'}</td><td className="p-3">{money(p.eligible_spend_npr)}</td><td className="p-3">{p.cost_status === "VERIFIED" && p.cogs_npr !== null ? money(p.cogs_npr) : "Unknown"}</td><td className="p-3">{money(p.reward_amount_npr)}</td><td className="p-3">{p.event_status}</td></tr>)}</tbody></table></div>
         {!data.purchases.length && <p className="p-5 text-sm text-slate-500">No attributed purchases yet. Share your link to start tracking.</p>}
       </section>
     </>}

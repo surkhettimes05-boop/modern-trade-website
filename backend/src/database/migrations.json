@@ -166,5 +166,9 @@
   [
     "043_creator_portal_otp_sessions",
     "../database/043_creator_portal_otp_sessions.sql"
+  ],
+  [
+    "044_creator_purchase_cost_evidence",
+    "../database/044_creator_purchase_cost_evidence.sql"
   ]
 ]

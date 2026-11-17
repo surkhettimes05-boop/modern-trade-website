@@ -12,6 +12,8 @@ const posSaleSchema = z.object({
   customerPhoneHash: z.string().regex(/^[a-f0-9]{64}$/),
   currency: z.literal("NPR"),
   eligibleSpendNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),
+  cogsNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/).nullable().optional(),
+  costStatus: z.enum(["VERIFIED", "UNKNOWN"]).optional(),
   completedAt: z.string().datetime(),
 });
 
@@ -23,7 +25,9 @@ const posReturnSchema = z.object({
   originalSourceTransactionId: z.string().uuid(),
   sourceTransactionNumber: z.string().min(1).max(100),
   customerPhoneHash: z.string().regex(/^[a-f0-9]{64}$/),
-  refundAmountNpr: z.string().regex(/^\\d{1,12}(\\.\\d{1,2})?$/),
+  refundAmountNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),
+  reversedCogsNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/).nullable().optional(),
+  costStatus: z.enum(["VERIFIED", "UNKNOWN"]).optional(),
   completedAt: z.string().datetime(),
 });
 
@@ -205,12 +209,12 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
            creator_id, customer_id, source_system, source_transaction_id,
            source_transaction_number, currency, eligible_spend_npr,
            reward_rate_percent, reward_amount_npr, event_status, eligible_at,
-           available_at, payload_hash
+           available_at, payload_hash, cogs_npr, cost_status
          )
          VALUES (
            $1, $2, 'POS', $3, $4, 'NPR', $5::numeric, $6::numeric,
            ROUND($5::numeric * $6::numeric / 100, 2), 'PENDING',
-           $7::timestamptz, $8::timestamptz, $9
+           $7::timestamptz, $8::timestamptz, $9, $10::numeric, $11
          )
          ON CONFLICT (source_system, source_transaction_id) DO NOTHING
          RETURNING id, reward_amount_npr`,
@@ -224,6 +228,8 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
           event.completedAt,
           availableAt.toISOString(),
           payloadHash,
+          event.cogsNpr ?? null,
+          event.costStatus ?? (event.cogsNpr ? "VERIFIED" : "UNKNOWN"),
         ],
       );
       if (!purchase.rowCount) {
@@ -326,7 +332,7 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
 
       const original = await client.query(
         `SELECT id, creator_id, customer_id, eligible_spend_npr, reward_rate_percent,
-                reward_amount_npr, event_status, available_at
+                reward_amount_npr, event_status, available_at, cogs_npr, cost_status
            FROM creator_purchase_events
           WHERE source_system = 'POS' AND source_transaction_id = $1
             AND customer_id = $2
@@ -355,30 +361,44 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
       const remainingSpend = Math.max(0, eligibleBefore - refundable);
       const remainingReward = Math.max(0, rewardBefore - rewardReversal);
       const nextStatus = remainingSpend <= 0.000001 ? "REVERSED" : purchase.event_status;
+      const hasReversedCostEvidence = purchase.cost_status === "VERIFIED" &&
+        event.costStatus === "VERIFIED" && event.reversedCogsNpr !== null && event.reversedCogsNpr !== undefined;
+      const reversedCogs = hasReversedCostEvidence
+        ? Math.min(Number(event.reversedCogsNpr), Number(purchase.cogs_npr ?? 0))
+        : 0;
+      const remainingCogs = hasReversedCostEvidence
+        ? Math.max(0, Number(purchase.cogs_npr ?? 0) - reversedCogs)
+        : null;
+      const nextCostStatus = hasReversedCostEvidence ? "VERIFIED" : "UNKNOWN";
 
       const reversal = await client.query(
         `INSERT INTO creator_purchase_events (
            creator_id, customer_id, source_system, source_transaction_id,
            source_transaction_number, currency, eligible_spend_npr,
            reward_rate_percent, reward_amount_npr, event_status, eligible_at,
-           available_at, reversal_of_event_id, payload_hash
+           available_at, reversal_of_event_id, payload_hash, cogs_npr, cost_status
          ) VALUES ($1, $2, 'POS', $3, $4, 'NPR', $5::numeric, $6::numeric,
-                   $7::numeric, 'REVERSED', $8::timestamptz, $9::timestamptz, $10, $11)
+                   $7::numeric, 'REVERSED', $8::timestamptz, $9::timestamptz, $10, $11,
+                   $12::numeric, $13)
          RETURNING id`,
         [
           purchase.creator_id, purchase.customer_id, event.sourceTransactionId,
           event.sourceTransactionNumber, refundable.toFixed(2), purchase.reward_rate_percent,
           rewardReversal.toFixed(2), event.completedAt, purchase.available_at,
           purchase.id, payloadHash,
+          hasReversedCostEvidence ? reversedCogs.toFixed(2) : null,
+          event.costStatus ?? "UNKNOWN",
         ],
       );
 
       await client.query(
         `UPDATE creator_purchase_events
             SET eligible_spend_npr = $2::numeric, reward_amount_npr = $3::numeric,
-                event_status = $4, updated_at = NOW()
+                event_status = $4, cogs_npr = $5::numeric, cost_status = $6,
+                updated_at = NOW()
           WHERE id = $1`,
-        [purchase.id, remainingSpend.toFixed(2), remainingReward.toFixed(2), nextStatus],
+        [purchase.id, remainingSpend.toFixed(2), remainingReward.toFixed(2), nextStatus,
+          remainingCogs === null ? null : remainingCogs.toFixed(2), nextCostStatus],
       );
       if (rewardReversal > 0) {
         await client.query(
@@ -403,6 +423,7 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
         accepted: true, attributed: true, originalPurchaseEventId: purchase.id,
         reversalEventId: reversal.rows[0].id, reversedEligibleSpendNpr: refundable.toFixed(2),
         reversedRewardNpr: rewardReversal.toFixed(2), remainingRewardNpr: remainingReward.toFixed(2),
+        reversedCogsNpr: hasReversedCostEvidence ? reversedCogs.toFixed(2) : null,
       };
     } catch (error) {
       await client.query("ROLLBACK");
