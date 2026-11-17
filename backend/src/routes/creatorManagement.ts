@@ -5,8 +5,8 @@ import { query } from "../database/connection.js";
 
 const createSchema = z.object({
   display_name: z.string().trim().min(2).max(120),
-  contact_phone: z.string().trim().max(20).optional(),
-  contact_email: z.string().trim().email().optional(),
+  contact_phone: z.preprocess((value) => value === "" ? undefined : value, z.string().trim().max(20).optional()),
+  contact_email: z.preprocess((value) => value === "" ? undefined : value, z.string().trim().email().optional()),
 });
 
 function slugBase(value: string) {
