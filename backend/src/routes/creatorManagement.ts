@@ -53,14 +53,14 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
   });
 
 
-  fastify.get("/creator-analytics", async (request) => {
+  fastify.get("/creator-analytics", async (request, reply) => {
     const range = z.object({
       from: z.string().date().optional(),
       to: z.string().date().optional(),
     }).parse(request.query);
     const to = range.to ?? new Date().toISOString().slice(0, 10);
     const from = range.from ?? new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
-    if (from > to) throw new Error("The from date must be on or before the to date");
+    if (from > to) return reply.status(400).send({ error: "The from date must be on or before the to date" });
     const params = [from, to];
 
     const [summary, channel, trend, leaderboard] = await Promise.all([
@@ -95,7 +95,7 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                 COALESCE(a.registrations, 0)::int AS registrations,
                 COALESCE(p.orders, 0)::int AS purchase_events,
                 COALESCE(p.sales_npr, 0)::text AS attributed_sales_npr
-           FROM generate_series($1::date, $2::date, INTERVAL '1 day') AS day
+           FROM generate_series($1::date, $2::date, INTERVAL '1 day') AS days(day)
            LEFT JOIN (
              SELECT created_at::date AS day, COUNT(*) AS visits
                FROM creator_referral_visits
