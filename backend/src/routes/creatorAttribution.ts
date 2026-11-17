@@ -45,12 +45,32 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: "Creator referral is unavailable" });
       }
 
-      const token = randomBytes(32).toString("hex");
-      const tokenHash = createHash("sha256").update(token).digest("hex");
       const queryParams = z.object({ next: z.string().optional() }).safeParse(request.query);
-      const nextPath = queryParams.success && queryParams.data.next?.startsWith("/") && !queryParams.data.next.startsWith("//")
+      const requestedNext = queryParams.success && queryParams.data.next?.startsWith("/") && !queryParams.data.next.startsWith("//")
         ? queryParams.data.next
         : "/";
+      const webBase = process.env.CUSTOMER_WEB_URL || process.env.CORS_ORIGIN || "/";
+      const existingToken = (request as any).cookies?.pasalho_creator_referral;
+      if (typeof existingToken === "string" && /^[a-f0-9]{64}$/i.test(existingToken)) {
+        const existingHash = createHash("sha256").update(existingToken).digest("hex");
+        const existingVisit = await getPool().query(
+          `SELECT v.landing_path
+             FROM creator_referral_visits v
+             JOIN creators c ON c.id = v.creator_id AND c.status = 'ACTIVE'
+            WHERE v.visit_token_hash = $1 AND v.expires_at > NOW()
+            LIMIT 1`,
+          [existingHash],
+        );
+        if (existingVisit.rowCount) {
+          const nextPath = existingVisit.rows[0].landing_path || requestedNext;
+          const destination = webBase === "/" ? requestedNext : new URL(requestedNext, webBase).toString();
+          reply.header("cache-control", "no-store");
+          return reply.redirect(destination);
+        }
+      }
+
+      const token = randomBytes(32).toString("hex");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
       const visit = await getPool().query(
         `INSERT INTO creator_referral_visits (
            creator_id, visit_token_hash, landing_path, expires_at
@@ -61,7 +81,7 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
            ))
          )
          RETURNING expires_at`,
-        [creator.rows[0].id, tokenHash, nextPath],
+        [creator.rows[0].id, tokenHash, requestedNext],
       );
       reply.setCookie("pasalho_creator_referral", token, {
         httpOnly: true,
