@@ -6,10 +6,10 @@ import { resilientFetch } from '@/lib/resilientFetch';
 type CreatorAnalytics = {
   period: { from: string; to: string };
   metrics: Record<string, number | string>;
-  channels: Array<{ source_system: string; purchase_events: number; attributed_sales_npr: string; purchasing_customers: number }>;
-  daily: Array<{ day: string; visits: number; registrations: number; purchase_events: number; attributed_sales_npr: string }>;
-  leaderboard: Array<{ id: string; display_name: string; creator_code: string; status: string; visits: number; registered_customers: number; purchasing_customers: number; purchase_events: number; attributed_sales_npr: string; reward_cost_npr: string }>;
-  profitability: { available: boolean; reason: string };
+  channels: Array<{ source_system: string; purchase_events: number; attributed_sales_npr: string; purchasing_customers: number; cost_of_goods_npr: string; measured_contribution_npr: string; cost_covered_purchase_events: number; missing_cost_purchase_events: number }>;
+  daily: Array<{ day: string; visits: number; registrations: number; purchase_events: number; attributed_sales_npr: string; measured_contribution_npr: string; cost_covered_purchase_events: number; missing_cost_purchase_events: number }>;
+  leaderboard: Array<{ id: string; display_name: string; creator_code: string; status: string; visits: number; registered_customers: number; purchasing_customers: number; purchase_events: number; attributed_sales_npr: string; cost_of_goods_npr: string; measured_gross_profit_npr: string | null; reward_cost_npr: string; contribution_after_reward_npr: string | null; cost_covered_purchase_events: number; missing_cost_purchase_events: number; profitability_status: string }>;
+  profitability: { available: boolean; cost_coverage_percent: number; return_adjustments_available: boolean; definition: string; reason: string };
 };
 
 const npr = (value: unknown) => new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -96,6 +96,10 @@ export function CreatorAnalyticsDashboard() {
         <Metric title="Pending rewards" value={npr(metrics?.pending_rewards_npr)} hint="Awaiting hold-period completion" />
         <Metric title="Approved rewards" value={npr(metrics?.approved_rewards_npr)} hint="Approved, not yet marked paid" />
         <Metric title="Paid rewards" value={npr(metrics?.paid_rewards_npr)} hint="Recorded as paid in reward events" />
+        <Metric title="Recorded COGS" value={npr(metrics?.cost_of_goods_npr)} hint={`${number(metrics?.cost_covered_purchase_events)} cost-covered purchases`} />
+        <Metric title="Measured gross profit" value={npr(metrics?.measured_gross_profit_npr)} hint="Only purchases with verified cost" />
+        <Metric title="Contribution after rewards" value={npr(metrics?.measured_contribution_npr)} hint="Before returns and operating overhead" />
+        <Metric title="COGS coverage" value={formatPercent(metrics?.cost_coverage_percent)} hint={`${number(metrics?.missing_cost_purchase_events)} purchases missing cost`} />
         <Metric title="Creators in programme" value={number(metrics?.total_creators)} hint="All-time creator accounts" />
       </div>
 
@@ -121,22 +125,23 @@ export function CreatorAnalyticsDashboard() {
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <h3 className="font-semibold text-slate-900">Sales by channel</h3>
           <div className="mt-3 space-y-3">
-            {data.channels.map((channel) => <div key={channel.source_system} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0"><div><p className="text-sm font-semibold text-slate-800">{channel.source_system === 'POS' ? 'Physical stores (POS)' : 'Online commerce'}</p><p className="text-xs text-slate-500">{number(channel.purchase_events)} purchases · {number(channel.purchasing_customers)} customers</p></div><p className="text-sm font-bold text-slate-900">{npr(channel.attributed_sales_npr)}</p></div>)}
+            {data.channels.map((channel) => <div key={channel.source_system} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0"><div><p className="text-sm font-semibold text-slate-800">{channel.source_system === 'POS' ? 'Physical stores (POS)' : 'Online commerce'}</p><p className="text-xs text-slate-500">{number(channel.purchase_events)} purchases · {number(channel.purchasing_customers)} customers · {number(channel.cost_covered_purchase_events)} with cost</p><p className="mt-1 text-xs text-slate-500">Contribution after rewards: {npr(channel.measured_contribution_npr)}</p></div><p className="text-sm font-bold text-slate-900">{npr(channel.attributed_sales_npr)}</p></div>)}
             {!data.channels.length && <p className="text-sm text-slate-500">No attributed purchases in this period.</p>}
           </div>
         </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <h3 className="font-semibold text-amber-950">Profitability measurement</h3>
-          <p className="mt-2 text-sm text-amber-900">Attributed revenue and creator reward cost are available. True creator-attributed gross profit, contribution margin and ROI are not yet measurable because order-level cost of goods sold is not connected to this reporting model.</p>
-          <p className="mt-2 text-xs text-amber-800">Do not treat attributed sales minus creator rewards as profit. Add product-level cost snapshots and refund adjustments before using profitability to allocate creator budgets.</p>
+        <div className={`rounded-xl border p-4 ${data.profitability.available ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+          <h3 className={`font-semibold ${data.profitability.available ? 'text-emerald-950' : 'text-amber-950'}`}>Creator contribution — not net profit</h3>
+          <p className={`mt-2 text-sm ${data.profitability.available ? 'text-emerald-900' : 'text-amber-900'}`}>{data.profitability.definition}</p>
+          <p className={`mt-2 text-xs ${data.profitability.available ? 'text-emerald-800' : 'text-amber-800'}`}>{data.profitability.reason}</p>
+          <p className="mt-2 text-xs text-slate-600">Refunds/returns, delivery costs, payment fees and store overhead are not yet included. Do not interpret this measure as final net profit.</p>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="border-b border-slate-200 p-4"><h3 className="font-semibold text-slate-900">Creator leaderboard</h3><p className="mt-1 text-xs text-slate-500">Ranked by attributed net sales, then purchasing customers.</p></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Creator</th><th className="px-4 py-3 text-right">Visits</th><th className="px-4 py-3 text-right">Registered</th><th className="px-4 py-3 text-right">Buyers</th><th className="px-4 py-3 text-right">Attributed sales</th><th className="px-4 py-3 text-right">Rewards accrued</th></tr></thead>
-          <tbody>{data.leaderboard.map((creator, index) => <tr key={creator.id} className="border-t border-slate-100"><td className="px-4 py-3"><div className="font-semibold text-slate-900">{index + 1}. {creator.display_name}</div><div className="text-xs text-slate-500">{creator.creator_code} · {creator.status}</div></td><td className="px-4 py-3 text-right tabular-nums">{number(creator.visits)}</td><td className="px-4 py-3 text-right tabular-nums">{number(creator.registered_customers)}</td><td className="px-4 py-3 text-right tabular-nums">{number(creator.purchasing_customers)}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{npr(creator.attributed_sales_npr)}</td><td className="px-4 py-3 text-right tabular-nums">{npr(creator.reward_cost_npr)}</td></tr>)}</tbody>
+        <div className="overflow-x-auto"><table className="w-full min-w-[1180px] text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Creator</th><th className="px-4 py-3 text-right">Buyers</th><th className="px-4 py-3 text-right">Attributed sales</th><th className="px-4 py-3 text-right">Recorded COGS</th><th className="px-4 py-3 text-right">Gross profit</th><th className="px-4 py-3 text-right">Rewards</th><th className="px-4 py-3 text-right">Contribution</th><th className="px-4 py-3 text-right">Cost coverage</th></tr></thead>
+          <tbody>{data.leaderboard.map((creator, index) => <tr key={creator.id} className="border-t border-slate-100"><td className="px-4 py-3"><div className="font-semibold text-slate-900">{index + 1}. {creator.display_name}</div><div className="text-xs text-slate-500">{creator.creator_code} · {creator.status} · {creator.profitability_status.replaceAll('_', ' ').toLowerCase()}</div></td><td className="px-4 py-3 text-right tabular-nums">{number(creator.purchasing_customers)}</td><td className="px-4 py-3 text-right tabular-nums">{npr(creator.attributed_sales_npr)}</td><td className="px-4 py-3 text-right tabular-nums">{npr(creator.cost_of_goods_npr)}</td><td className="px-4 py-3 text-right tabular-nums">{creator.measured_gross_profit_npr == null ? '—' : npr(creator.measured_gross_profit_npr)}</td><td className="px-4 py-3 text-right tabular-nums">{npr(creator.reward_cost_npr)}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{creator.contribution_after_reward_npr == null ? '—' : npr(creator.contribution_after_reward_npr)}</td><td className="px-4 py-3 text-right tabular-nums">{creator.purchase_events ? formatPercent(Number(creator.cost_covered_purchase_events) / Number(creator.purchase_events) * 100) : '—'}</td></tr>)}</tbody>
         </table></div>
         {!data.leaderboard.length && <p className="p-6 text-sm text-slate-500">No creators found for this period.</p>}
       </div>
