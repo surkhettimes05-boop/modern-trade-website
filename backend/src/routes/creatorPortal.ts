@@ -104,11 +104,18 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
           COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED')::int AS purchases,
           COUNT(DISTINCT p.customer_id) FILTER (WHERE p.event_status <> 'REVERSED')::int AS purchasing_customers,
           COALESCE(SUM(p.eligible_spend_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0)::text AS attributed_sales_npr,
-          COALESCE(SUM(p.reward_amount_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0)::text AS gross_rewards_npr
+          COALESCE(SUM(p.reward_amount_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0)::text AS gross_rewards_npr,
+          COALESCE(SUM(p.cogs_npr) FILTER (WHERE p.event_status <> 'REVERSED' AND p.cost_status = 'VERIFIED'), 0)::text AS verified_cogs_npr,
+          COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED' AND p.cost_status <> 'VERIFIED')::int AS purchases_missing_cogs,
+          CASE WHEN COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED') > 0
+                    AND COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED' AND p.cost_status <> 'VERIFIED') = 0
+               THEN COALESCE(SUM(p.eligible_spend_npr - COALESCE(p.cogs_npr, 0) - p.reward_amount_npr)
+                    FILTER (WHERE p.event_status <> 'REVERSED'), 0)::text
+               ELSE NULL END AS contribution_after_cogs_and_rewards_npr
          FROM creator_purchase_events p WHERE p.creator_id = $1`, [creator.id]),
       query(
         `SELECT source_system, source_transaction_number, eligible_spend_npr::text,
-                reward_amount_npr::text, event_status, eligible_at, available_at
+                reward_amount_npr::text, cogs_npr::text, cost_status, event_status, eligible_at, available_at
            FROM creator_purchase_events WHERE creator_id = $1 ORDER BY eligible_at DESC LIMIT 25`, [creator.id]),
       query(
         `SELECT
