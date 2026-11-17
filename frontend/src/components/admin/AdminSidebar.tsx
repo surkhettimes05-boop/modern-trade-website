@@ -193,6 +193,12 @@ const navigation: NavItem[] = [
     capability: "audit.read",
   },
   {
+    title: "Creator Programme",
+    href: "/admin/marketing/creators",
+    icon: Megaphone,
+    capability: "system.manage",
+  },
+  {
     title: "Settings",
     href: "/admin/settings",
     icon: Settings,
