@@ -76,7 +76,7 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PENDING') AS pending_rewards_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'APPROVED') AS approved_rewards_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PAID') AS paid_rewards_npr,
-           (SELECT COUNT(*)::int FROM creator_customer_attributions a WHERE a.attributed_at >= $1::date AND a.attributed_at < ($2::date + INTERVAL '1 day') AND EXISTS (SELECT 1 FROM creator_purchase_events p WHERE p.customer_id = a.customer_id AND p.event_status <> 'REVERSED')) AS converted_customers`,
+           (SELECT COUNT(*)::int FROM creator_customer_attributions a WHERE a.attributed_at >= $1::date AND a.attributed_at < ($2::date + INTERVAL '1 day') AND EXISTS (SELECT 1 FROM creator_purchase_events p WHERE p.customer_id = a.customer_id AND p.creator_id = a.creator_id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED')) AS converted_customers`,
         params,
       ),
       query(
