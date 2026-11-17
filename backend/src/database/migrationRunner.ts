@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import pg from "pg";
 
-export const LATEST_MIGRATION_ID = "043_creator_portal_otp_sessions";
+export const LATEST_MIGRATION_ID = "045_creator_manual_payouts";
 
 // Databases created before schema_migrations was introduced already contain
 // this fixed baseline. Never derive the baseline from the current manifest:

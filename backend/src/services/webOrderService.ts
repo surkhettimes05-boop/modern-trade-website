@@ -390,6 +390,8 @@ export class WebOrderService {
       // Keep reserved stock unavailable while staff fulfils the order. When the
       // delivery is completed, deduct the physical batch inventory and consume
       // the reservations in the same database transaction.
+      let deliveredOrderCogs = 0;
+      let deliveredOrderCostComplete = true;
       if (status === "DELIVERED") {
         const orderItems = await client.query(
           `SELECT product_id, quantity
@@ -408,7 +410,7 @@ export class WebOrderService {
           ]);
           let remaining = Number(item.quantity);
           const batches = await client.query(
-            `SELECT id, batch_id, quantity
+            `SELECT id, batch_id, quantity, unit_cost
                FROM batch_inventory
               WHERE store_id = $1
                 AND product_id = $2
@@ -423,6 +425,8 @@ export class WebOrderService {
             const available = Number(batch.quantity);
             const deduct = Math.min(available, remaining);
             if (deduct <= 0) continue;
+            if (batch.unit_cost === null || batch.unit_cost === undefined) deliveredOrderCostComplete = false;
+            else deliveredOrderCogs += Number(batch.unit_cost) * deduct;
             await client.query(
               `UPDATE batch_inventory
                   SET quantity = quantity - $1,
@@ -576,7 +580,7 @@ export class WebOrderService {
              creator_id, customer_id, source_system, source_transaction_id,
              source_transaction_number, currency, eligible_spend_npr,
              reward_rate_percent, reward_amount_npr, event_status, eligible_at,
-             available_at, payload_hash
+             available_at, payload_hash, cogs_npr, cost_status
            )
            SELECT a.creator_id, wo.customer_id, 'COMMERCE', wo.id::text,
                   wo.order_number, 'NPR',
@@ -586,7 +590,9 @@ export class WebOrderService {
                         * settings.default_rate_percent / 100, 2),
                   'PENDING', NOW(),
                   NOW() + make_interval(days => settings.hold_days),
-                  REPEAT(MD5(wo.id::text || wo.total_amount::text), 2)
+                  REPEAT(MD5(wo.id::text || wo.total_amount::text), 2),
+                  CASE WHEN $2::boolean THEN $3::numeric ELSE NULL END,
+                  CASE WHEN $2::boolean THEN 'VERIFIED' ELSE 'UNKNOWN' END
              FROM web_orders wo
              JOIN customers customer
                ON customer.id = wo.customer_id
@@ -602,7 +608,7 @@ export class WebOrderService {
               AND wo.payment_status = 'PAID' AND settings.id = 1
            ON CONFLICT (source_system, source_transaction_id) DO NOTHING
            RETURNING id, creator_id, reward_amount_npr`,
-          [orderId],
+          [orderId, deliveredOrderCostComplete, deliveredOrderCogs.toFixed(2)],
         );
         if (creatorPurchase.rowCount) {
           await client.query(

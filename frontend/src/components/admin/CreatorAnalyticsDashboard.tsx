@@ -8,8 +8,8 @@ type CreatorAnalytics = {
   metrics: Record<string, number | string>;
   channels: Array<{ source_system: string; purchase_events: number; attributed_sales_npr: string; purchasing_customers: number }>;
   daily: Array<{ day: string; visits: number; registrations: number; purchase_events: number; attributed_sales_npr: string }>;
-  leaderboard: Array<{ id: string; display_name: string; creator_code: string; status: string; visits: number; registered_customers: number; purchasing_customers: number; purchase_events: number; attributed_sales_npr: string; reward_cost_npr: string }>;
-  profitability: { available: boolean; reason: string };
+  leaderboard: Array<{ id: string; display_name: string; creator_code: string; status: string; visits: number; registered_customers: number; purchasing_customers: number; purchase_events: number; attributed_sales_npr: string; reward_cost_npr: string; verified_cogs_npr: string; purchases_missing_cogs: number; contribution_after_cogs_rewards_npr: string | null }>;
+  profitability: { available: boolean; verified_cogs_npr: string; purchases_missing_cogs: number; contribution_after_cogs_rewards_npr: string | null; scope: string };
 };
 
 const npr = (value: unknown) => new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -125,18 +125,19 @@ export function CreatorAnalyticsDashboard() {
             {!data.channels.length && <p className="text-sm text-slate-500">No attributed purchases in this period.</p>}
           </div>
         </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <h3 className="font-semibold text-amber-950">Profitability measurement</h3>
-          <p className="mt-2 text-sm text-amber-900">Attributed revenue and creator reward cost are available. True creator-attributed gross profit, contribution margin and ROI are not yet measurable because order-level cost of goods sold is not connected to this reporting model.</p>
-          <p className="mt-2 text-xs text-amber-800">Do not treat attributed sales minus creator rewards as profit. Add product-level cost snapshots and refund adjustments before using profitability to allocate creator budgets.</p>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <h3 className="font-semibold text-slate-900">Contribution after verified COGS and rewards</h3>
+          <p className="mt-2 text-2xl font-bold text-slate-950">{data.profitability.available ? npr(data.profitability.contribution_after_cogs_rewards_npr) : 'Not yet measurable'}</p>
+          <p className="mt-2 text-sm text-slate-600">{data.profitability.available ? data.profitability.scope : `${number(data.profitability.purchases_missing_cogs)} attributed purchases lack verified cost evidence. No profit estimate is shown.`}</p>
+          <p className="mt-2 text-xs text-slate-500">This is contribution after product COGS and creator rewards, before delivery, staffing, rent, tax and other operating expenses. It is not net profit or ROI.</p>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 p-4"><h3 className="font-semibold text-slate-900">Creator leaderboard</h3><p className="mt-1 text-xs text-slate-500">Ranked by attributed net sales, then purchasing customers.</p></div>
+        <div className="border-b border-slate-200 p-4"><h3 className="font-semibold text-slate-900">Creator leaderboard</h3><p className="mt-1 text-xs text-slate-500">Ranked by verified contribution after COGS and creator rewards; creators with incomplete cost evidence are placed last.</p></div>
         <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Creator</th><th className="px-4 py-3 text-right">Visits</th><th className="px-4 py-3 text-right">Registered</th><th className="px-4 py-3 text-right">Buyers</th><th className="px-4 py-3 text-right">Attributed sales</th><th className="px-4 py-3 text-right">Rewards accrued</th></tr></thead>
-          <tbody>{data.leaderboard.map((creator, index) => <tr key={creator.id} className="border-t border-slate-100"><td className="px-4 py-3"><div className="font-semibold text-slate-900">{index + 1}. {creator.display_name}</div><div className="text-xs text-slate-500">{creator.creator_code} · {creator.status}</div></td><td className="px-4 py-3 text-right tabular-nums">{number(creator.visits)}</td><td className="px-4 py-3 text-right tabular-nums">{number(creator.registered_customers)}</td><td className="px-4 py-3 text-right tabular-nums">{number(creator.purchasing_customers)}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{npr(creator.attributed_sales_npr)}</td><td className="px-4 py-3 text-right tabular-nums">{npr(creator.reward_cost_npr)}</td></tr>)}</tbody>
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Creator</th><th className="px-4 py-3 text-right">Visits</th><th className="px-4 py-3 text-right">Registered</th><th className="px-4 py-3 text-right">Buyers</th><th className="px-4 py-3 text-right">Attributed sales</th><th className="px-4 py-3 text-right">Rewards accrued</th><th className="px-4 py-3 text-right">Contribution</th></tr></thead>
+          <tbody>{data.leaderboard.map((creator, index) => <tr key={creator.id} className="border-t border-slate-100"><td className="px-4 py-3"><div className="font-semibold text-slate-900">{index + 1}. {creator.display_name}</div><div className="text-xs text-slate-500">{creator.creator_code} · {creator.status}</div></td><td className="px-4 py-3 text-right tabular-nums">{number(creator.visits)}</td><td className="px-4 py-3 text-right tabular-nums">{number(creator.registered_customers)}</td><td className="px-4 py-3 text-right tabular-nums">{number(creator.purchasing_customers)}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{npr(creator.attributed_sales_npr)}</td><td className="px-4 py-3 text-right tabular-nums">{npr(creator.reward_cost_npr)}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{creator.contribution_after_cogs_rewards_npr === null ? "Incomplete costs" : npr(creator.contribution_after_cogs_rewards_npr)}</td></tr>)}</tbody>
         </table></div>
         {!data.leaderboard.length && <p className="p-6 text-sm text-slate-500">No creators found for this period.</p>}
       </div>
