@@ -97,7 +97,7 @@ describe("creator analytics reporting", () => {
       });
     } finally {
       await app.close();
-      await query("DELETE FROM creator_purchase_events WHERE id = ANY($1::uuid[])", [eventIds]);
+      await query("DELETE FROM creator_purchase_events WHERE source_transaction_id = ANY($1::text[])", [eventIds]);
       await query("DELETE FROM creator_customer_attributions WHERE customer_id = $1", [customerId]);
       await query("DELETE FROM creator_referral_visits WHERE id = $1", [visitId]);
       await query("DELETE FROM customers WHERE id = $1", [customerId]);
