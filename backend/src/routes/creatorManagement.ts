@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
 import { validatePhone } from "../utils/phoneNormalization.js";
 
 const createSchema = z.object({
@@ -303,4 +303,113 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
     );
     return { creator: creator.rows[0], purchases: events.rows };
   });
+  // Manual creator settlement: only approved rewards can be paid, and every
+  // settlement is recorded as an immutable payout + ledger entry.
+  fastify.get("/creator-payouts", async () => {
+    const [balances, payouts] = await Promise.all([
+      query(`
+        SELECT c.id AS creator_id, c.display_name, c.creator_code,
+               COALESCE(SUM(p.reward_amount_npr), 0)::text AS approved_balance_npr,
+               COUNT(p.id)::int AS approved_purchase_events
+          FROM creators c
+          LEFT JOIN creator_purchase_events p
+            ON p.creator_id = c.id AND p.event_status = 'APPROVED'
+         GROUP BY c.id, c.display_name, c.creator_code
+        HAVING COALESCE(SUM(p.reward_amount_npr), 0) > 0
+         ORDER BY COALESCE(SUM(p.reward_amount_npr), 0) DESC
+      `),
+      query(`
+        SELECT cp.id, cp.creator_id, c.display_name, c.creator_code,
+               cp.amount_npr::text, cp.payment_method, cp.payment_reference,
+               cp.note, cp.created_by, cp.settled_at
+          FROM creator_payouts cp
+          JOIN creators c ON c.id = cp.creator_id
+         ORDER BY cp.settled_at DESC
+         LIMIT 100
+      `),
+    ]);
+    return { eligible: balances.rows, settlements: payouts.rows };
+  });
+
+  fastify.post("/creators/:id/payouts", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = z.object({
+      payment_method: z.enum(["BANK_TRANSFER", "CASH", "WALLET"]),
+      payment_reference: z.string().trim().min(2).max(120),
+      note: z.string().trim().max(500).optional(),
+      idempotency_key: z.string().trim().min(12).max(160),
+    }).parse(request.body);
+    const actor = (request.user as { email?: string } | undefined)?.email ?? "ADMIN";
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const creator = await client.query(
+        "SELECT id FROM creators WHERE id = $1 FOR UPDATE", [params.id],
+      );
+      if (!creator.rowCount) {
+        await client.query("ROLLBACK");
+        return reply.status(404).send({ error: "Creator not found" });
+      }
+      const prior = await client.query(
+        "SELECT id, creator_id, amount_npr::text, payment_method, payment_reference, settled_at FROM creator_payouts WHERE idempotency_key = $1",
+        [input.idempotency_key],
+      );
+      if (prior.rowCount) {
+        if (prior.rows[0].creator_id !== params.id) {
+          await client.query("ROLLBACK");
+          return reply.status(409).send({ error: "Idempotency key already belongs to another creator" });
+        }
+        await client.query("COMMIT");
+        return { payout: prior.rows[0], replay: true };
+      }
+      const approved = await client.query(
+        `SELECT id, reward_amount_npr
+           FROM creator_purchase_events
+          WHERE creator_id = $1 AND event_status = 'APPROVED'
+          ORDER BY available_at, id
+          FOR UPDATE`,
+        [params.id],
+      );
+      const amount = approved.rows.reduce((sum, row) => sum + Number(row.reward_amount_npr), 0);
+      if (!approved.rowCount || amount <= 0) {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "No approved creator rewards are available for settlement" });
+      }
+      const payout = await client.query(
+        `INSERT INTO creator_payouts
+           (creator_id, amount_npr, payment_method, payment_reference, note,
+            idempotency_key, created_by)
+         VALUES ($1, $2::numeric, $3, $4, $5, $6, $7)
+         RETURNING id, creator_id, amount_npr::text, payment_method,
+                   payment_reference, note, created_by, settled_at`,
+        [params.id, amount.toFixed(2), input.payment_method, input.payment_reference,
+          input.note ?? null, input.idempotency_key, actor],
+      );
+      await client.query(
+        `UPDATE creator_purchase_events
+            SET event_status = 'PAID', updated_at = NOW()
+          WHERE id = ANY($1::uuid[]) AND event_status = 'APPROVED'`,
+        [approved.rows.map((row) => row.id)],
+      );
+      await client.query(
+        `INSERT INTO creator_reward_ledger
+           (creator_id, purchase_event_id, entry_type, amount_npr,
+            idempotency_key, note, actor)
+         VALUES ($1, NULL, 'PAYOUT', $2::numeric, $3, $4, $5)`,
+        [params.id, (-amount).toFixed(2), `creator-payout:${input.idempotency_key}`,
+          `Manual payout ${payout.rows[0].id}; ${input.payment_method}; ref ${input.payment_reference}`, actor],
+      );
+      await client.query("COMMIT");
+      return reply.status(201).send({ payout: payout.rows[0], paid_purchase_events: approved.rowCount });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if ((error as { code?: string }).code === "23505") {
+        return reply.status(409).send({ error: "Payout idempotency key already used" });
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
 }
