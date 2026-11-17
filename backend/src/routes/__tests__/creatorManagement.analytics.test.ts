@@ -4,6 +4,7 @@ import { query } from "../../database/connection.js";
 import { creatorManagementRoutes } from "../creatorManagement.js";
 
 describe("creator analytics reporting", () => {
+  // Exercise the endpoint against the same PostgreSQL tables used by the service.
   it("reports attributed commerce and POS sales without counting reversed events", async () => {
     const creatorId = randomUUID();
     const customerId = randomUUID();
