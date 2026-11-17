@@ -130,9 +130,9 @@ CREATE TRIGGER creator_reward_ledger_no_update
 -- Every new runtime table must follow the backend's explicit RLS policy.
 DO $$
 DECLARE
-  table_name TEXT;
+  target_table TEXT;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY[
+  FOREACH target_table IN ARRAY ARRAY[
     'creators',
     'creator_referral_visits',
     'creator_customer_attributions',
@@ -142,12 +142,12 @@ BEGIN
     'creator_integration_events'
   ]
   LOOP
-    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', target_table);
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'storesync_app')
        AND NOT EXISTS (
          SELECT 1 FROM pg_policies
           WHERE schemaname = 'public'
-            AND tablename = table_name
+            AND tablename = target_table
             AND policyname = 'storesync_backend_access'
        ) THEN
       EXECUTE format(
