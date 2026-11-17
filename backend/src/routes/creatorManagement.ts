@@ -134,7 +134,12 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                 (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p
                   WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr
            FROM creators c
-          ORDER BY attributed_sales_npr::numeric DESC, purchasing_customers DESC
+          ORDER BY (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)
+                      FROM creator_purchase_events p
+                     WHERE p.creator_id = c.id AND p.created_at >= $1::date
+                       AND p.created_at < ($2::date + INTERVAL '1 day')
+                       AND p.event_status <> 'REVERSED') DESC,
+                   purchasing_customers DESC
           LIMIT 20`,
         params,
       )
