@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
+import { validatePhone } from "../utils/phoneNormalization.js";
 
 const createSchema = z.object({
   display_name: z.string().trim().min(2).max(120),
-  contact_phone: z.preprocess((value) => value === "" ? undefined : value, z.string().trim().max(20).optional()),
+  contact_phone: z.string().trim().min(10).max(20).refine(validatePhone, "A valid Nepal mobile number is required for creator OTP login."),
   contact_email: z.preprocess((value) => value === "" ? undefined : value, z.string().trim().email().optional()),
 });
 
@@ -76,12 +77,17 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PENDING') AS pending_rewards_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'APPROVED') AS approved_rewards_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PAID') AS paid_rewards_npr,
+           (SELECT COALESCE(SUM(cogs_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_status = 'VERIFIED') AS verified_cogs_npr,
+           (SELECT COUNT(*)::int FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_status <> 'VERIFIED') AS purchases_missing_cogs,
+           (SELECT CASE WHEN COUNT(*) FILTER (WHERE event_status <> 'REVERSED') > 0 AND COUNT(*) FILTER (WHERE event_status <> 'REVERSED' AND cost_status <> 'VERIFIED') = 0
+             THEN COALESCE(SUM(eligible_spend_npr - COALESCE(cogs_npr, 0) - reward_amount_npr) FILTER (WHERE event_status <> 'REVERSED'), 0)::text
+             ELSE NULL END FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')) AS contribution_after_cogs_rewards_npr,
            (SELECT COUNT(*)::int FROM creator_customer_attributions a WHERE a.attributed_at >= $1::date AND a.attributed_at < ($2::date + INTERVAL '1 day') AND EXISTS (SELECT 1 FROM creator_purchase_events p WHERE p.customer_id = a.customer_id AND p.creator_id = a.creator_id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED')) AS converted_customers`,
         params,
       ),
       query(
         `SELECT source_system, COUNT(*)::int AS purchase_events,
-                COALESCE(SUM(eligible_spend_npr), 0)::text AS attributed_sales_npr,
+                COALESCE(SUM(eligible_spend_npr), 0) AS attributed_sales_npr,
                 COUNT(DISTINCT customer_id)::int AS purchasing_customers
            FROM creator_purchase_events
           WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
@@ -94,7 +100,7 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                 COALESCE(v.visits, 0)::int AS visits,
                 COALESCE(a.registrations, 0)::int AS registrations,
                 COALESCE(p.orders, 0)::int AS purchase_events,
-                COALESCE(p.sales_npr, 0)::text AS attributed_sales_npr
+                COALESCE(p.sales_npr, 0) AS attributed_sales_npr
            FROM (SELECT generate_series($1::date, $2::date, INTERVAL '1 day')::date AS day) days
            LEFT JOIN (
              SELECT created_at::date AS day, COUNT(*) AS visits
@@ -132,14 +138,18 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                 (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)::text FROM creator_purchase_events p
                   WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') AS attributed_sales_npr,
                 (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p
-                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr,
+                (SELECT COALESCE(SUM(p.cogs_npr), 0)::text FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_status = 'VERIFIED') AS verified_cogs_npr,
+                (SELECT COUNT(*)::int FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_status <> 'VERIFIED') AS purchases_missing_cogs,
+                (SELECT CASE WHEN COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED') > 0 AND COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED' AND p.cost_status <> 'VERIFIED') = 0
+                  THEN COALESCE(SUM(p.eligible_spend_npr - COALESCE(p.cogs_npr, 0) - p.reward_amount_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0) 
+                  ELSE NULL END FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day')) AS contribution_after_cogs_rewards_npr
            FROM creators c
-          ORDER BY (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)
-                      FROM creator_purchase_events p
-                     WHERE p.creator_id = c.id AND p.created_at >= $1::date
-                       AND p.created_at < ($2::date + INTERVAL '1 day')
-                       AND p.event_status <> 'REVERSED') DESC,
-                   purchasing_customers DESC
+          ORDER BY contribution_after_cogs_rewards_npr DESC NULLS LAST,
+                   attributed_sales_npr DESC, purchasing_customers DESC
           LIMIT 20`,
         params,
       )
@@ -169,8 +179,13 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
       daily: trend.rows,
       leaderboard: leaderboard.rows,
       profitability: {
-        available: false,
-        reason: "Order-level cost of goods sold and contribution margin are not yet connected to creator purchase events. Attributed sales and reward cost are reported; profit and ROI are intentionally not estimated.",
+        available: Number(metrics.completed_purchase_events ?? 0) > 0 && Number(metrics.purchases_missing_cogs ?? 0) === 0,
+        verified_cogs_npr: String(metrics.verified_cogs_npr ?? "0.00"),
+        purchases_missing_cogs: Number(metrics.purchases_missing_cogs ?? 0),
+        contribution_after_cogs_rewards_npr: metrics.contribution_after_cogs_rewards_npr === null
+          ? null
+          : String(metrics.contribution_after_cogs_rewards_npr),
+        scope: "Verified POS item-cost and online consumed-batch snapshots only; contribution is before delivery, staffing, rent, tax and other operating expenses. It is not net profit or ROI.",
       },
     };
   });
@@ -235,6 +250,23 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
     });
   });
 
+  fastify.patch("/creators/:id/contact", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = z.object({
+      contact_phone: z.string().trim().min(10).max(20).refine(validatePhone, "A valid Nepal mobile number is required."),
+      contact_email: z.preprocess((value) => value === "" ? null : value, z.string().trim().email().nullable().optional()),
+    }).parse(request.body);
+    const updated = await query(
+      `UPDATE creators SET contact_phone = $2, contact_email = COALESCE($3, contact_email),
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, creator_code, display_name, contact_phone, contact_email, status`,
+      [params.id, input.contact_phone, input.contact_email ?? null],
+    );
+    if (!updated.rowCount) return reply.status(404).send({ error: "Creator not found" });
+    return { creator: updated.rows[0] };
+  });
+
   fastify.patch("/creators/:id/status", async (request, reply) => {
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     const input = z.object({ status: z.enum(["ACTIVE", "PAUSED", "SUSPENDED", "CLOSED"]) }).parse(request.body);
@@ -271,4 +303,113 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
     );
     return { creator: creator.rows[0], purchases: events.rows };
   });
+  // Manual creator settlement: only approved rewards can be paid, and every
+  // settlement is recorded as an immutable payout + ledger entry.
+  fastify.get("/creator-payouts", async () => {
+    const [balances, payouts] = await Promise.all([
+      query(`
+        SELECT c.id AS creator_id, c.display_name, c.creator_code,
+               COALESCE(SUM(p.reward_amount_npr), 0)::text AS approved_balance_npr,
+               COUNT(p.id)::int AS approved_purchase_events
+          FROM creators c
+          LEFT JOIN creator_purchase_events p
+            ON p.creator_id = c.id AND p.event_status = 'APPROVED'
+         GROUP BY c.id, c.display_name, c.creator_code
+        HAVING COALESCE(SUM(p.reward_amount_npr), 0) > 0
+         ORDER BY COALESCE(SUM(p.reward_amount_npr), 0) DESC
+      `),
+      query(`
+        SELECT cp.id, cp.creator_id, c.display_name, c.creator_code,
+               cp.amount_npr::text, cp.payment_method, cp.payment_reference,
+               cp.note, cp.created_by, cp.settled_at
+          FROM creator_payouts cp
+          JOIN creators c ON c.id = cp.creator_id
+         ORDER BY cp.settled_at DESC
+         LIMIT 100
+      `),
+    ]);
+    return { eligible: balances.rows, settlements: payouts.rows };
+  });
+
+  fastify.post("/creators/:id/payouts", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = z.object({
+      payment_method: z.enum(["BANK_TRANSFER", "CASH", "WALLET"]),
+      payment_reference: z.string().trim().min(2).max(120),
+      note: z.string().trim().max(500).optional(),
+      idempotency_key: z.string().trim().min(12).max(160),
+    }).parse(request.body);
+    const actor = (request.user as { email?: string } | undefined)?.email ?? "ADMIN";
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const creator = await client.query(
+        "SELECT id FROM creators WHERE id = $1 FOR UPDATE", [params.id],
+      );
+      if (!creator.rowCount) {
+        await client.query("ROLLBACK");
+        return reply.status(404).send({ error: "Creator not found" });
+      }
+      const prior = await client.query(
+        "SELECT id, creator_id, amount_npr::text, payment_method, payment_reference, settled_at FROM creator_payouts WHERE idempotency_key = $1",
+        [input.idempotency_key],
+      );
+      if (prior.rowCount) {
+        if (prior.rows[0].creator_id !== params.id) {
+          await client.query("ROLLBACK");
+          return reply.status(409).send({ error: "Idempotency key already belongs to another creator" });
+        }
+        await client.query("COMMIT");
+        return { payout: prior.rows[0], replay: true };
+      }
+      const approved = await client.query(
+        `SELECT id, reward_amount_npr
+           FROM creator_purchase_events
+          WHERE creator_id = $1 AND event_status = 'APPROVED'
+          ORDER BY available_at, id
+          FOR UPDATE`,
+        [params.id],
+      );
+      const amount = approved.rows.reduce((sum, row) => sum + Number(row.reward_amount_npr), 0);
+      if (!approved.rowCount || amount <= 0) {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "No approved creator rewards are available for settlement" });
+      }
+      const payout = await client.query(
+        `INSERT INTO creator_payouts
+           (creator_id, amount_npr, payment_method, payment_reference, note,
+            idempotency_key, created_by)
+         VALUES ($1, $2::numeric, $3, $4, $5, $6, $7)
+         RETURNING id, creator_id, amount_npr::text, payment_method,
+                   payment_reference, note, created_by, settled_at`,
+        [params.id, amount.toFixed(2), input.payment_method, input.payment_reference,
+          input.note ?? null, input.idempotency_key, actor],
+      );
+      await client.query(
+        `UPDATE creator_purchase_events
+            SET event_status = 'PAID', updated_at = NOW()
+          WHERE id = ANY($1::uuid[]) AND event_status = 'APPROVED'`,
+        [approved.rows.map((row) => row.id)],
+      );
+      await client.query(
+        `INSERT INTO creator_reward_ledger
+           (creator_id, purchase_event_id, entry_type, amount_npr,
+            idempotency_key, note, actor)
+         VALUES ($1, NULL, 'PAYOUT', $2::numeric, $3, $4, $5)`,
+        [params.id, (-amount).toFixed(2), `creator-payout:${input.idempotency_key}`,
+          `Manual payout ${payout.rows[0].id}; ${input.payment_method}; ref ${input.payment_reference}`, actor],
+      );
+      await client.query("COMMIT");
+      return reply.status(201).send({ payout: payout.rows[0], paid_purchase_events: approved.rowCount });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if ((error as { code?: string }).code === "23505") {
+        return reply.status(409).send({ error: "Payout idempotency key already used" });
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
 }
