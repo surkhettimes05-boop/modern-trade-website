@@ -51,10 +51,16 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
       const nextPath = queryParams.success && queryParams.data.next?.startsWith("/") && !queryParams.data.next.startsWith("//")
         ? queryParams.data.next
         : "/";
-      await getPool().query(
+      const visit = await getPool().query(
         `INSERT INTO creator_referral_visits (
            creator_id, visit_token_hash, landing_path, expires_at
-         ) VALUES ($1, $2, $3, NOW() + INTERVAL '30 days')`,
+         ) VALUES (
+           $1, $2, $3,
+           NOW() + make_interval(days => COALESCE(
+             (SELECT attribution_window_days FROM creator_reward_settings WHERE id = 1), 30
+           ))
+         )
+         RETURNING expires_at`,
         [creator.rows[0].id, tokenHash, nextPath],
       );
       reply.setCookie("pasalho_creator_referral", token, {
@@ -62,7 +68,7 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
-        maxAge: 30 * 24 * 60 * 60,
+        maxAge: Math.max(1, Math.floor((new Date(visit.rows[0].expires_at).getTime() - Date.now()) / 1000)),
       });
       reply.header("cache-control", "no-store");
       const webBase = process.env.CUSTOMER_WEB_URL || process.env.CORS_ORIGIN || "/";
