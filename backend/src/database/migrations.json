@@ -158,5 +158,9 @@
   [
     "041_payment_evidence_engine",
     "../database/041_payment_evidence_engine.sql"
+  ],
+  [
+    "042_creator_attribution_rewards",
+    "../database/042_creator_attribution_rewards.sql"
   ]
 ]
