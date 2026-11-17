@@ -23,10 +23,10 @@ async function currentCreator(request: FastifyRequest) {
   const token = (request as any).cookies?.[SESSION_COOKIE];
   if (typeof token !== "string" || token.length < 32) return null;
   const result = await query(
-    \`SELECT c.id, c.creator_code, c.display_name, c.contact_phone, c.status, c.referral_slug
+    `SELECT c.id, c.creator_code, c.display_name, c.contact_phone, c.status, c.referral_slug
        FROM creator_portal_sessions s JOIN creators c ON c.id = s.creator_id
       WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
-        AND c.status = 'ACTIVE' LIMIT 1\`,
+        AND c.status = 'ACTIVE' LIMIT 1`,
     [digest(token)],
   );
   return result.rows[0] ?? null;
@@ -70,8 +70,8 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
     const csrf = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400000);
     await query(
-      \`INSERT INTO creator_portal_sessions (creator_id, token_hash, expires_at, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4, $5)\`,
+      `INSERT INTO creator_portal_sessions (creator_id, token_hash, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5)`,
       [creator.rows[0].id, digest(token), expiresAt, (request as any).ip ?? null, request.headers["user-agent"] ?? null],
     );
     const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", expires: expiresAt };
@@ -87,7 +87,7 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
       id: creator.id, code: creator.creator_code, name: creator.display_name,
       phone_masked: String(creator.contact_phone ?? "").replace(/.(?=.{4})/g, "•"),
       referral_slug: creator.referral_slug,
-      referral_url: \`\${process.env.CUSTOMER_WEB_URL ?? ""}/r/\${encodeURIComponent(creator.referral_slug)}\`,
+      referral_url: `\${process.env.CUSTOMER_WEB_URL ?? ""}/r/\${encodeURIComponent(creator.referral_slug)}`,
     } };
   });
 
@@ -96,26 +96,26 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
     if (!creator) return reply.status(401).send({ error: "Creator login required." });
     const [summary, purchases, ledger] = await Promise.all([
       query(
-        \`SELECT
+        `SELECT
           (SELECT COUNT(*)::int FROM creator_referral_visits WHERE creator_id = $1) AS clicks,
           (SELECT COUNT(*)::int FROM creator_customer_attributions WHERE creator_id = $1) AS registrations,
           COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED')::int AS purchases,
           COUNT(DISTINCT p.customer_id) FILTER (WHERE p.event_status <> 'REVERSED')::int AS purchasing_customers,
           COALESCE(SUM(p.eligible_spend_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0)::text AS attributed_sales_npr,
           COALESCE(SUM(p.reward_amount_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0)::text AS gross_rewards_npr
-         FROM creator_purchase_events p WHERE p.creator_id = $1\`, [creator.id]),
+         FROM creator_purchase_events p WHERE p.creator_id = $1`, [creator.id]),
       query(
-        \`SELECT source_system, source_transaction_number, eligible_spend_npr::text,
+        `SELECT source_system, source_transaction_number, eligible_spend_npr::text,
                 reward_amount_npr::text, event_status, eligible_at, available_at
-           FROM creator_purchase_events WHERE creator_id = $1 ORDER BY eligible_at DESC LIMIT 25\`, [creator.id]),
+           FROM creator_purchase_events WHERE creator_id = $1 ORDER BY eligible_at DESC LIMIT 25`, [creator.id]),
       query(
-        \`SELECT
+        `SELECT
           COALESCE(SUM(CASE WHEN entry_type IN ('EARN','ADJUSTMENT') THEN amount_npr
                             WHEN entry_type IN ('REVERSAL','PAYOUT') THEN -ABS(amount_npr) ELSE 0 END), 0)::text AS balance_npr,
           COALESCE(SUM(CASE WHEN entry_type = 'EARN' THEN amount_npr ELSE 0 END), 0)::text AS earned_npr,
           COALESCE(SUM(CASE WHEN entry_type = 'REVERSAL' THEN ABS(amount_npr) ELSE 0 END), 0)::text AS reversed_npr,
           COALESCE(SUM(CASE WHEN entry_type = 'PAYOUT' THEN ABS(amount_npr) ELSE 0 END), 0)::text AS paid_npr
-         FROM creator_reward_ledger WHERE creator_id = $1\`, [creator.id]),
+         FROM creator_reward_ledger WHERE creator_id = $1`, [creator.id]),
     ]);
     return { summary: summary.rows[0], purchases: purchases.rows, ledger: ledger.rows[0], profitability_status: "NOT_AVAILABLE_COGS_AND_REFUND_RECONCILIATION_PENDING" };
   });
