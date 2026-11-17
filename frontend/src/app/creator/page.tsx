@@ -30,7 +30,10 @@ export default function CreatorPortalPage() {
     const me = await a.json(); const overview = await b.json();
     setCreator(me.creator); setData(overview); setStage('dashboard');
   }, []);
-  useEffect(() => { void load().catch(() => undefined); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load().catch(() => undefined); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   async function requestOtp(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError('');
