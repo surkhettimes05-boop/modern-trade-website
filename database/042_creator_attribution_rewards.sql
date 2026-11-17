@@ -143,12 +143,13 @@ BEGIN
   ]
   LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
-    IF NOT EXISTS (
-      SELECT 1 FROM pg_policies
-       WHERE schemaname = 'public'
-         AND tablename = table_name
-         AND policyname = 'storesync_backend_access'
-    ) THEN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'storesync_app')
+       AND NOT EXISTS (
+         SELECT 1 FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename = table_name
+            AND policyname = 'storesync_backend_access'
+       ) THEN
       EXECUTE format(
         'CREATE POLICY storesync_backend_access ON public.%I FOR ALL TO storesync_app USING (true) WITH CHECK (true)',
         table_name
