@@ -126,3 +126,34 @@ DROP TRIGGER IF EXISTS creator_reward_ledger_no_update ON creator_reward_ledger;
 CREATE TRIGGER creator_reward_ledger_no_update
   BEFORE UPDATE OR DELETE ON creator_reward_ledger
   FOR EACH ROW EXECUTE FUNCTION prevent_creator_reward_ledger_mutation();
+
+-- Every new runtime table must follow the backend's explicit RLS policy.
+DO $$
+DECLARE
+  table_name TEXT;
+BEGIN
+  FOREACH table_name IN ARRAY ARRAY[
+    'creators',
+    'creator_referral_visits',
+    'creator_customer_attributions',
+    'creator_reward_settings',
+    'creator_purchase_events',
+    'creator_reward_ledger',
+    'creator_integration_events'
+  ]
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies
+       WHERE schemaname = 'public'
+         AND tablename = table_name
+         AND policyname = 'storesync_backend_access'
+    ) THEN
+      EXECUTE format(
+        'CREATE POLICY storesync_backend_access ON public.%I FOR ALL TO storesync_app USING (true) WITH CHECK (true)',
+        table_name
+      );
+    END IF;
+  END LOOP;
+END
+$$;
