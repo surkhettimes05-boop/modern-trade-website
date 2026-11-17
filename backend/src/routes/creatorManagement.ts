@@ -66,7 +66,7 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
          FROM creators c
         ORDER BY c.created_at DESC`,
     );
-    return { creators: result.rows };
+    return { items: result.rows };
   });
 
   fastify.post("/creators", async (request, reply) => {
