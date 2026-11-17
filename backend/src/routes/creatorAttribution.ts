@@ -12,7 +12,18 @@ const posSaleSchema = z.object({
   customerPhoneHash: z.string().regex(/^[a-f0-9]{64}$/),
   currency: z.literal("NPR"),
   eligibleSpendNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),
+  costOfGoodsNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/).nullable().optional(),
+  costEvidenceStatus: z.enum(["AVAILABLE", "MISSING_COST"]).optional(),
   completedAt: z.string().datetime(),
+}).superRefine((event, context) => {
+  const costStatus = event.costEvidenceStatus ?? "MISSING_COST";
+  const cost = event.costOfGoodsNpr ?? null;
+  if (costStatus === "AVAILABLE" && cost === null) {
+    context.addIssue({ code: "custom", path: ["costOfGoodsNpr"], message: "Cost evidence marked AVAILABLE requires a cost snapshot" });
+  }
+  if (costStatus === "MISSING_COST" && cost !== null) {
+    context.addIssue({ code: "custom", path: ["costOfGoodsNpr"], message: "Missing cost evidence cannot include a cost snapshot" });
+  }
 });
 
 function verifySignature(timestamp: string, signature: string, body: string) {
@@ -192,13 +203,15 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
         `INSERT INTO creator_purchase_events (
            creator_id, customer_id, source_system, source_transaction_id,
            source_transaction_number, currency, eligible_spend_npr,
+           cost_of_goods_npr, cost_evidence_status,
            reward_rate_percent, reward_amount_npr, event_status, eligible_at,
            available_at, payload_hash
          )
          VALUES (
-           $1, $2, 'POS', $3, $4, 'NPR', $5::numeric, $6::numeric,
-           ROUND($5::numeric * $6::numeric / 100, 2), 'PENDING',
-           $7::timestamptz, $8::timestamptz, $9
+           $1, $2, 'POS', $3, $4, 'NPR', $5::numeric,
+           $6::numeric, $7, $8::numeric,
+           ROUND($5::numeric * $8::numeric / 100, 2), 'PENDING',
+           $9::timestamptz, $10::timestamptz, $11
          )
          ON CONFLICT (source_system, source_transaction_id) DO NOTHING
          RETURNING id, reward_amount_npr`,
@@ -208,6 +221,8 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
           event.sourceTransactionId,
           event.sourceTransactionNumber,
           event.eligibleSpendNpr,
+          event.costOfGoodsNpr ?? null,
+          event.costEvidenceStatus ?? "MISSING_COST",
           rate,
           event.completedAt,
           availableAt.toISOString(),
