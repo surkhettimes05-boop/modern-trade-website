@@ -63,7 +63,7 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
         );
         if (existingVisit.rowCount) {
           const nextPath = existingVisit.rows[0].landing_path || requestedNext;
-          const destination = webBase === "/" ? requestedNext : new URL(requestedNext, webBase).toString();
+          const destination = webBase === "/" ? nextPath : new URL(nextPath, webBase).toString();
           reply.header("cache-control", "no-store");
           return reply.redirect(destination);
         }
@@ -91,8 +91,7 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
         maxAge: Math.max(1, Math.floor((new Date(visit.rows[0].expires_at).getTime() - Date.now()) / 1000)),
       });
       reply.header("cache-control", "no-store");
-      const webBase = process.env.CUSTOMER_WEB_URL || process.env.CORS_ORIGIN || "/";
-      const destination = webBase === "/" ? nextPath : new URL(nextPath, webBase).toString();
+      const destination = webBase === "/" ? requestedNext : new URL(requestedNext, webBase).toString();
       return reply.redirect(destination);
     },
   );
