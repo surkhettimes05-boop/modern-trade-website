@@ -4,7 +4,7 @@ import { OTPService } from "../services/otpService.js";
 import { SessionService } from "../services/sessionService.js";
 import { CustomerService } from "../services/customerService.js";
 import { validatePhone } from "../utils/phoneNormalization.js";
-import { query } from "../database/connection.js";
+import { getPool, query } from "../database/connection.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { AuthenticatedUser } from "../plugins/authorization.js";
 import crypto from "node:crypto";
@@ -228,7 +228,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         const referralToken = (request as any).cookies?.pasalho_creator_referral;
         if (isNewCustomer && typeof referralToken === "string" && /^[a-f0-9]{64}$/i.test(referralToken)) {
           const visitTokenHash = crypto.createHash("sha256").update(referralToken).digest("hex");
-          const client = await (await import("../database/connection.js")).getPool().connect();
+          const client = await getPool().connect();
           try {
             await client.query("BEGIN");
             const visit = await client.query(
