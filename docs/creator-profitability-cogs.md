@@ -1,5 +1,7 @@
 # Creator programme COGS and contribution reporting
 
+> This draft is stacked on the attribution and admin analytics releases; do not deploy it independently.
+
 ## Cost evidence sources
 
 - **Online commerce:** At delivery, the order fulfillment transaction computes the moving weighted-average unit cost across all positive-quantity batches at the issuing store and snapshots the extended line cost to `web_order_items.cost_total_snapshot`. Physical batch depletion remains FIFO by expiry/date for traceability; COGS valuation uses weighted average.
