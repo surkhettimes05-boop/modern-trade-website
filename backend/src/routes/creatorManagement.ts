@@ -2,10 +2,11 @@ import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { query } from "../database/connection.js";
+import { validatePhone } from "../utils/phoneNormalization.js";
 
 const createSchema = z.object({
   display_name: z.string().trim().min(2).max(120),
-  contact_phone: z.preprocess((value) => value === "" ? undefined : value, z.string().trim().max(20).optional()),
+  contact_phone: z.string().trim().min(10).max(20).refine(validatePhone, "A valid Nepal mobile number is required for creator OTP login."),
   contact_email: z.preprocess((value) => value === "" ? undefined : value, z.string().trim().email().optional()),
 });
 
@@ -233,6 +234,23 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
       referral_path: referralPath,
       qr_code_ready: Boolean(referralUrl),
     });
+  });
+
+  fastify.patch("/creators/:id/contact", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = z.object({
+      contact_phone: z.string().trim().min(10).max(20).refine(validatePhone, "A valid Nepal mobile number is required."),
+      contact_email: z.preprocess((value) => value === "" ? null : value, z.string().trim().email().nullable().optional()),
+    }).parse(request.body);
+    const updated = await query(
+      `UPDATE creators SET contact_phone = $2, contact_email = COALESCE($3, contact_email),
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, creator_code, display_name, contact_phone, contact_email, status`,
+      [params.id, input.contact_phone, input.contact_email ?? null],
+    );
+    if (!updated.rowCount) return reply.status(404).send({ error: "Creator not found" });
+    return { creator: updated.rows[0] };
   });
 
   fastify.patch("/creators/:id/status", async (request, reply) => {
