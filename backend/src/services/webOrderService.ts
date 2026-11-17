@@ -407,8 +407,6 @@ export class WebOrderService {
             `${item.product_id}:${order.store_id}`,
           ]);
           let remaining = Number(item.quantity);
-          let costTotal = 0;
-          let costEvidenceComplete = true;
           const batches = await client.query(
             `SELECT id, batch_id, quantity, cost
                FROM batch_inventory
@@ -419,18 +417,30 @@ export class WebOrderService {
               FOR UPDATE`,
             [order.store_id, item.product_id],
           );
+          const totalOnHandForCost = batches.rows.reduce(
+            (sum, batch) => sum + Number(batch.quantity),
+            0,
+          );
+          const allBatchCostsKnown = batches.rows.every((batch) => {
+            const unitCost = batch.cost === null ? null : Number(batch.cost);
+            return unitCost !== null && Number.isFinite(unitCost) && unitCost >= 0;
+          });
+          const weightedAverageUnitCost = totalOnHandForCost > 0 && allBatchCostsKnown
+            ? batches.rows.reduce(
+                (sum, batch) => sum + Number(batch.quantity) * Number(batch.cost),
+                0,
+              ) / totalOnHandForCost
+            : null;
+          const costTotalSnapshot = weightedAverageUnitCost === null
+            ? null
+            : (Math.round(weightedAverageUnitCost * Number(item.quantity) * 100) / 100).toFixed(2);
+          const costEvidenceStatus = costTotalSnapshot === null ? "MISSING_COST" : "AVAILABLE";
 
           for (const batch of batches.rows) {
             if (remaining <= 0) break;
             const available = Number(batch.quantity);
             const deduct = Math.min(available, remaining);
             if (deduct <= 0) continue;
-            const unitCost = batch.cost === null ? null : Number(batch.cost);
-            if (unitCost === null || !Number.isFinite(unitCost) || unitCost < 0) {
-              costEvidenceComplete = false;
-            } else {
-              costTotal += deduct * unitCost;
-            }
             await client.query(
               `UPDATE batch_inventory
                   SET quantity = quantity - $1,
@@ -465,11 +475,7 @@ export class WebOrderService {
                 SET cost_total_snapshot = $1::numeric,
                     cost_evidence_status = $2
               WHERE id = $3`,
-            [
-              costEvidenceComplete ? (Math.round(costTotal * 100) / 100).toFixed(2) : null,
-              costEvidenceComplete ? "AVAILABLE" : "MISSING_COST",
-              item.id,
-            ],
+            [costTotalSnapshot, costEvidenceStatus, item.id],
           );
         }
       }
