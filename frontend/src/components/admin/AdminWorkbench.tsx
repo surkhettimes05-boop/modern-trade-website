@@ -25,6 +25,7 @@ const resources: Record<string, Resource> = {
   'organization/staff': { title: 'Staff', endpoint: '/api/staff', capability: 'staff.read' },
   'organization/roles': { title: 'Roles', endpoint: '/api/roles', capability: 'roles.manage', unavailable: 'Role management is currently read-only through the capability seed.' },
   audit: { title: 'Audit', endpoint: '/api/audit-reports', capability: 'audit.read' },
+  'marketing/creators': { title: 'Creator Programme', endpoint: '/api/creators', capability: 'system.manage', fields: ['display_name', 'contact_phone', 'contact_email'] },
   settings: { title: 'Settings', endpoint: '/api/operations-auth/session', capability: 'settings.manage' },
 };
 
