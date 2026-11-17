@@ -73,6 +73,11 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
            (SELECT COUNT(DISTINCT customer_id)::int FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED') AS purchasing_customers,
            (SELECT COUNT(*)::int FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED') AS completed_purchase_events,
            (SELECT COALESCE(SUM(eligible_spend_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED') AS attributed_sales_npr,
+           (SELECT COUNT(*)::int FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_evidence_status = 'AVAILABLE') AS cost_covered_purchase_events,
+           (SELECT COUNT(*)::int FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_evidence_status <> 'AVAILABLE') AS missing_cost_purchase_events,
+           (SELECT COALESCE(SUM(cost_of_goods_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_evidence_status = 'AVAILABLE') AS cost_of_goods_npr,
+           (SELECT COALESCE(SUM(eligible_spend_npr - cost_of_goods_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_evidence_status = 'AVAILABLE') AS measured_gross_profit_npr,
+           (SELECT COALESCE(SUM(eligible_spend_npr - cost_of_goods_npr - reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_evidence_status = 'AVAILABLE') AS measured_contribution_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PENDING') AS pending_rewards_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'APPROVED') AS approved_rewards_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PAID') AS paid_rewards_npr,
@@ -81,8 +86,13 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
       ),
       query(
         `SELECT source_system, COUNT(*)::int AS purchase_events,
+                COUNT(*) FILTER (WHERE cost_evidence_status = 'AVAILABLE')::int AS cost_covered_purchase_events,
+                COUNT(*) FILTER (WHERE cost_evidence_status <> 'AVAILABLE')::int AS missing_cost_purchase_events,
+                COUNT(DISTINCT customer_id)::int AS purchasing_customers,
                 COALESCE(SUM(eligible_spend_npr), 0)::text AS attributed_sales_npr,
-                COUNT(DISTINCT customer_id)::int AS purchasing_customers
+                COALESCE(SUM(cost_of_goods_npr) FILTER (WHERE cost_evidence_status = 'AVAILABLE'), 0)::text AS cost_of_goods_npr,
+                COALESCE(SUM(eligible_spend_npr - cost_of_goods_npr) FILTER (WHERE cost_evidence_status = 'AVAILABLE'), 0)::text AS measured_gross_profit_npr,
+                COALESCE(SUM(eligible_spend_npr - cost_of_goods_npr - reward_amount_npr) FILTER (WHERE cost_evidence_status = 'AVAILABLE'), 0)::text AS measured_contribution_npr
            FROM creator_purchase_events
           WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
             AND event_status <> 'REVERSED'
@@ -94,7 +104,11 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                 COALESCE(v.visits, 0)::int AS visits,
                 COALESCE(a.registrations, 0)::int AS registrations,
                 COALESCE(p.orders, 0)::int AS purchase_events,
-                COALESCE(p.sales_npr, 0)::text AS attributed_sales_npr
+                COALESCE(p.sales_npr, 0)::text AS attributed_sales_npr,
+                COALESCE(p.gross_profit_npr, 0)::text AS measured_gross_profit_npr,
+                COALESCE(p.contribution_npr, 0)::text AS measured_contribution_npr,
+                COALESCE(p.cost_covered, 0)::int AS cost_covered_purchase_events,
+                COALESCE(p.cost_missing, 0)::int AS missing_cost_purchase_events
            FROM (SELECT generate_series($1::date, $2::date, INTERVAL '1 day')::date AS day) days
            LEFT JOIN (
              SELECT created_at::date AS day, COUNT(*) AS visits
@@ -109,8 +123,13 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
               GROUP BY attributed_at::date
            ) a USING (day)
            LEFT JOIN (
-             SELECT created_at::date AS day, COUNT(*) AS orders,
-                    SUM(eligible_spend_npr) AS sales_npr
+             SELECT created_at::date AS day,
+                    COUNT(*) AS orders,
+                    SUM(eligible_spend_npr) AS sales_npr,
+                    SUM(eligible_spend_npr - cost_of_goods_npr) FILTER (WHERE cost_evidence_status = 'AVAILABLE') AS gross_profit_npr,
+                    SUM(eligible_spend_npr - cost_of_goods_npr - reward_amount_npr) FILTER (WHERE cost_evidence_status = 'AVAILABLE') AS contribution_npr,
+                    COUNT(*) FILTER (WHERE cost_evidence_status = 'AVAILABLE') AS cost_covered,
+                    COUNT(*) FILTER (WHERE cost_evidence_status <> 'AVAILABLE') AS cost_missing
                FROM creator_purchase_events
               WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
                 AND event_status <> 'REVERSED'
@@ -131,24 +150,46 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                   WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') AS purchase_events,
                 (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)::text FROM creator_purchase_events p
                   WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') AS attributed_sales_npr,
+                (SELECT COALESCE(SUM(p.cost_of_goods_npr), 0)::text FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status = 'AVAILABLE') AS cost_of_goods_npr,
+                (SELECT COALESCE(SUM(p.eligible_spend_npr - p.cost_of_goods_npr), 0)::text FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status = 'AVAILABLE') AS measured_gross_profit_npr,
                 (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p
-                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr,
+                (SELECT COUNT(*)::int FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status = 'AVAILABLE') AS cost_covered_purchase_events,
+                (SELECT COUNT(*)::int FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status <> 'AVAILABLE') AS missing_cost_purchase_events,
+                CASE
+                  WHEN (SELECT COUNT(*) FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') = 0 THEN 'NO_PURCHASES'
+                  WHEN (SELECT COUNT(*) FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status <> 'AVAILABLE') > 0 THEN 'INCOMPLETE_COST_DATA'
+                  ELSE 'COST_COMPLETE'
+                END AS profitability_status,
+                CASE
+                  WHEN (SELECT COUNT(*) FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') > 0
+                   AND (SELECT COUNT(*) FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_evidence_status <> 'AVAILABLE') = 0
+                  THEN (SELECT COALESCE(SUM(p.eligible_spend_npr - p.cost_of_goods_npr - p.reward_amount_npr), 0)::text FROM creator_purchase_events p WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED')
+                  ELSE NULL
+                END AS contribution_after_reward_npr
            FROM creators c
-          ORDER BY (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)
-                      FROM creator_purchase_events p
-                     WHERE p.creator_id = c.id AND p.created_at >= $1::date
-                       AND p.created_at < ($2::date + INTERVAL '1 day')
-                       AND p.event_status <> 'REVERSED') DESC,
+          ORDER BY CASE WHEN profitability_status = 'COST_COMPLETE' THEN 0 ELSE 1 END,
+                   contribution_after_reward_npr::numeric DESC NULLS LAST,
                    purchasing_customers DESC
           LIMIT 20`,
         params,
       )
-    ]);
+    ]);;
 
     const metrics = summary.rows[0] ?? {};
     const visits = Number(metrics.visits ?? 0);
     const registrations = Number(metrics.registrations ?? 0);
     const purchasingCustomers = Number(metrics.purchasing_customers ?? 0);
+    const completedPurchaseEvents = Number(metrics.completed_purchase_events ?? 0);
+    const costCoveredEvents = Number(metrics.cost_covered_purchase_events ?? 0);
+    const missingCostEvents = Number(metrics.missing_cost_purchase_events ?? 0);
+    const costCoveragePercent = completedPurchaseEvents
+      ? Number((costCoveredEvents / completedPurchaseEvents * 100).toFixed(2))
+      : 0;
     return {
       period: { from, to },
       metrics: {
@@ -157,8 +198,14 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
         visits,
         registrations,
         purchasing_customers: purchasingCustomers,
-        completed_purchase_events: Number(metrics.completed_purchase_events ?? 0),
+        completed_purchase_events: completedPurchaseEvents,
         attributed_sales_npr: String(metrics.attributed_sales_npr ?? "0.00"),
+        cost_of_goods_npr: String(metrics.cost_of_goods_npr ?? "0.00"),
+        measured_gross_profit_npr: String(metrics.measured_gross_profit_npr ?? "0.00"),
+        measured_contribution_npr: String(metrics.measured_contribution_npr ?? "0.00"),
+        cost_covered_purchase_events: costCoveredEvents,
+        missing_cost_purchase_events: missingCostEvents,
+        cost_coverage_percent: costCoveragePercent,
         pending_rewards_npr: String(metrics.pending_rewards_npr ?? "0.00"),
         approved_rewards_npr: String(metrics.approved_rewards_npr ?? "0.00"),
         paid_rewards_npr: String(metrics.paid_rewards_npr ?? "0.00"),
@@ -169,8 +216,15 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
       daily: trend.rows,
       leaderboard: leaderboard.rows,
       profitability: {
-        available: false,
-        reason: "Order-level cost of goods sold and contribution margin are not yet connected to creator purchase events. Attributed sales and reward cost are reported; profit and ROI are intentionally not estimated.",
+        available: completedPurchaseEvents > 0 && missingCostEvents === 0,
+        cost_coverage_percent: costCoveragePercent,
+        return_adjustments_available: false,
+        definition: "Eligible merchandise sales minus recorded COGS and creator reward. Excludes refunds, payment fees, delivery costs and store overhead; this is contribution, not net profit.",
+        reason: completedPurchaseEvents === 0
+          ? "No attributed purchase events exist in this reporting period."
+          : missingCostEvents > 0
+            ? `${missingCostEvents} purchase events have no verified cost snapshot; creators with incomplete cost data are not ranked by contribution.`
+            : "All attributed purchase events in this period have recorded COGS. Return/refund adjustments and operating overhead are not included.",
       },
     };
   });
