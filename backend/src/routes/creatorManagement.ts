@@ -121,22 +121,23 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
       ),
       query(
         `SELECT c.id, c.display_name, c.creator_code, c.status,
-                COUNT(DISTINCT v.id)::int AS visits,
-                COUNT(DISTINCT a.customer_id)::int AS registered_customers,
-                COUNT(DISTINCT p.customer_id)::int AS purchasing_customers,
-                COUNT(DISTINCT p.id)::int AS purchase_events,
-                COALESCE(SUM(p.eligible_spend_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0)::text AS attributed_sales_npr,
-                COALESCE(SUM(p.reward_amount_npr) FILTER (WHERE p.event_status IN ('PENDING','APPROVED','PAID')), 0)::text AS reward_cost_npr
+                (SELECT COUNT(*)::int FROM creator_referral_visits v
+                  WHERE v.creator_id = c.id AND v.created_at >= $1::date AND v.created_at < ($2::date + INTERVAL '1 day')) AS visits,
+                (SELECT COUNT(*)::int FROM creator_customer_attributions a
+                  WHERE a.creator_id = c.id AND a.attributed_at >= $1::date AND a.attributed_at < ($2::date + INTERVAL '1 day')) AS registered_customers,
+                (SELECT COUNT(DISTINCT p.customer_id)::int FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') AS purchasing_customers,
+                (SELECT COUNT(*)::int FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') AS purchase_events,
+                (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)::text FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') AS attributed_sales_npr,
+                (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr
            FROM creators c
-           LEFT JOIN creator_referral_visits v ON v.creator_id = c.id AND v.created_at >= $1::date AND v.created_at < ($2::date + INTERVAL '1 day')
-           LEFT JOIN creator_customer_attributions a ON a.creator_id = c.id AND a.attributed_at >= $1::date AND a.attributed_at < ($2::date + INTERVAL '1 day')
-           LEFT JOIN creator_purchase_events p ON p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day')
-          GROUP BY c.id
-          ORDER BY SUM(p.eligible_spend_npr) FILTER (WHERE p.event_status <> 'REVERSED') DESC NULLS LAST,
-                   COUNT(DISTINCT p.customer_id) DESC
+          ORDER BY attributed_sales_npr::numeric DESC, purchasing_customers DESC
           LIMIT 20`,
         params,
-      ),
+      )
     ]);
 
     const metrics = summary.rows[0] ?? {};
