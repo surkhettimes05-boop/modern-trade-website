@@ -77,12 +77,17 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PENDING') AS pending_rewards_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'APPROVED') AS approved_rewards_npr,
            (SELECT COALESCE(SUM(reward_amount_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status = 'PAID') AS paid_rewards_npr,
+           (SELECT COALESCE(SUM(cogs_npr), 0)::text FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_status = 'VERIFIED') AS verified_cogs_npr,
+           (SELECT COUNT(*)::int FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') AND event_status <> 'REVERSED' AND cost_status <> 'VERIFIED') AS purchases_missing_cogs,
+           (SELECT CASE WHEN COUNT(*) FILTER (WHERE event_status <> 'REVERSED') > 0 AND COUNT(*) FILTER (WHERE event_status <> 'REVERSED' AND cost_status <> 'VERIFIED') = 0
+             THEN COALESCE(SUM(eligible_spend_npr - COALESCE(cogs_npr, 0) - reward_amount_npr) FILTER (WHERE event_status <> 'REVERSED'), 0)::text
+             ELSE NULL END FROM creator_purchase_events WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')) AS contribution_after_cogs_rewards_npr,
            (SELECT COUNT(*)::int FROM creator_customer_attributions a WHERE a.attributed_at >= $1::date AND a.attributed_at < ($2::date + INTERVAL '1 day') AND EXISTS (SELECT 1 FROM creator_purchase_events p WHERE p.customer_id = a.customer_id AND p.creator_id = a.creator_id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED')) AS converted_customers`,
         params,
       ),
       query(
         `SELECT source_system, COUNT(*)::int AS purchase_events,
-                COALESCE(SUM(eligible_spend_npr), 0)::text AS attributed_sales_npr,
+                COALESCE(SUM(eligible_spend_npr), 0) AS attributed_sales_npr,
                 COUNT(DISTINCT customer_id)::int AS purchasing_customers
            FROM creator_purchase_events
           WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day')
@@ -95,7 +100,7 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                 COALESCE(v.visits, 0)::int AS visits,
                 COALESCE(a.registrations, 0)::int AS registrations,
                 COALESCE(p.orders, 0)::int AS purchase_events,
-                COALESCE(p.sales_npr, 0)::text AS attributed_sales_npr
+                COALESCE(p.sales_npr, 0) AS attributed_sales_npr
            FROM (SELECT generate_series($1::date, $2::date, INTERVAL '1 day')::date AS day) days
            LEFT JOIN (
              SELECT created_at::date AS day, COUNT(*) AS visits
@@ -133,14 +138,18 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                 (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)::text FROM creator_purchase_events p
                   WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED') AS attributed_sales_npr,
                 (SELECT COALESCE(SUM(p.reward_amount_npr), 0)::text FROM creator_purchase_events p
-                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status IN ('PENDING','APPROVED','PAID')) AS reward_cost_npr,
+                (SELECT COALESCE(SUM(p.cogs_npr), 0)::text FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_status = 'VERIFIED') AS verified_cogs_npr,
+                (SELECT COUNT(*)::int FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day') AND p.event_status <> 'REVERSED' AND p.cost_status <> 'VERIFIED') AS purchases_missing_cogs,
+                (SELECT CASE WHEN COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED') > 0 AND COUNT(*) FILTER (WHERE p.event_status <> 'REVERSED' AND p.cost_status <> 'VERIFIED') = 0
+                  THEN COALESCE(SUM(p.eligible_spend_npr - COALESCE(p.cogs_npr, 0) - p.reward_amount_npr) FILTER (WHERE p.event_status <> 'REVERSED'), 0) 
+                  ELSE NULL END FROM creator_purchase_events p
+                  WHERE p.creator_id = c.id AND p.created_at >= $1::date AND p.created_at < ($2::date + INTERVAL '1 day')) AS contribution_after_cogs_rewards_npr
            FROM creators c
-          ORDER BY (SELECT COALESCE(SUM(p.eligible_spend_npr), 0)
-                      FROM creator_purchase_events p
-                     WHERE p.creator_id = c.id AND p.created_at >= $1::date
-                       AND p.created_at < ($2::date + INTERVAL '1 day')
-                       AND p.event_status <> 'REVERSED') DESC,
-                   purchasing_customers DESC
+          ORDER BY contribution_after_cogs_rewards_npr DESC NULLS LAST,
+                   attributed_sales_npr DESC, purchasing_customers DESC
           LIMIT 20`,
         params,
       )
@@ -170,8 +179,13 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
       daily: trend.rows,
       leaderboard: leaderboard.rows,
       profitability: {
-        available: false,
-        reason: "Order-level cost of goods sold and contribution margin are not yet connected to creator purchase events. Attributed sales and reward cost are reported; profit and ROI are intentionally not estimated.",
+        available: Number(metrics.completed_purchase_events ?? 0) > 0 && Number(metrics.purchases_missing_cogs ?? 0) === 0,
+        verified_cogs_npr: String(metrics.verified_cogs_npr ?? "0.00"),
+        purchases_missing_cogs: Number(metrics.purchases_missing_cogs ?? 0),
+        contribution_after_cogs_rewards_npr: metrics.contribution_after_cogs_rewards_npr === null
+          ? null
+          : String(metrics.contribution_after_cogs_rewards_npr),
+        scope: "Verified POS item-cost and online consumed-batch snapshots only; contribution is before delivery, staffing, rent, tax and other operating expenses. It is not net profit or ROI.",
       },
     };
   });
