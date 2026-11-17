@@ -14,6 +14,45 @@ function slugBase(value: string) {
 }
 
 export async function creatorManagementRoutes(fastify: FastifyInstance) {
+  fastify.get("/creator-reward-settings", async () => {
+    const result = await query(
+      "SELECT default_rate_percent::text, attribution_window_days, hold_days, updated_at FROM creator_reward_settings WHERE id = 1",
+    );
+    return { settings: result.rows[0] ?? null };
+  });
+
+  fastify.patch("/creator-reward-settings", async (request, reply) => {
+    const input = z.object({
+      default_rate_percent: z.number().min(0).max(10),
+      attribution_window_days: z.number().int().min(1).max(90),
+      hold_days: z.number().int().min(0).max(90),
+    }).parse(request.body);
+    const actor = (request.user as { email?: string } | undefined)?.email ?? "ADMIN";
+    const result = await query(
+      `UPDATE creator_reward_settings
+          SET default_rate_percent = $1, attribution_window_days = $2,
+              hold_days = $3, updated_by = $4, updated_at = NOW()
+        WHERE id = 1
+        RETURNING default_rate_percent::text, attribution_window_days, hold_days, updated_at`,
+      [input.default_rate_percent, input.attribution_window_days, input.hold_days, actor],
+    );
+    return { settings: result.rows[0] };
+  });
+
+  fastify.post("/creator-rewards/approve-due", async () => {
+    const result = await query(
+      `UPDATE creator_purchase_events
+          SET event_status = 'APPROVED', updated_at = NOW()
+        WHERE event_status = 'PENDING' AND available_at <= NOW()
+        RETURNING id, creator_id, reward_amount_npr::text`,
+    );
+    return {
+      approved_count: result.rowCount ?? 0,
+      approved_reward_npr: result.rows.reduce((sum, row) => sum + Number(row.reward_amount_npr), 0).toFixed(2),
+    };
+  });
+
+
   fastify.get("/creators", async () => {
     const result = await query(
       `SELECT c.id, c.creator_code, c.display_name, c.contact_phone,
