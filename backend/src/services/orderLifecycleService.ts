@@ -26,6 +26,7 @@ export class OrderLifecycleService {
   private readonly validTransitions: Record<string, string[]> = {
     DRAFT: ["PENDING_PAYMENT", "CANCELLED"],
     PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
+    RECEIVED: ["CONFIRMED", "CANCELLED"],
     CONFIRMED: ["PICKING", "CANCELLED"],
     PICKING: ["PACKED", "CANCELLED"],
     PACKED: ["OUT_FOR_DELIVERY", "CANCELLED"],
@@ -161,7 +162,7 @@ export class OrderLifecycleService {
 
     // Check if order can be cancelled
     if (
-      !["DRAFT", "PENDING_PAYMENT", "CONFIRMED", "PICKING", "PACKED"].includes(
+      !["DRAFT", "PENDING_PAYMENT", "RECEIVED", "CONFIRMED", "PICKING", "PACKED"].includes(
         order.status,
       )
     ) {
