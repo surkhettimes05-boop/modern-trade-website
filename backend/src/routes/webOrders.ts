@@ -138,6 +138,7 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         .enum([
           "PENDING",
           "PENDING_PAYMENT",
+          "RECEIVED",
           "CONFIRMED",
           "PICKING",
           "PACKED",
