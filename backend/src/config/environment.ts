@@ -120,6 +120,8 @@ export function validateProductionEnvironment(
     "PROXY_AUTH_SECRET",
     "JWT_ISSUER",
     "JWT_AUDIENCE",
+    "MODERN_PRICING_SERVICE_TOKEN",
+    "MODERN_PRICING_SIGNING_SECRET",
     "DATABASE_RUNTIME_ROLE",
     "DATABASE_MIGRATION_ROLE",
   ] as const;

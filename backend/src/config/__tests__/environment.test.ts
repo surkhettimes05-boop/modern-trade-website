@@ -38,6 +38,8 @@ const productionEnvironment = {
   PAYMENT_ENCRYPTION_KEY: "a".repeat(64),
   JWT_ISSUER: "storesync-backend",
   JWT_AUDIENCE: "storesync-operations",
+  MODERN_PRICING_SERVICE_TOKEN: "m".repeat(32),
+  MODERN_PRICING_SIGNING_SECRET: "n".repeat(32),
   REQUIRE_LEAST_PRIVILEGE_DATABASE_ROLE: "true",
   DATABASE_RUNTIME_ROLE: "storesync_app",
   DATABASE_MIGRATION_ROLE: "storesync_migrator",
