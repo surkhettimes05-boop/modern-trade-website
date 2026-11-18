@@ -65,7 +65,7 @@ describe("web order lifecycle integrity", () => {
           rows: [
             {
               id: "order-1",
-              status: "PENDING_PAYMENT",
+              status: "RECEIVED",
               payment_status: "PENDING",
               cart_id: "cart-1",
               store_id: "store-1",
