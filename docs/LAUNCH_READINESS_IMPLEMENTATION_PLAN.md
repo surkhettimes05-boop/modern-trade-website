@@ -309,3 +309,30 @@ Branch inventory refreshed via GitHub. The connector could not independently enu
 - [ ] Confirm staging/production deployment SHAs and health.
 
 **Implementation blocker:** Do not select or merge code until current PR head/base/diffs are verified. Next workstream is COD PR reconciliation. Production remains untouched.
+
+
+## Phase 1 audit update — checkout reconciliation (2026-11-18)
+
+### Current ref comparison
+
+| Ref | Ahead of main | Behind main | Risk |
+|---|---:|---:|---|
+| `fix/nepal-cod-readiness` | 58 | 71 | High: stale/diverged; migration manifest ends at 042 while main has creator migrations through 045 |
+| `release/checkout-reconcile-20261014` | 5 | 34 | High: older release ref; not safe to merge without diff review |
+| `release/v1-web-reconcile` | 52 | 177 | Very high: broad web/app/infra divergence; not a checkout-only integration candidate |
+
+### Findings
+- `backend/src/routes/checkout.ts` and `backend/src/routes/public.ts` compare byte-identically between `main` and `fix/nepal-cod-readiness`.
+- `backend/src/services/checkoutService.ts`, `backend/src/app.ts`, and `backend/src/database/migrations.json` differ.
+- Main already registers migrations 036–045: Google web auth, checkout attempt fingerprint, addresses, favorites, COD fulfillment/cash, payment evidence, and creator attribution/rewards. The readiness branch has 036–042 and uses a different 042 migration name.
+- Main checkout currently inserts COD orders as `PENDING_PAYMENT` with payment status `PENDING`. This requires a deliberate canonical-state-machine decision and regression coverage; do not change the status in isolation because `WebOrderService` currently transitions `PENDING_PAYMENT` to `CONFIRMED` and operations may depend on it.
+
+### Decision
+Do not merge PR #66 or #67, or any old release branch wholesale. Reconcile only the service-level changes and migration/test deltas against current main. Before implementation, obtain complete PR diffs and CI/check state; the GitHub connector available in this session supports branch comparisons and file reads but does not provide full PR diffs/checks or a local execution environment. No code merge/deployment was performed.
+
+### Updated blocker
+- [ ] Full diff and CI evidence for PR #66/#67/#45/#46/#47 against current main.
+- [ ] Confirm order-state contract for COD: order status and payment status, including operations lifecycle.
+- [ ] Reconcile service changes and migrations 037–042 without regressing migrations 042–045 on main.
+- [ ] Run backend unit/integration suite and fresh database migration test in repository environment.
+- [ ] Staging customer → COD checkout → operations fulfillment smoke test.
