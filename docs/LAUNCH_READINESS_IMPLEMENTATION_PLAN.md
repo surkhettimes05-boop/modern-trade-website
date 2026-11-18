@@ -279,3 +279,33 @@ For each scenario record:
 2. Build the PR dependency/reconciliation matrix and identify the smallest safe merge sequence.
 3. Start with the highest-risk launch path: fresh COD order on website → operational visibility → fulfillment → stock/cash reconciliation.
 4. Do not deploy to production or merge production-impacting PRs without approval.
+
+
+## Phase 0 refresh — repository inventory (2026-11-18)
+
+Branch inventory refreshed via GitHub. The connector could not independently enumerate live open-PR status/CI for this run; prior PR references are a known snapshot, not verified current states.
+
+### Repository branch signals
+| Repository | Branches observed | Action |
+|---|---|---|
+| `modern-trade-website` | `agent/publish-modern-trade-updates`, `backup/pre-sync-2026-09-29`, `codex/fix-ghcr-publish`, `codex/fix-pickup-checkout`, `codex/vercel-cloudflare-deploy`, `codex/vercel-node22-fix`, dependency branches | Refresh checkout/deployment PRs and compare with main. |
+| `modern-trade-app` | `main`, `codex/sync-production-flutter`, `feat/creator-programme-dashboard`, `feat/pasalho-commerce-client`, `feat/unified-campaign-manager`, `feat/unified-campaign-manager-prod`, `feature/google-customer-auth`, `fix/checkout-saved-address-province`, `fix/firebase-live-campaigns`, `fix/nepal-cod-readiness` | Verify exact app release branch and dependencies. |
+| `Pasalho-lite` | `deploy/cloudflare-workers`, `deploy/vercel-neon`, `feat/creator-attribution-rewards`, `feat/creator-pos-cogs`, `feat/creator-return-reversals`, `feat/lite-launch-runtime-e2e`, `feature-bulk-sku-import`, `feature-pasalho-ops-ui-pass2`, `feature-pasalho-ui-polish`, `fix/vercel-production-env` | Confirm target deployment architecture; reconcile launch/runtime and creator branches. |
+| `ceodashboard` | `main`, `backup/pre-sync-2026-09-29`, `release/v1-ci-closure` | Inspect divergence, CI, mocks and source-data correctness. |
+
+### Known PR snapshot from previous audit — revalidation required
+- Website: #90 authenticated Lite pricing contract (migration 046); #84 creator profitability/COGS (migration 043); #82 creator attribution/rewards (migration 042); #89/#67/#66/#59/#54/#52/#47/#46/#45 and related release/dependency PRs. COD/checkout overlap is a merge risk.
+- App: #10 creator dashboard; #8 Google sign-in; #6 campaigns; #2 V1 reconciliation/release validation. Prior audit reported Flutter analyzer/build and live API E2E unproven.
+- Lite: #24 launch runtime/canonical pricing E2E; #23 creator POS return reversals; #22 POS COGS evidence; #20 Vercel environment compatibility. PR-body CI claims require verification against current commits.
+
+### Phase 0 checklist
+- [x] Repository branch inventory refreshed.
+- [x] Plan and dependency/risk sequence documented.
+- [ ] Re-enumerate live PRs, reviews, CI, mergeability, changed files, base/head SHAs (connector limitation; verify GitHub pages).
+- [ ] Compare website COD PRs and select canonical integration chain.
+- [ ] Compare Lite runtime/COGS/reversal PRs and confirm deployment target.
+- [ ] Inspect app release branch and Flutter CI.
+- [ ] Audit CEO dashboard data sources/mocks/multi-store aggregation.
+- [ ] Confirm staging/production deployment SHAs and health.
+
+**Implementation blocker:** Do not select or merge code until current PR head/base/diffs are verified. Next workstream is COD PR reconciliation. Production remains untouched.
