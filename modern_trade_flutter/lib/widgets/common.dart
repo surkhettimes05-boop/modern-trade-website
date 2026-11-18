@@ -192,6 +192,11 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final memberPrice =
+        product.sku == null ? null : state.memberPrices[product.sku];
+    final memberEligible = state.membership?.isActive == true &&
+        memberPrice != null &&
+        memberPrice.appliedUnitMinor < memberPrice.regularUnitMinor;
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
@@ -266,12 +271,31 @@ class ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 7),
                   Text(
-                    formatNpr(product.price),
-                    style: const TextStyle(
-                      color: AppColors.brand,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    memberEligible
+                        ? formatNprMinor(memberPrice.appliedUnitMinor)
+                        : formatNpr(product.price),
+                    style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w900),
                   ),
+                  if (memberEligible) ...[
+                    Text(
+                      'Regular ${formatNprMinor(memberPrice.regularUnitMinor)}',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 11,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                    Text(
+                      state.membership!.tier == 'FOUNDING_1000'
+                          ? 'Founding 1,000 member price'
+                          : 'Registered member price',
+                      style: const TextStyle(
+                        color: AppColors.brand,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,

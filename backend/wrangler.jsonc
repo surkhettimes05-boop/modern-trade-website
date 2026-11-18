@@ -24,6 +24,7 @@
     "ENABLE_EXTERNAL_TAX_INTEGRATION": "false",
     "ENABLE_RETURNS": "false",
     "ENABLE_PROMOTION_ENGINE": "false",
+    "ENABLE_MEMBER_PRICING": "false",
     "ENABLE_CUSTOMER_SEGMENTS": "false",
     "ENABLE_OFFLINE_SYNC": "false",
     "ENABLE_HARDWARE_DEVICES": "false",

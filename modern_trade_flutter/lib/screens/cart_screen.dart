@@ -14,6 +14,7 @@ class CartScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final pricingQuote = state.currentPricingQuote;
     if (state.cart.isEmpty) {
       return EmptyState(
         icon: Icons.shopping_cart_outlined,
@@ -49,11 +50,12 @@ class CartScreen extends StatelessWidget {
                 Row(
                   children: [
                     const Expanded(child: Text('Subtotal')),
-                    Text(
-                      formatNpr(state.cartSubtotal),
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w900),
-                    ),
+                    Text(pricingQuote == null && state.customer != null
+                        ? state.pricingBusy
+                            ? 'Updating…'
+                            : 'Price unavailable'
+                        : formatNprMinor(state.cartSubtotalMinor),
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
                   ],
                 ),
                 const SizedBox(height: 5),
@@ -79,6 +81,15 @@ class CartScreen extends StatelessWidget {
                               builder: (_) => const LoginScreen()),
                         );
                         if (signedIn != true || !context.mounted) return;
+                      }
+                      if (state.currentPricingQuote == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(state.pricingError ??
+                                'Waiting for an authoritative price quote.'),
+                          ),
+                        );
+                        return;
                       }
                       await Navigator.push<void>(
                         context,
@@ -107,6 +118,11 @@ class _CartLineItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final quotedItems = state.currentPricingQuote?.items
+            .where((item) => item.sku == line.product.sku)
+            .toList() ??
+        const [];
+    final quoteItem = quotedItems.isEmpty ? null : quotedItems.first;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -126,11 +142,22 @@ class _CartLineItem extends StatelessWidget {
               Text(line.product.name,
                   style: const TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 5),
-              Text(formatNpr(line.product.price),
-                  style: const TextStyle(
-                    color: AppColors.brand,
-                    fontWeight: FontWeight.w900,
-                  )),
+              if (quoteItem != null) ...[
+                Text(formatNprMinor(quoteItem.appliedUnitMinor),
+                    style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w900)),
+                Text('Regular ${formatNprMinor(quoteItem.regularUnitMinor)} · Save ${formatNprMinor(quoteItem.savingPerUnitMinor)} per item',
+                    style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                if (quoteItem.promotionName != null)
+                  Text(quoteItem.promotionName!, style: const TextStyle(color: AppColors.brand, fontSize: 12)),
+              ] else
+                Text(
+                  state.customer == null
+                      ? formatNpr(line.product.price)
+                      : state.pricingBusy
+                          ? 'Updating price…'
+                          : 'Price unavailable',
+                  style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w900),
+                ),
               const SizedBox(height: 10),
               Row(
                 children: [

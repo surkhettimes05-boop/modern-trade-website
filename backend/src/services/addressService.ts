@@ -56,6 +56,18 @@ export class AddressService {
     created_by?: string;
     metadata?: any;
   }): Promise<CustomerAddress> {
+    if (!addressData.municipality_id || !addressData.ward_id) {
+      throw new Error("A complete municipality and ward is required");
+    }
+    const geography = await query(
+      `SELECT 1
+         FROM nepal_wards
+        WHERE id = $1 AND municipality_id = $2`,
+      [addressData.ward_id, addressData.municipality_id],
+    );
+    if (!geography.rows[0]) {
+      throw new Error("Municipality and ward do not match");
+    }
     const result = await query(
       `INSERT INTO customer_addresses (
         customer_id, province_id, district_id, municipality_id, ward_id,

@@ -8,15 +8,14 @@ import { resilientFetch } from '@/lib/resilientFetch';
 type OrderItem = { id?: string; sku?: string; product_name?: string; quantity?: number; unit_price?: number; line_total?: number };
 type OrderRow = Record<string, unknown> & { items?: OrderItem[] };
 
-const terminalStatuses = new Set(['DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED']);
-const alertStatuses = new Set(['PENDING', 'PENDING_PAYMENT']);
+const terminalStatuses = new Set(['DELIVERED', 'CANCELLED', 'FAILED']);
+const alertStatuses = new Set(['RECEIVED']);
 
 const nextStatus: Record<string, { status: string; label: string }> = {
-  PENDING: { status: 'CONFIRMED', label: 'Accept & start' },
-  PENDING_PAYMENT: { status: 'CONFIRMED', label: 'Accept & start' },
-  CONFIRMED: { status: 'PICKING', label: 'Start picking' },
-  PICKING: { status: 'PACKED', label: 'Mark packed' },
-  PACKED: { status: 'OUT_FOR_DELIVERY', label: 'Send for delivery' },
+  RECEIVED: { status: 'CONFIRMED', label: 'Confirm order' },
+  CONFIRMED: { status: 'PROCESSING', label: 'Start processing' },
+  PROCESSING: { status: 'READY', label: 'Mark ready' },
+  READY: { status: 'OUT_FOR_DELIVERY', label: 'Send for delivery' },
   OUT_FOR_DELIVERY: { status: 'DELIVERED', label: 'Confirm delivered + cash received' },
 };
 
@@ -310,7 +309,7 @@ export function LiveOrderConsole() {
                       onClick={() => void transition(order, action.status)}
                       className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 font-bold text-white disabled:opacity-60"
                     >
-                      {status === 'PACKED' ? <Truck size={18} /> : <PackageCheck size={18} />}
+                      {status === 'READY' ? <Truck size={18} /> : <PackageCheck size={18} />}
                       {busyOrderId === id ? 'Updating…' : action.label}
                     </button>
                   )}

@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import pg from "pg";
 
-export const LATEST_MIGRATION_ID = "036_google_web_auth";
+export const LATEST_MIGRATION_ID =
+  "050_cod_launch_lifecycle";
 
 // Databases created before schema_migrations was introduced already contain
 // this fixed baseline. Never derive the baseline from the current manifest:

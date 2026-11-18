@@ -158,5 +158,41 @@
   [
     "041_payment_evidence_engine",
     "../database/041_payment_evidence_engine.sql"
+  ],
+  [
+    "042_membership_foundation",
+    "../database/042_membership_foundation.sql"
+  ],
+  [
+    "043_membership_integrity",
+    "../database/043_membership_integrity.sql"
+  ],
+  [
+    "044_member_pricing_engine",
+    "../database/044_member_pricing_engine.sql"
+  ],
+  [
+    "045_member_pricing_quotes",
+    "../database/045_member_pricing_quotes.sql"
+  ],
+  [
+    "046_web_order_member_pricing_snapshots",
+    "../database/046_web_order_member_pricing_snapshots.sql"
+  ],
+  [
+    "047_unique_member_pricing_quote_sale_reference",
+    "../database/047_unique_member_pricing_quote_sale_reference.sql"
+  ],
+  [
+    "048_cod_member_pricing_channel",
+    "../database/048_cod_member_pricing_channel.sql"
+  ],
+  [
+    "049_web_order_loyalty_return_reversal",
+    "../database/049_web_order_loyalty_return_reversal.sql"
+  ],
+  [
+    "050_cod_launch_lifecycle",
+    "../database/050_cod_launch_lifecycle.sql"
   ]
 ]

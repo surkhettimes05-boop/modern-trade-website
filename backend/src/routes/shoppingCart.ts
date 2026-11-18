@@ -119,6 +119,12 @@ export async function shoppingCartRoutes(fastify: FastifyInstance) {
       ) {
         return reply.status(400).send({ error: error.message });
       }
+      if (
+        error instanceof Error &&
+        error.message.includes("stock")
+      ) {
+        return reply.status(409).send({ error: error.message });
+      }
       throw error;
     }
   });
@@ -149,7 +155,10 @@ export async function shoppingCartRoutes(fastify: FastifyInstance) {
         cart_id: cartId,
       });
       return reply.status(201).send(item);
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("stock")) {
+        return reply.status(409).send({ error: error.message });
+      }
       return reply.status(500).send({ error: "Failed to add item to cart" });
     }
   });
@@ -181,6 +190,9 @@ export async function shoppingCartRoutes(fastify: FastifyInstance) {
     } catch (error) {
       if (error instanceof Error && error.message === "No fields to update") {
         return reply.status(400).send({ error: "No fields to update" });
+      }
+      if (error instanceof Error && error.message.includes("stock")) {
+        return reply.status(409).send({ error: error.message });
       }
       return reply.status(500).send({ error: "Failed to update cart item" });
     }

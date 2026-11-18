@@ -3,7 +3,13 @@ import { z } from "zod";
 import { OfflineSyncService } from "../services/offlineSyncService.js";
 import { query } from "../database/connection.js";
 
-const offlineSyncService = new OfflineSyncService();
+let offlineSyncService: OfflineSyncService | null = null;
+function getOfflineSyncService(): OfflineSyncService {
+  if (!offlineSyncService) {
+    offlineSyncService = new OfflineSyncService();
+  }
+  return offlineSyncService;
+}
 
 export async function offlineSyncRoutes(fastify: FastifyInstance) {
   // Device: Register device
@@ -23,7 +29,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
     const deviceData = schema.parse(request.body);
 
     try {
-      const device = await offlineSyncService.registerDevice(deviceData);
+      const device = await getOfflineSyncService().registerDevice(deviceData);
       return reply.send(device);
     } catch {
       return reply.status(500).send({ error: "Failed to register device" });
@@ -39,7 +45,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
     const { deviceId } = schema.parse(request.params);
 
     try {
-      const device = await offlineSyncService.getDevice(deviceId);
+      const device = await getOfflineSyncService().getDevice(deviceId);
       if (!device) {
         return reply.status(404).send({ error: "Device not found" });
       }
@@ -60,7 +66,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
       const { deviceId } = schema.parse(request.params);
 
       try {
-        await offlineSyncService.updateDeviceLastSeen(deviceId);
+        await getOfflineSyncService().updateDeviceLastSeen(deviceId);
         return reply.send({ success: true });
       } catch {
         return reply.status(500).send({ error: "Failed to update last seen" });
@@ -84,7 +90,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
     const transactionData = schema.parse(request.body);
 
     try {
-      const id = await offlineSyncService.addTransaction({
+      const id = await getOfflineSyncService().addTransaction({
         ...transactionData,
         local_sequence_number: BigInt(transactionData.local_sequence_number),
       });
@@ -104,7 +110,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
     const { device_id, limit = 100 } = schema.parse(request.query);
 
     try {
-      const transactions = await offlineSyncService.getPendingTransactions(
+      const transactions = await getOfflineSyncService().getPendingTransactions(
         device_id,
         limit,
       );
@@ -126,7 +132,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
     const { device_id, transaction_ids } = schema.parse(request.body);
 
     try {
-      const batchId = await offlineSyncService.createSyncBatch(
+      const batchId = await getOfflineSyncService().createSyncBatch(
         device_id,
         transaction_ids,
       );
@@ -147,7 +153,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
       const { batchId } = schema.parse(request.params);
 
       try {
-        const result = await offlineSyncService.processSyncBatch(batchId);
+        const result = await getOfflineSyncService().processSyncBatch(batchId);
         return reply.send(result);
       } catch {
         return reply.status(500).send({ error: "Failed to process batch" });
@@ -164,7 +170,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
     const { deviceId } = schema.parse(request.params);
 
     try {
-      const status = await offlineSyncService.getDeviceSyncStatus(deviceId);
+      const status = await getOfflineSyncService().getDeviceSyncStatus(deviceId);
       return reply.send(status);
     } catch {
       return reply.status(500).send({ error: "Failed to get sync status" });
@@ -180,7 +186,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
     const { deviceId } = schema.parse(request.params);
 
     try {
-      const count = await offlineSyncService.retryFailedTransactions(deviceId);
+      const count = await getOfflineSyncService().retryFailedTransactions(deviceId);
       return reply.send({ retried_count: count });
     } catch {
       return reply.status(500).send({ error: "Failed to retry transactions" });
@@ -205,7 +211,7 @@ export async function offlineSyncRoutes(fastify: FastifyInstance) {
       const { resolution, resolved_by, notes } = bodySchema.parse(request.body);
 
       try {
-        await offlineSyncService.resolveConflict(
+        await getOfflineSyncService().resolveConflict(
           transactionId,
           resolution,
           resolved_by,

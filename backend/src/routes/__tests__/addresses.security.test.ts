@@ -57,7 +57,12 @@ describe("address route ownership", () => {
       method: "POST",
       url: "/addresses",
       headers: { "x-test-customer-id": customerA },
-      payload: { address_type: "HOME", street: "Durbar Marg" },
+      payload: {
+        address_type: "HOME",
+        street: "Durbar Marg",
+        municipality_id: 1,
+        ward_id: 1,
+      },
     });
     expect(response.statusCode).toBe(201);
     expect(create).toHaveBeenCalledWith(

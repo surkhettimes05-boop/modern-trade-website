@@ -1,5 +1,6 @@
 import {
   PILOT_FEATURES,
+  memberPricingEnabled,
   validatePilotFeatureEnvironment,
 } from "../releaseFeatures.js";
 
@@ -10,6 +11,7 @@ describe("pilot feature controls", () => {
       basicPos: true,
       inventory: true,
       electronicPayments: false,
+      memberPricing: false,
       loyalty: true,
       advancedAnalytics: false,
       externalTaxIntegration: false,
@@ -24,5 +26,11 @@ describe("pilot feature controls", () => {
         ENABLE_ELECTRONIC_PAYMENTS: "true",
       }),
     ).toThrow("Deferred pilot features cannot be enabled");
+  });
+
+  it("keeps member pricing off unless explicitly enabled", () => {
+    expect(memberPricingEnabled({})).toBe(false);
+    expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "false" })).toBe(false);
+    expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "true" })).toBe(true);
   });
 });

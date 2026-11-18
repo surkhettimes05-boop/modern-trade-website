@@ -65,7 +65,7 @@ describe("web order lifecycle integrity", () => {
           rows: [
             {
               id: "order-1",
-              status: "PENDING_PAYMENT",
+              status: "RECEIVED",
               payment_status: "PENDING",
               cart_id: "cart-1",
               store_id: "store-1",
@@ -144,7 +144,7 @@ describe("web order lifecycle integrity", () => {
   it("rejects an invalid status transition and rolls back", async () => {
     clientQuery.mockImplementation(async (sql: string) => {
       if (sql.startsWith("SELECT * FROM web_orders")) {
-        return { rows: [{ id: "order-1", status: "PENDING_PAYMENT" }] };
+        return { rows: [{ id: "order-1", status: "RECEIVED" }] };
       }
       return { rows: [] };
     });

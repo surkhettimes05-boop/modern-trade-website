@@ -3,6 +3,17 @@ import { getPool } from "../database/connection.js";
 import { MARKET } from "../config/market.js";
 import { DeliveryZoneService } from "./deliveryZoneService.js";
 import { loadCanonicalCartItems } from "./cartValidationService.js";
+import {
+  calculatePricedLine,
+  centsMoney,
+  moneyCents,
+  resolveMemberPricing,
+} from "./memberPricingService.js";
+import {
+  calculateMemberPricingLine,
+  MemberPricingQuoteError,
+  validateMemberPricingQuote,
+} from "./memberPricingQuoteService.js";
 
 const deliveryZones = new DeliveryZoneService();
 
@@ -13,6 +24,8 @@ export class CheckoutService {
     addressId?: string;
     cartId: string;
     idempotencyKey: string;
+    signedQuoteToken: string;
+    channel: "WEB" | "APP";
     deliveryType: "DELIVERY" | "PICKUP";
     shippingName: string;
     shippingPhone: string;
@@ -129,11 +142,7 @@ export class CheckoutService {
         // never used as the authority for a delivery order.
         fulfillmentStoreId = assignment.fulfillment_store_id;
       } else {
-        // Pickup has no delivery address to resolve. Keep its store choice
-        // backend-owned as well by using the same deterministic store order.
-        const defaultStoreId = await deliveryZones.getDefaultOpenStoreId();
-        if (!defaultStoreId) throw new Error("No store is accepting orders");
-        fulfillmentStoreId = defaultStoreId;
+        fulfillmentStoreId = input.storeId;
       }
 
       const storeResult = await client.query(
@@ -180,9 +189,97 @@ export class CheckoutService {
         })),
       );
 
-      // Product prices are the final customer-facing NPR prices. We do not add
-      // a blanket 13% VAT on top because FMCG tax treatment varies by SKU.
-      let subtotalPaisa = 0;
+      const customerIdentity = await client.query(
+        `SELECT phone_normalized
+           FROM customers
+          WHERE id = $1 AND status = 'ACTIVE'
+            AND verification_status = 'VERIFIED'`,
+        [input.customerId],
+      );
+      if (!customerIdentity.rowCount) {
+        throw new MemberPricingQuoteError(
+          "CUSTOMER_NOT_AVAILABLE",
+          "The authenticated customer is not available for checkout.",
+          409,
+        );
+      }
+
+      const validatedQuote = await validateMemberPricingQuote({
+        channel: input.channel,
+        storeReference: fulfillmentStoreId,
+        customerReference: input.customerId,
+        customerPhoneReference: String(
+          customerIdentity.rows[0].phone_normalized,
+        ),
+        items: canonicalItems.map((item) => {
+          if (!item.sku) {
+            throw new MemberPricingQuoteError(
+              "SKU_NOT_FOUND",
+              "A cart product is missing its authoritative SKU.",
+              409,
+            );
+          }
+          return { sku: item.sku, quantity: String(item.quantity) };
+        }),
+        signedQuoteToken: input.signedQuoteToken,
+        saleReference: input.idempotencyKey,
+      });
+
+      const memberPrices = await resolveMemberPricing(client, {
+        storeId: fulfillmentStoreId,
+        customerId: input.customerId,
+        channel: input.channel,
+        productIds: canonicalItems.map((item) => item.product_id),
+      });
+      const promotionIds = [
+        ...new Set(
+          memberPrices.flatMap((price) =>
+            price.promotion_id ? [price.promotion_id] : [],
+          ),
+        ),
+      ];
+      const promotionResult = promotionIds.length
+        ? await client.query(
+            `SELECT id::text, name, version
+               FROM member_pricing_promotions
+              WHERE id = ANY($1::uuid[])`,
+            [promotionIds],
+          )
+        : { rows: [] as Array<{ id: string; name: string; version: number }> };
+      const promotionById = new Map(
+        promotionResult.rows.map((row) => [
+          String(row.id),
+          {
+            id: String(row.id),
+            name: String(row.name),
+            version: Number(row.version),
+          },
+        ]),
+      );
+      const policy = await client.query(
+        `SELECT pricing_rule_version
+           FROM member_pricing_policies
+          WHERE policy_key = 'GLOBAL'`,
+      );
+      if (
+        !policy.rowCount ||
+        Number(policy.rows[0].pricing_rule_version) !==
+          validatedQuote.pricingRuleVersion
+      ) {
+        throw new MemberPricingQuoteError(
+          "PRICING_CHANGED",
+          "Member pricing changed. Review the updated quote before checkout.",
+          409,
+        );
+      }
+      const priceByProduct = new Map(
+        memberPrices.map((price) => [price.product_id, price]),
+      );
+      const quotedBySku = new Map(
+        validatedQuote.items.map((item) => [item.sku, item]),
+      );
+      let subtotalPaisa = 0n;
+      let discountPaisa = 0n;
       const pricedItems = canonicalItems.map((item) => {
         if (item.status !== "VALID") {
           throw new Error(
@@ -195,19 +292,58 @@ export class CheckoutService {
                 : `Price unavailable for ${item.name_en || item.product_id}`,
           );
         }
-        const authoritativePrice = Number(item.authoritative_price);
-        const linePaisa =
-          Math.round(authoritativePrice * 100) * Number(item.quantity);
-        subtotalPaisa += linePaisa;
+        const price = priceByProduct.get(item.product_id);
+        if (!price) throw new Error("Product price is unavailable");
+        const quoteLine = item.sku ? quotedBySku.get(item.sku) : undefined;
+        const exactLine = calculateMemberPricingLine(
+          price,
+          String(item.quantity),
+        );
+        const promotion = price.promotion_id
+          ? promotionById.get(price.promotion_id) ?? null
+          : null;
+        if (
+          !quoteLine ||
+          quoteLine.quantity !== String(item.quantity) ||
+          quoteLine.regularUnitPrice !== exactLine.regularUnitPrice ||
+          quoteLine.appliedUnitPrice !== exactLine.appliedUnitPrice ||
+          quoteLine.lineDiscount !== exactLine.lineDiscount ||
+          quoteLine.lineTotal !== exactLine.lineTotal ||
+          quoteLine.promotionReference !== price.promotion_id ||
+          JSON.stringify(quoteLine.promotionSnapshot) !==
+            JSON.stringify(promotion)
+        ) {
+          throw new MemberPricingQuoteError(
+            "PRICING_CHANGED",
+            "Member pricing changed. Review the updated quote before checkout.",
+            409,
+          );
+        }
+        const line = calculatePricedLine(price, Number(item.quantity));
+        const regularLinePaisa =
+          moneyCents(price.regular_price) * BigInt(item.quantity);
+        subtotalPaisa += regularLinePaisa;
+        discountPaisa += moneyCents(line.discountAmount);
         return {
           ...item,
-          lineTotal: linePaisa / 100,
+          unitPrice: line.regularUnitPrice,
+          discountAmount: line.discountAmount,
+          lineTotal: line.lineTotal,
           taxAmount: 0,
-          lineTotalWithTax: linePaisa / 100,
+          lineTotalWithTax: line.lineTotal,
+          memberPricingPromotionId: line.promotionId,
+          regularUnitPrice: exactLine.regularUnitPrice,
+          appliedUnitPrice: exactLine.appliedUnitPrice,
+          promotionSnapshot: quoteLine.promotionSnapshot,
+          pricingRuleVersion: validatedQuote.pricingRuleVersion,
+          currency: validatedQuote.currency,
         };
       });
 
-      const subtotal = subtotalPaisa / 100;
+      const subtotal = centsMoney(subtotalPaisa);
+      const discountAmount = centsMoney(discountPaisa);
+      const discountedSubtotalPaisa = subtotalPaisa - discountPaisa;
+      const discountedSubtotal = Number(centsMoney(discountedSubtotalPaisa));
       let shippingAddress: string | null = null;
       let shippingCity: string | null = null;
       let shippingState: string | null = null;
@@ -218,6 +354,7 @@ export class CheckoutService {
       let deliveryZoneId: string | null = null;
       let deliveryQuote: Record<string, unknown> | null = null;
       let shipping = 0;
+      let shippingPaisa = 0n;
 
       if (input.deliveryType === "PICKUP") {
         shippingAddress = store.address_en;
@@ -250,7 +387,7 @@ export class CheckoutService {
           municipality_id: savedAddress.municipality_id,
           ward_id: savedAddress.ward_id,
           store_id: fulfillmentStoreId,
-          order_value: subtotal,
+          order_value: discountedSubtotal,
         });
         if (!quote.serviceable) {
           throw new Error(
@@ -282,11 +419,12 @@ export class CheckoutService {
         shippingWardId = savedAddress.ward_id;
         deliveryZoneId = quote.zone_id;
         deliveryQuote = quote;
-        shipping = Number(quote.delivery_fee || 0);
+        shippingPaisa = moneyCents(String(quote.delivery_fee || 0));
+        shipping = Number(centsMoney(shippingPaisa));
       }
 
       const tax = 0;
-      const total = subtotal + shipping;
+      const total = centsMoney(discountedSubtotalPaisa + shippingPaisa);
 
       const order = await client.query(
         `INSERT INTO web_orders (
@@ -297,13 +435,16 @@ export class CheckoutService {
           payment_status, shipping_name, shipping_phone, shipping_address,
           shipping_city, shipping_state, shipping_postal_code, shipping_country,
           shipping_municipality_id, shipping_ward_id, delivery_type,
-          delivery_zone_id, delivery_quote, notes
+          delivery_zone_id, delivery_quote, member_pricing_quote_id,
+          membership_tier_snapshot, pricing_rule_version,
+          pricing_quote_snapshot, notes
         )
         VALUES (
           'WO-' || TO_CHAR(NOW(), 'YYYYMMDDHH24MISS') || '-' || SUBSTRING($1, 1, 8),
-          $2, $3, $3, $4, $1, $5, 'PENDING_PAYMENT', $6, $7, $8, $8, 0, $9,
-          '${MARKET.currencyCode}', 'COD', 'PENDING', $10, $11, $12, $13, $14,
-          $15, $16, $17, $18, $19, $20, $21::jsonb, $22
+          $2, $3, $3, $4, $1, $5, 'RECEIVED', $6, $7, $8, $8, $9, $10,
+          '${MARKET.currencyCode}', 'COD', 'PENDING', $11, $12, $13, $14, $15,
+          $16, $17, $18, $19, $20, $21, $22::jsonb, $23, $24, $25,
+          $26::jsonb, $27
         )
         RETURNING *`,
         [
@@ -314,7 +455,8 @@ export class CheckoutService {
           requestFingerprint,
           subtotal,
           tax,
-          shipping,
+          centsMoney(shippingPaisa),
+          discountAmount,
           total,
           input.shippingName,
           input.shippingPhone,
@@ -328,6 +470,10 @@ export class CheckoutService {
           input.deliveryType,
           deliveryZoneId,
           JSON.stringify(deliveryQuote),
+          validatedQuote.quoteId,
+          validatedQuote.membershipTier,
+          validatedQuote.pricingRuleVersion,
+          JSON.stringify(validatedQuote),
           input.notes || null,
         ],
       );
@@ -335,26 +481,46 @@ export class CheckoutService {
       await client.query(
         `INSERT INTO web_order_items
           (order_id, product_id, product_name, quantity, unit_price,
-           discount_amount, line_total, tax_amount, line_total_with_tax)
+           discount_amount, line_total, tax_amount, line_total_with_tax,
+           member_pricing_promotion_id, regular_unit_price,
+           applied_unit_price, promotion_snapshot, membership_tier_snapshot,
+           member_pricing_quote_id, pricing_rule_version, currency)
          SELECT $1, item.product_id, item.product_name, item.quantity,
-                item.unit_price, 0, item.line_total, item.tax_amount,
-                item.line_total_with_tax
-           FROM unnest(
-             $2::uuid[], $3::text[], $4::integer[], $5::numeric[],
-             $6::numeric[], $7::numeric[], $8::numeric[]
-           ) AS item(
-             product_id, product_name, quantity, unit_price,
-             line_total, tax_amount, line_total_with_tax
+                item.unit_price, item.discount_amount, item.line_total,
+                item.tax_amount, item.line_total_with_tax,
+                item.member_pricing_promotion_id, item.regular_unit_price,
+                item.applied_unit_price, item.promotion_snapshot,
+                $3, $4, $5, item.currency
+           FROM jsonb_to_recordset($2::jsonb) AS item(
+             product_id uuid, product_name text, quantity integer,
+             unit_price numeric, discount_amount numeric, line_total numeric,
+             tax_amount numeric, line_total_with_tax numeric,
+             member_pricing_promotion_id uuid, regular_unit_price numeric,
+             applied_unit_price numeric, promotion_snapshot jsonb,
+             currency text
            )`,
         [
           order.rows[0].id,
-          pricedItems.map((item) => item.product_id),
-          pricedItems.map((item) => item.name_en),
-          pricedItems.map((item) => item.quantity),
-          pricedItems.map((item) => item.authoritative_price),
-          pricedItems.map((item) => item.lineTotal),
-          pricedItems.map((item) => item.taxAmount),
-          pricedItems.map((item) => item.lineTotalWithTax),
+          JSON.stringify(
+            pricedItems.map((item) => ({
+              product_id: item.product_id,
+              product_name: item.name_en,
+              quantity: item.quantity,
+              unit_price: item.unitPrice,
+              discount_amount: item.discountAmount,
+              line_total: item.lineTotal,
+              tax_amount: item.taxAmount,
+              line_total_with_tax: item.lineTotalWithTax,
+              member_pricing_promotion_id: item.memberPricingPromotionId,
+              regular_unit_price: item.regularUnitPrice,
+              applied_unit_price: item.appliedUnitPrice,
+              promotion_snapshot: item.promotionSnapshot,
+              currency: item.currency,
+            })),
+          ),
+          validatedQuote.membershipTier,
+          validatedQuote.quoteId,
+          validatedQuote.pricingRuleVersion,
         ],
       );
 
@@ -387,7 +553,7 @@ export class CheckoutService {
         `INSERT INTO order_events
           (order_id, event_type, from_status, to_status, reason, metadata, created_by)
          VALUES (
-           $1, 'CREATED', NULL, 'PENDING_PAYMENT', 'COD checkout submitted',
+           $1, 'CREATED', NULL, 'RECEIVED', 'COD checkout submitted',
            $2::jsonb, $3
          )`,
         [
@@ -458,7 +624,7 @@ export class CheckoutService {
       const order = current.rows[0];
       if (
         !order ||
-        !["PENDING", "PENDING_PAYMENT", "CONFIRMED"].includes(order.status)
+        !["RECEIVED", "CONFIRMED"].includes(order.status)
       ) {
         throw new Error("Order cannot be cancelled");
       }

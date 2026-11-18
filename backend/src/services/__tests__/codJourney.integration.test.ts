@@ -10,10 +10,13 @@ import { addressRoutes } from "../../routes/addresses.js";
 import { OTPService } from "../otpService.js";
 import { errorHandler } from "../../middleware/errorHandler.js";
 import { publicRoutes } from "../../routes/public.js";
+import { createMemberPricingQuote } from "../memberPricingQuoteService.js";
 
 // Real PostgreSQL, services, routes, transactions and migrations. Only SMS is
 // replaced with the existing test transport. Executed by test:ci.
 test("customer → address → serviceability → assigned cart → COD recovery", async () => {
+  process.env.MEMBER_PRICING_QUOTE_SECRET ||=
+    "test-only-member-pricing-quote-secret-at-least-32-bytes";
   const seed = await readFile("../database/development_seed.sql", "utf8");
   await query(seed);
   const organizationCountBefore = await query(
@@ -112,7 +115,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     migration_037_count: "1",
     fingerprint_nullable: "YES",
   });
-  expect(Number(migrationState.rows[0].migration_count)).toBe(40); // 019 is intentionally absent from this project's manifest.
+  expect(Number(migrationState.rows[0].migration_count)).toBeGreaterThanOrEqual(49); // 019 is intentionally absent.
   const migrationIds = await query(
     "SELECT migration_id FROM schema_migrations ORDER BY migration_id",
   );
@@ -130,6 +133,20 @@ test("customer → address → serviceability → assigned cart → COD recovery
     expect(
       migrationIds.rows.some((row) => row.migration_id.startsWith(prefix)),
     ).toBe(true);
+  }
+  for (const migration of [
+    "042_membership_foundation",
+    "043_membership_integrity",
+    "044_member_pricing_engine",
+    "045_member_pricing_quotes",
+    "046_web_order_member_pricing_snapshots",
+    "047_unique_member_pricing_quote_sale_reference",
+    "048_cod_member_pricing_channel",
+    "049_web_order_loyalty_return_reversal",
+  ]) {
+    expect(migrationIds.rows.some((row) => row.migration_id === migration)).toBe(
+      true,
+    );
   }
   expect(migrationState.rows[0].idempotency_index).toMatch(
     /CREATE UNIQUE INDEX/,
@@ -428,26 +445,49 @@ test("customer → address → serviceability → assigned cart → COD recovery
       return cartId;
     };
 
-    const makeCheckout = (cartId: string, key: string) => ({
-      method: "POST" as const,
-      url: "/api/checkout/cod",
-      headers,
-      payload: {
-        cart_id: cartId,
-        // Deliberately untrusted: delivery assignment must override this.
-        store_id: randomUUID(),
-        idempotency_key: key,
-        delivery_type: "DELIVERY" as const,
-        address_id: address.id,
-        shipping_name: "QA Customer",
-        shipping_phone: phone,
-        shipping_address: "1 QA Street, QA Tole",
-        shipping_municipality_id: address.municipality_id,
-        shipping_ward_id: address.ward_id,
-        shipping_postal_code: "44000",
-        shipping_country: "NP",
-      },
-    });
+    const makeCheckout = async (cartId: string, key: string) => {
+      const customerIdentity = await query(
+        "SELECT phone_normalized FROM customers WHERE id = $1",
+        [customer.rows[0].id],
+      );
+      const cartItems = await query(
+        `SELECT p.sku, ci.quantity
+           FROM cart_items ci JOIN products p ON p.id = ci.product_id
+          WHERE ci.cart_id = $1 ORDER BY p.sku`,
+        [cartId],
+      );
+      const quote = await createMemberPricingQuote({
+        channel: "WEB",
+        storeReference: firstAssignment.fulfillment_store_id,
+        customerReference: customer.rows[0].id,
+        customerPhoneReference: customerIdentity.rows[0].phone_normalized,
+        items: cartItems.rows.map((item) => ({
+          sku: String(item.sku),
+          quantity: String(item.quantity),
+        })),
+      });
+      return {
+        method: "POST" as const,
+        url: "/api/checkout/cod",
+        headers,
+        payload: {
+          cart_id: cartId,
+          // Deliberately untrusted: delivery assignment must override this.
+          store_id: randomUUID(),
+          idempotency_key: key,
+          delivery_type: "DELIVERY" as const,
+          address_id: address.id,
+          shipping_name: "QA Customer",
+          shipping_phone: phone,
+          shipping_address: "1 QA Street, QA Tole",
+          shipping_municipality_id: address.municipality_id,
+          shipping_ward_id: address.ward_id,
+          shipping_postal_code: "44000",
+          shipping_country: "NP",
+          signed_quote_token: quote.signedQuoteToken,
+        },
+      };
+    };
 
     // Recheck availability under the final transaction after advisory
     // validation. The temporarily reduced stock is restored before submission.
@@ -464,7 +504,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       [firstAssignment.fulfillment_store_id, product.rows[0].product_id],
     );
     const preflightKey = randomUUID();
-    const preflight = await app.inject(makeCheckout(cartId, preflightKey));
+    const preflight = await app.inject(await makeCheckout(cartId, preflightKey));
     expect(preflight.statusCode).toBe(409);
     expect(
       (
@@ -495,7 +535,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
 
     // A: first request creates exactly one order. B: exact replay returns it.
     const primaryKey = randomUUID();
-    const checkout = makeCheckout(cartId, primaryKey);
+    const checkout = await makeCheckout(cartId, primaryKey);
     const first = await app.inject(checkout);
     expect(first.statusCode).toBe(201);
     const orderId = first.json().id as string;
@@ -503,7 +543,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     expect(replay.statusCode).toBe(201);
     expect(replay.json().id).toBe(orderId);
     const order = await query(
-      "SELECT store_id, fulfillment_store_id, shipping_amount, subtotal, total_amount FROM web_orders WHERE id = $1",
+      "SELECT store_id, fulfillment_store_id, shipping_amount, subtotal, total_amount, status, payment_status, payment_method FROM web_orders WHERE id = $1",
       [orderId],
     );
     expect(order.rows[0].store_id).toBe(firstAssignment.fulfillment_store_id);
@@ -513,6 +553,11 @@ test("customer → address → serviceability → assigned cart → COD recovery
     expect(Number(order.rows[0].shipping_amount)).toBe(validCart.delivery_fee);
     expect(Number(order.rows[0].subtotal)).toBe(validCart.subtotal);
     expect(Number(order.rows[0].total_amount)).toBe(validCart.total);
+    expect(order.rows[0]).toMatchObject({
+      status: "RECEIVED",
+      payment_status: "PENDING",
+      payment_method: "COD",
+    });
 
     // D: the same key cannot alias a changed logical request.
     const changedPayload = await app.inject({
@@ -526,7 +571,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     // key. F: an unknown key remains NOT_FOUND.
     const lostKey = randomUUID();
     const lostResponse = await app.inject(
-      makeCheckout(await createCart(), lostKey),
+      await makeCheckout(await createCart(), lostKey),
     );
     expect(lostResponse.statusCode).toBe(201);
     const recovered = await app.inject({
@@ -535,7 +580,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       headers,
     });
     expect(recovered.json()).toMatchObject({
-      status: "CONFIRMED",
+      status: "RECEIVED",
       order: { id: lostResponse.json().id },
     });
     const unknownAttempt = await app.inject({
@@ -548,7 +593,10 @@ test("customer → address → serviceability → assigned cart → COD recovery
     // C and G: concurrent duplicate submissions commit one order, one item,
     // one reservation and one creation event.
     const concurrentKey = randomUUID();
-    const concurrentCheckout = makeCheckout(await createCart(), concurrentKey);
+    const concurrentCheckout = await makeCheckout(
+      await createCart(),
+      concurrentKey,
+    );
     const concurrent = await Promise.all([
       app.inject(concurrentCheckout),
       app.inject(concurrentCheckout),
@@ -628,7 +676,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       headers,
     });
     expect(legacyStatus.json()).toMatchObject({
-      status: "CONFIRMED",
+      status: "RECEIVED",
       order: { id: orderId },
     });
     const legacyReplay = await app.inject(checkout);

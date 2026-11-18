@@ -33,6 +33,8 @@ const productionEnvironment = {
   COOKIE_SECRET: "c".repeat(32),
   ENCRYPTION_KEY: "e".repeat(32),
   SIGNATURE_SECRET: "s".repeat(32),
+  MEMBER_PRICING_SERVICE_TOKEN: "m".repeat(40),
+  MEMBER_PRICING_QUOTE_SECRET: "q".repeat(40),
   OTP_HASH_SECRET: "o".repeat(32),
   PROXY_AUTH_SECRET: "p".repeat(32),
   PAYMENT_ENCRYPTION_KEY: "a".repeat(64),
