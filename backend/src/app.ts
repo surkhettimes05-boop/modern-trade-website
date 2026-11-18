@@ -24,6 +24,7 @@ import { redisService } from "./services/redisService.js";
 import { loyaltyMvpRoutes } from "./routes/loyaltyMvp.js";
 import { paymentWebhookRoutes } from "./routes/payments.js";
 import { creatorAttributionRoutes } from "./routes/creatorAttribution.js";
+import { pasalhoLitePricingRoutes } from "./routes/pasalhoLitePricing.js";
 import { creatorPortalRoutes } from "./routes/creatorPortal.js";
 import { deferredFeatureEnabled } from "./config/releaseFeatures.js";
 import { verifyDatabaseSecurityPosture } from "./database/databaseSecurity.js";
@@ -200,6 +201,7 @@ export async function buildApp(
   await fastify.register(addressRoutes, { prefix: "/api" });
   await fastify.register(loyaltyMvpRoutes, { prefix: "/api" });
   await fastify.register(creatorAttributionRoutes, { prefix: "/api" });
+  await fastify.register(pasalhoLitePricingRoutes);
   await fastify.register(creatorPortalRoutes, { prefix: "/api/creator-portal" });
 
   if (process.env.ENABLE_ADMIN_API === "true") {

@@ -174,5 +174,9 @@
   [
     "045_creator_manual_payouts",
     "../database/045_creator_manual_payouts.sql"
+  ],
+  [
+    "046_pasalho_lite_pricing",
+    "../database/046_pasalho_lite_pricing.sql"
   ]
 ]

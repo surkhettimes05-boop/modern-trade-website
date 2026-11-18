@@ -21,6 +21,7 @@ export const PRODUCTION_ROUTE_SECURITY: Readonly<Record<string, ProductionRouteB
   checkoutRoutes: "CUSTOMER_SESSION",
   addressRoutes: "MIXED_EXPLICIT",
   loyaltyMvpRoutes: "MIXED_EXPLICIT",
+  pasalhoLitePricingRoutes: "MIXED_EXPLICIT",
   creatorAttributionRoutes: "MIXED_EXPLICIT",
   creatorPortalRoutes: "MIXED_EXPLICIT",
   paymentWebhookRoutes: "SIGNED_WEBHOOK",
