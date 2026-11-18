@@ -115,7 +115,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     migration_037_count: "1",
     fingerprint_nullable: "YES",
   });
-  expect(Number(migrationState.rows[0].migration_count)).toBeGreaterThanOrEqual(49); // 019 is intentionally absent.
+  expect(Number(migrationState.rows[0].migration_count)).toBe(53); // 019 is intentionally absent.
   const migrationIds = await query(
     "SELECT migration_id FROM schema_migrations ORDER BY migration_id",
   );
@@ -125,7 +125,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       (_, index) => `${String(index + 1).padStart(3, "0")}_`,
     ),
     ...Array.from(
-      { length: 22 },
+      { length: 25 },
       (_, index) => `${String(index + 20).padStart(3, "0")}_`,
     ),
   ];
@@ -143,6 +143,11 @@ test("customer → address → serviceability → assigned cart → COD recovery
     "047_unique_member_pricing_quote_sale_reference",
     "048_cod_member_pricing_channel",
     "049_web_order_loyalty_return_reversal",
+    "050_cod_launch_lifecycle",
+    "042_creator_attribution_rewards",
+    "043_creator_portal_otp_sessions",
+    "044_creator_purchase_cost_evidence",
+    "045_creator_manual_payouts",
   ]) {
     expect(migrationIds.rows.some((row) => row.migration_id === migration)).toBe(
       true,

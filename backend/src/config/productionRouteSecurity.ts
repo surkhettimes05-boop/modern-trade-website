@@ -25,6 +25,8 @@ export const PRODUCTION_ROUTE_SECURITY: Readonly<Record<string, ProductionRouteB
   membershipRoutes: "MIXED_EXPLICIT",
   customerMemberPricingRoutes: "CUSTOMER_SESSION",
   memberPricingServiceRoutes: "SERVICE_TO_SERVICE_AUTH",
+  creatorAttributionRoutes: "MIXED_EXPLICIT",
+  creatorPortalRoutes: "MIXED_EXPLICIT",
   paymentWebhookRoutes: "SIGNED_WEBHOOK",
   operationsAuthRoutes: "MIXED_EXPLICIT",
   protectedOperations: "STAFF_SESSION",

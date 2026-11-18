@@ -394,6 +394,8 @@ export class WebOrderService {
       // Keep reserved stock unavailable while staff fulfils the order. When the
       // delivery is completed, deduct the physical batch inventory and consume
       // the reservations in the same database transaction.
+      let deliveredOrderCogs = 0;
+      let deliveredOrderCostComplete = true;
       if (status === "DELIVERED") {
         const orderItems = await client.query(
           `SELECT product_id, quantity
@@ -412,7 +414,7 @@ export class WebOrderService {
           ]);
           let remaining = Number(item.quantity);
           const batches = await client.query(
-            `SELECT id, batch_id, quantity
+            `SELECT id, batch_id, quantity, unit_cost
                FROM batch_inventory
               WHERE store_id = $1
                 AND product_id = $2
@@ -427,6 +429,8 @@ export class WebOrderService {
             const available = Number(batch.quantity);
             const deduct = Math.min(available, remaining);
             if (deduct <= 0) continue;
+            if (batch.unit_cost === null || batch.unit_cost === undefined) deliveredOrderCostComplete = false;
+            else deliveredOrderCogs += Number(batch.unit_cost) * deduct;
             await client.query(
               `UPDATE batch_inventory
                   SET quantity = quantity - $1,
@@ -572,6 +576,58 @@ export class WebOrderService {
            WHERE status = 'ACTIVE' AND (order_id = $1 OR cart_id = $2)`,
           [orderId, order.cart_id],
         );
+      }
+      if (status === "DELIVERED" && result.rows[0]?.payment_status === "PAID") {
+        stage = "record-creator-reward";
+        const creatorPurchase = await client.query(
+          `INSERT INTO creator_purchase_events (
+             creator_id, customer_id, source_system, source_transaction_id,
+             source_transaction_number, currency, eligible_spend_npr,
+             reward_rate_percent, reward_amount_npr, event_status, eligible_at,
+             available_at, payload_hash, cogs_npr, cost_status
+           )
+           SELECT a.creator_id, wo.customer_id, 'COMMERCE', wo.id::text,
+                  wo.order_number, 'NPR',
+                  GREATEST(wo.subtotal - wo.discount_amount, 0)::numeric,
+                  settings.default_rate_percent,
+                  ROUND(GREATEST(wo.subtotal - wo.discount_amount, 0)::numeric
+                        * settings.default_rate_percent / 100, 2),
+                  'PENDING', NOW(),
+                  NOW() + make_interval(days => settings.hold_days),
+                  REPEAT(MD5(wo.id::text || wo.total_amount::text), 2),
+                  CASE WHEN $2::boolean THEN $3::numeric ELSE NULL END,
+                  CASE WHEN $2::boolean THEN 'VERIFIED' ELSE 'UNKNOWN' END
+             FROM web_orders wo
+             JOIN customers customer
+               ON customer.id = wo.customer_id
+              AND customer.status = 'ACTIVE'
+              AND customer.verification_status = 'VERIFIED'
+              AND customer.deleted_at IS NULL
+             JOIN creator_customer_attributions a
+               ON a.customer_id = customer.id
+             JOIN creators creator
+               ON creator.id = a.creator_id AND creator.status = 'ACTIVE'
+             CROSS JOIN creator_reward_settings settings
+            WHERE wo.id = $1 AND wo.status = 'DELIVERED'
+              AND wo.payment_status = 'PAID' AND settings.id = 1
+           ON CONFLICT (source_system, source_transaction_id) DO NOTHING
+           RETURNING id, creator_id, reward_amount_npr`,
+          [orderId, deliveredOrderCostComplete, deliveredOrderCogs.toFixed(2)],
+        );
+        if (creatorPurchase.rowCount) {
+          await client.query(
+            `INSERT INTO creator_reward_ledger (
+               creator_id, purchase_event_id, entry_type, amount_npr,
+               idempotency_key, note
+             ) VALUES ($1, $2, 'EARN', $3::numeric, $4, 'Pending online order creator reward')`,
+            [
+              creatorPurchase.rows[0].creator_id,
+              creatorPurchase.rows[0].id,
+              creatorPurchase.rows[0].reward_amount_npr,
+              `creator-earn:COMMERCE:${orderId}`,
+            ],
+          );
+        }
       }
       stage = "insert-order-event";
       await client.query(
