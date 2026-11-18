@@ -16,6 +16,7 @@ export async function orderLifecycleRoutes(fastify: FastifyInstance) {
       to_status: z.enum([
         "DRAFT",
         "PENDING_PAYMENT",
+        "RECEIVED",
         "CONFIRMED",
         "PICKING",
         "PACKED",
