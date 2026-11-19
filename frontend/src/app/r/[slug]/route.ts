@@ -48,12 +48,28 @@ export async function GET(
     }
 
     const destination = new URL(location, request.url);
-    // Never forward an upstream redirect to an unexpected origin.
-    if (destination.origin !== request.nextUrl.origin) {
+    // Standalone Next.js can see its internal 0.0.0.0 origin while the backend
+    // returns the explicitly configured public website origin. Permit only
+    // these two known website origins; never forward an arbitrary redirect.
+    const publicSiteOrigin = process.env.NEXT_PUBLIC_SITE_URL;
+    let configuredOrigin: string | undefined;
+    try {
+      configuredOrigin = publicSiteOrigin ? new URL(publicSiteOrigin).origin : undefined;
+    } catch {
+      return NextResponse.json({ error: "Website origin is misconfigured" }, { status: 503 });
+    }
+    if (destination.origin !== request.nextUrl.origin && destination.origin !== configuredOrigin) {
       return NextResponse.json({ error: "Creator referral destination is misconfigured" }, { status: 502 });
     }
+    // A relative Location keeps browser navigation on the incoming public
+    // host even when Next.js receives the request through an internal host.
+    if (!destination.pathname.startsWith("/") || destination.pathname.startsWith("//")) {
+      return NextResponse.json({ error: "Invalid creator referral destination" }, { status: 502 });
+    }
+    const relativeDestination = `${destination.pathname}${destination.search}${destination.hash}`;
 
-    const response = NextResponse.redirect(destination, 302);
+    const response = NextResponse.redirect(new URL(relativeDestination, request.url), 302);
+    response.headers.set("location", relativeDestination);
     response.headers.set("cache-control", "no-store");
     for (const cookie of upstream.headers.getSetCookie()) {
       response.headers.append("set-cookie", cookie);
