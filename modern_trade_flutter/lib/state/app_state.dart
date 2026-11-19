@@ -116,13 +116,14 @@ const _fallbackProducts = <Product>[
 
 class AppState extends ChangeNotifier {
   AppState({ApiClient? api})
-      : api = api ??
-            ApiClient(
-              baseUrl: const String.fromEnvironment(
-                'API_BASE_URL',
-                defaultValue: 'https://storesync-backend-dg8z.onrender.com',
-              ),
-            ) {
+    : api =
+          api ??
+          ApiClient(
+            baseUrl: const String.fromEnvironment(
+              'API_BASE_URL',
+              defaultValue: 'https://storesync-backend-dg8z.onrender.com',
+            ),
+          ) {
     authRepository = AuthRepository(this.api);
     catalogRepository = CatalogRepository(this.api);
     checkoutRepository = CheckoutRepository(this.api);
@@ -166,8 +167,9 @@ class AppState extends ChangeNotifier {
 
   List<CartLine> get cart => cartController.quantities.entries
       .map((entry) {
-        final product =
-            products.where((item) => item.id == entry.key).firstOrNull;
+        final product = products
+            .where((item) => item.id == entry.key)
+            .firstOrNull;
         return product == null
             ? null
             : CartLine(product: product, quantity: entry.value);
@@ -175,8 +177,10 @@ class AppState extends ChangeNotifier {
       .whereType<CartLine>()
       .toList(growable: false);
 
-  int get cartCount => cartController.quantities.values
-      .fold(0, (sum, quantity) => sum + quantity);
+  int get cartCount => cartController.quantities.values.fold(
+    0,
+    (sum, quantity) => sum + quantity,
+  );
   MemberPricingQuote? get currentPricingQuote {
     final quote = pricingQuote;
     if (customer == null ||
@@ -187,16 +191,16 @@ class AppState extends ChangeNotifier {
         quote.items.length != cart.length) {
       return null;
     }
-    final quoted = {
-      for (final item in quote.items) item.sku: item.quantity,
-    };
-    if (cart.any((line) =>
-        line.product.sku == null ||
-        quoted[line.product.sku] != line.quantity)) {
+    final quoted = {for (final item in quote.items) item.sku: item.quantity};
+    if (cart.any(
+      (line) =>
+          line.product.sku == null || quoted[line.product.sku] != line.quantity,
+    )) {
       return null;
     }
     return quote;
   }
+
   int get regularSubtotalMinor =>
       cart.fold(0, (sum, line) => sum + line.totalMinor);
   int get cartSubtotalMinor => customer == null
@@ -247,7 +251,7 @@ class AppState extends ChangeNotifier {
       final savedStore = prefs.getString('selected_store');
       selectedStore =
           stores.where((store) => store.id == savedStore).firstOrNull ??
-              stores.firstOrNull;
+          stores.firstOrNull;
       if (api.hasSession) await validateSession();
       await reloadMemberPricing();
       if (customer != null && cart.isNotEmpty) {
@@ -287,16 +291,20 @@ class AppState extends ChangeNotifier {
 
   List<Product> search(String query, {String? categoryId}) {
     final normalized = query.trim().toLowerCase();
-    return products.where((product) {
-      final categoryMatch = categoryId == null ||
-          product.categoryId == categoryId ||
-          product.category.toLowerCase() == categoryId.toLowerCase();
-      final textMatch = normalized.isEmpty ||
-          '${product.name} ${product.brand} ${product.category}'
-              .toLowerCase()
-              .contains(normalized);
-      return categoryMatch && textMatch;
-    }).toList(growable: false);
+    return products
+        .where((product) {
+          final categoryMatch =
+              categoryId == null ||
+              product.categoryId == categoryId ||
+              product.category.toLowerCase() == categoryId.toLowerCase();
+          final textMatch =
+              normalized.isEmpty ||
+              '${product.name} ${product.brand} ${product.category}'
+                  .toLowerCase()
+                  .contains(normalized);
+          return categoryMatch && textMatch;
+        })
+        .toList(growable: false);
   }
 
   Future<void> selectStore(StoreLocation store) async {
@@ -449,10 +457,16 @@ class AppState extends ChangeNotifier {
     final requestCustomer = customer;
     final lines = cart;
     if (requestCustomer == null || store == null || lines.isEmpty) {
-      throw const ApiException('Sign in, choose a store, and add products before requesting a quote.');
+      throw const ApiException(
+        'Sign in, choose a store, and add products before requesting a quote.',
+      );
     }
-    if (lines.any((line) => line.product.sku == null || line.product.sku!.isEmpty)) {
-      throw const ApiException('A cart product is missing its SKU and cannot be priced.');
+    if (lines.any(
+      (line) => line.product.sku == null || line.product.sku!.isEmpty,
+    )) {
+      throw const ApiException(
+        'A cart product is missing its SKU and cannot be priced.',
+      );
     }
     _pricingQuoteExpiryTimer?.cancel();
     _pricingQuoteExpiryTimer = null;
@@ -460,7 +474,11 @@ class AppState extends ChangeNotifier {
     if (requireConfirmation) pricingQuoteNeedsConfirmation = true;
     pricingError = null;
     final requestGeneration = ++_pricingRequestGeneration;
-    final cartFingerprint = _cartFingerprint(store.id, requestCustomer.id, lines);
+    final cartFingerprint = _cartFingerprint(
+      store.id,
+      requestCustomer.id,
+      lines,
+    );
     notifyListeners();
     try {
       final quote = await memberPricingRepository.createQuote(
@@ -510,18 +528,22 @@ class AppState extends ChangeNotifier {
   }
 
   String _cartFingerprint(
-      String storeId, String customerId, List<CartLine> lines) {
-    final entries = lines
-        .map((line) => '${line.product.sku}:${line.quantity}')
-        .toList()
-      ..sort();
+    String storeId,
+    String customerId,
+    List<CartLine> lines,
+  ) {
+    final entries =
+        lines.map((line) => '${line.product.sku}:${line.quantity}').toList()
+          ..sort();
     return '$storeId|$customerId|${entries.join(',')}';
   }
 
   Future<Membership> enrollMembership() async {
     final store = selectedStore;
     if (customer == null || store == null || store.id == 'offline-store') {
-      throw const ApiException('Sign in and choose an open store before enrolling.');
+      throw const ApiException(
+        'Sign in and choose an open store before enrolling.',
+      );
     }
     final enrolled = await customerRepository.enrollMembership(store.id);
     membership = enrolled;
@@ -548,8 +570,10 @@ class AppState extends ChangeNotifier {
     String? notes,
   }) async {
     if (customer == null) {
-      throw const ApiException('Please sign in to checkout.',
-          kind: ApiErrorKind.authentication);
+      throw const ApiException(
+        'Please sign in to checkout.',
+        kind: ApiErrorKind.authentication,
+      );
     }
     final store = selectedStore;
     if (store == null || store.id == 'offline-store') {
@@ -577,14 +601,15 @@ class AppState extends ChangeNotifier {
       lines: cart,
       quote: acceptedQuote,
       details: CheckoutDetails(
-          deliveryType: deliveryType,
-          name: name,
-          phone: phone,
-          address: address,
-          municipalityId: municipalityId,
-          wardId: wardId,
-          postalCode: postalCode,
-          notes: notes),
+        deliveryType: deliveryType,
+        name: name,
+        phone: phone,
+        address: address,
+        municipalityId: municipalityId,
+        wardId: wardId,
+        postalCode: postalCode,
+        notes: notes,
+      ),
     );
     await clearCart();
     return order;
@@ -624,9 +649,17 @@ const _fallbackCategories = <ProductCategory>[
     skuCount: 25,
   ),
   ProductCategory(
-      id: 'opening-5', name: 'Laundry', slug: 'laundry', skuCount: 25),
+    id: 'opening-5',
+    name: 'Laundry',
+    slug: 'laundry',
+    skuCount: 25,
+  ),
   ProductCategory(
-      id: 'opening-6', name: 'Hair care', slug: 'hair-care', skuCount: 25),
+    id: 'opening-6',
+    name: 'Hair care',
+    slug: 'hair-care',
+    skuCount: 25,
+  ),
 ];
 
 extension _FirstOrNull<T> on Iterable<T> {

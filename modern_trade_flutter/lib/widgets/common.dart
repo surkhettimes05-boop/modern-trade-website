@@ -11,51 +11,51 @@ class NovaLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: compact ? 34 : 40,
+        height: compact ? 34 : 40,
+        decoration: BoxDecoration(
+          color: AppColors.brand,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          'N',
+          style: TextStyle(
+            color: AppColors.lime,
+            fontSize: compact ? 18 : 21,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: compact ? 34 : 40,
-            height: compact ? 34 : 40,
-            decoration: BoxDecoration(
-              color: AppColors.brand,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              'N',
-              style: TextStyle(
-                color: AppColors.lime,
-                fontSize: compact ? 18 : 21,
-                fontWeight: FontWeight.w900,
-              ),
+          Text(
+            'NOVA',
+            style: TextStyle(
+              height: .9,
+              letterSpacing: -.5,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(width: 8),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'NOVA',
-                style: TextStyle(
-                  height: .9,
-                  letterSpacing: -.5,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              Text(
-                'MART',
-                style: TextStyle(
-                  height: .9,
-                  letterSpacing: -.5,
-                  color: AppColors.brand,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
+          Text(
+            'MART',
+            style: TextStyle(
+              height: .9,
+              letterSpacing: -.5,
+              color: AppColors.brand,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
-      );
+      ),
+    ],
+  );
 }
 
 class StoreSelector extends StatelessWidget {
@@ -76,25 +76,31 @@ class StoreSelector extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Choose your store',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        )),
+                Text(
+                  'Choose your store',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
                 const SizedBox(height: 10),
                 ...state.stores.map(
                   (store) => ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(store.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    title: Text(
+                      store.name,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     subtitle: Text(
-                        [
-                          if (store.temporarilyClosed) 'TEMPORARILY CLOSED',
-                          if (store.address != null) store.address!,
-                        ].join(' · '),
-                        style: TextStyle(
-                            color: store.temporarilyClosed
-                                ? AppColors.danger
-                                : null)),
+                      [
+                        if (store.temporarilyClosed) 'TEMPORARILY CLOSED',
+                        if (store.address != null) store.address!,
+                      ].join(' · '),
+                      style: TextStyle(
+                        color: store.temporarilyClosed
+                            ? AppColors.danger
+                            : null,
+                      ),
+                    ),
                     leading: Icon(
                       state.selectedStore?.id == store.id
                           ? Icons.check_circle
@@ -128,8 +134,10 @@ class StoreSelector extends StatelessWidget {
               child: Text(
                 state.selectedStore?.name ?? 'Choose store',
                 overflow: TextOverflow.ellipsis,
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const Icon(Icons.expand_more, size: 18),
@@ -153,36 +161,36 @@ class SectionHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (eyebrow != null)
-                  Text(
-                    eyebrow!.toUpperCase(),
-                    style: const TextStyle(
-                      color: AppColors.brand,
-                      fontSize: 10,
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -.7,
-                      ),
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (eyebrow != null)
+              Text(
+                eyebrow!.toUpperCase(),
+                style: const TextStyle(
+                  color: AppColors.brand,
+                  fontSize: 10,
+                  letterSpacing: 1.5,
+                  fontWeight: FontWeight.w900,
                 ),
-              ],
+              ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                letterSpacing: -.7,
+              ),
             ),
-          ),
-          if (action != null) action!,
-        ],
-      );
+          ],
+        ),
+      ),
+      if (action != null) action!,
+    ],
+  );
 }
 
 class ProductCard extends StatelessWidget {
@@ -192,9 +200,11 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final memberPrice =
-        product.sku == null ? null : state.memberPrices[product.sku];
-    final memberEligible = state.membership?.isActive == true &&
+    final memberPrice = product.sku == null
+        ? null
+        : state.memberPrices[product.sku];
+    final memberEligible =
+        state.membership?.isActive == true &&
         memberPrice != null &&
         memberPrice.appliedUnitMinor < memberPrice.regularUnitMinor;
     return Card(
@@ -274,7 +284,10 @@ class ProductCard extends StatelessWidget {
                     memberEligible
                         ? formatNprMinor(memberPrice.appliedUnitMinor)
                         : formatNpr(product.price),
-                    style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w900),
+                    style: const TextStyle(
+                      color: AppColors.brand,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   if (memberEligible) ...[
                     Text(
@@ -308,8 +321,9 @@ class ProductCard extends StatelessWidget {
                                 ..hideCurrentSnackBar()
                                 ..showSnackBar(
                                   SnackBar(
-                                    content:
-                                        Text('${product.name} added to cart'),
+                                    content: Text(
+                                      '${product.name} added to cart',
+                                    ),
                                     duration: const Duration(seconds: 1),
                                   ),
                                 );
@@ -344,23 +358,30 @@ class ProductImage extends StatelessWidget {
       return const ColoredBox(
         color: AppColors.cream,
         child: Center(
-          child: Icon(Icons.inventory_2_outlined,
-              color: AppColors.muted, size: 42),
+          child: Icon(
+            Icons.inventory_2_outlined,
+            color: AppColors.muted,
+            size: 42,
+          ),
         ),
       );
     }
     return Image.network(
       url,
       fit: fit,
-      cacheWidth: (MediaQuery.sizeOf(context).width *
-              MediaQuery.devicePixelRatioOf(context))
-          .clamp(240, 1200)
-          .round(),
+      cacheWidth:
+          (MediaQuery.sizeOf(context).width *
+                  MediaQuery.devicePixelRatioOf(context))
+              .clamp(240, 1200)
+              .round(),
       errorBuilder: (_, __, ___) => const ColoredBox(
         color: AppColors.cream,
         child: Center(
-          child: Icon(Icons.inventory_2_outlined,
-              color: AppColors.muted, size: 42),
+          child: Icon(
+            Icons.inventory_2_outlined,
+            color: AppColors.muted,
+            size: 42,
+          ),
         ),
       ),
       loadingBuilder: (context, child, progress) => progress == null
@@ -388,30 +409,29 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 58, color: AppColors.brand),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.muted, height: 1.5),
-              ),
-              if (action != null) ...[const SizedBox(height: 20), action!],
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 58, color: AppColors.brand),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
           ),
-        ),
-      );
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.muted, height: 1.5),
+          ),
+          if (action != null) ...[const SizedBox(height: 20), action!],
+        ],
+      ),
+    ),
+  );
 }

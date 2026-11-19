@@ -36,13 +36,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   void dispose() {
-    for (final controller in [
-      _name,
-      _phone,
-      _address,
-      _postalCode,
-      _notes,
-    ]) {
+    for (final controller in [_name, _phone, _address, _postalCode, _notes]) {
       controller.dispose();
     }
     super.dispose();
@@ -65,8 +59,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         priceQuote != null &&
         _municipalityId != null &&
         _wardId != null) {
-      final nextKey =
-          '${store?.id}|$_municipalityId|$_wardId|${priceQuote.id}';
+      final nextKey = '${store?.id}|$_municipalityId|$_wardId|${priceQuote.id}';
       if (nextKey != _deliveryQuoteKey) {
         _deliveryQuoteKey = nextKey;
         unawaited(_refreshDeliveryQuote());
@@ -80,8 +73,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _error = null;
     });
     try {
-      final areas =
-          await AppScope.of(context).checkoutRepository.loadServiceAreas(storeId);
+      final areas = await AppScope.of(
+        context,
+      ).checkoutRepository.loadServiceAreas(storeId);
       if (mounted) setState(() => _serviceAreas = areas);
     } catch (exception) {
       if (mounted) setState(() => _error = userMessage(exception));
@@ -96,7 +90,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final municipalityId = _municipalityId;
     final wardId = _wardId;
     final productQuote = state.currentPricingQuote;
-    if (store == null || municipalityId == null || wardId == null ||
+    if (store == null ||
+        municipalityId == null ||
+        wardId == null ||
         productQuote == null) {
       setState(() => _deliveryQuote = null);
       return;
@@ -148,18 +144,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         if (_municipalityId == null || _wardId == null) {
           throw const ApiException('Choose a valid municipality and ward.');
         }
-        acceptedDeliveryQuote =
-            await state.checkoutRepository.quoteDelivery(
+        acceptedDeliveryQuote = await state.checkoutRepository.quoteDelivery(
           storeId: state.selectedStore!.id,
           municipalityId: _municipalityId!,
           wardId: _wardId!,
           orderValueMinor: acceptedQuote.finalTotalMinor,
         );
         if (!acceptedDeliveryQuote.serviceable) {
-          throw const ApiException('Delivery is not available for this address.');
+          throw const ApiException(
+            'Delivery is not available for this address.',
+          );
         }
       }
-      final quoteChanged = previousQuote != null &&
+      final quoteChanged =
+          previousQuote != null &&
           (previousQuote.regularSubtotalMinor !=
                   acceptedQuote.regularSubtotalMinor ||
               previousQuote.discountTotalMinor !=
@@ -176,8 +174,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     old.lineDiscountMinor != next.lineDiscountMinor ||
                     old.lineTotalMinor != next.lineTotalMinor;
               }));
-      final deliveryFeeChanged = _deliveryQuote?.deliveryFee !=
-          acceptedDeliveryQuote?.deliveryFee;
+      final deliveryFeeChanged =
+          _deliveryQuote?.deliveryFee != acceptedDeliveryQuote?.deliveryFee;
       if (state.pricingQuoteNeedsConfirmation ||
           quoteExpired ||
           quoteChanged ||
@@ -185,11 +183,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         final approved = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text(state.pricingQuoteNeedsConfirmation ||
-                    quoteChanged ||
-                    deliveryFeeChanged
-                ? 'Checkout price updated'
-                : 'Price quote refreshed'),
+            title: Text(
+              state.pricingQuoteNeedsConfirmation ||
+                      quoteChanged ||
+                      deliveryFeeChanged
+                  ? 'Checkout price updated'
+                  : 'Price quote refreshed',
+            ),
             content: Text(
               'Current product payable is ${formatNprMinor(acceptedQuote.finalTotalMinor)}${acceptedDeliveryQuote?.deliveryFee == null ? '' : ' plus delivery ${formatNprMinor(acceptedDeliveryQuote!.deliveryFee!)}'}. Review and confirm before placing your COD order.',
             ),
@@ -209,16 +209,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         state.confirmPricingQuote();
       }
       Future<CustomerOrder> submit(MemberPricingQuote quote) => state.checkout(
-            deliveryType: _deliveryType,
-            name: _name.text.trim(),
-            phone: _phone.text.trim(),
-            address: _address.text.trim(),
-            postalCode: _postalCode.text.trim(),
-            municipalityId: _municipalityId,
-            wardId: _wardId,
-            acceptedQuote: quote,
-            notes: _notes.text.trim(),
-          );
+        deliveryType: _deliveryType,
+        name: _name.text.trim(),
+        phone: _phone.text.trim(),
+        address: _address.text.trim(),
+        postalCode: _postalCode.text.trim(),
+        municipalityId: _municipalityId,
+        wardId: _wardId,
+        acceptedQuote: quote,
+        notes: _notes.text.trim(),
+      );
       late CustomerOrder order;
       try {
         order = await submit(acceptedQuote);
@@ -254,8 +254,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
-          icon:
-              const Icon(Icons.check_circle, color: AppColors.brand, size: 52),
+          icon: const Icon(
+            Icons.check_circle,
+            color: AppColors.brand,
+            size: 52,
+          ),
           title: const Text('Order confirmed'),
           content: Text(
             'Your COD order ${order.orderNumber ?? order.id} has been received.',
@@ -289,11 +292,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
           children: [
-            Text('Fulfilment',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w900)),
+            Text(
+              'Fulfilment',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 10),
             SegmentedButton<String>(
               segments: const [
@@ -327,17 +331,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 child: ListTile(
                   leading: const Icon(Icons.store, color: AppColors.brand),
                   title: Text(state.selectedStore?.name ?? 'No store selected'),
-                  subtitle:
-                      Text(state.selectedStore?.address ?? 'Pickup store'),
+                  subtitle: Text(
+                    state.selectedStore?.address ?? 'Pickup store',
+                  ),
                 ),
               ),
             ],
             const SizedBox(height: 24),
-            Text('Contact and address',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w900)),
+            Text(
+              'Contact and address',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _name,
@@ -350,8 +356,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               controller: _phone,
               validator: (value) =>
                   RegExp(r'^(\+977)?9[6-9]\d{8}$').hasMatch(value?.trim() ?? '')
-                      ? null
-                      : 'Enter a valid Nepal mobile number',
+                  ? null
+                  : 'Enter a valid Nepal mobile number',
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: 'Mobile number'),
@@ -363,24 +369,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 validator: _required,
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
-                    labelText: 'Street, ward and locality'),
+                  labelText: 'Street, ward and locality',
+                ),
               ),
               const SizedBox(height: 12),
               if (_areasLoading)
                 const LinearProgressIndicator()
               else if (_serviceAreas.isEmpty)
-                const Text('No verified delivery areas are available for this store.',
-                    style: TextStyle(color: AppColors.danger))
+                const Text(
+                  'No verified delivery areas are available for this store.',
+                  style: TextStyle(color: AppColors.danger),
+                )
               else ...[
                 DropdownButtonFormField<int>(
                   value: _municipalityId,
-                  validator: (value) => value == null ? 'Choose a municipality' : null,
+                  validator: (value) =>
+                      value == null ? 'Choose a municipality' : null,
                   decoration: const InputDecoration(labelText: 'Municipality'),
                   items: _serviceAreas
-                      .map((area) => DropdownMenuItem(
-                            value: area.id,
-                            child: Text(area.name),
-                          ))
+                      .map(
+                        (area) => DropdownMenuItem(
+                          value: area.id,
+                          child: Text(area.name),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     setState(() {
@@ -400,10 +412,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   items: _serviceAreas
                       .where((area) => area.id == _municipalityId)
                       .expand((area) => area.wards)
-                      .map((ward) => DropdownMenuItem(
-                            value: ward.id,
-                            child: Text('Ward ${ward.number}'),
-                          ))
+                      .map(
+                        (ward) => DropdownMenuItem(
+                          value: ward.id,
+                          child: Text('Ward ${ward.number}'),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     setState(() {
@@ -419,7 +433,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _postalCode,
-                validator: (value) => RegExp(r'^\d{5}$').hasMatch(value?.trim() ?? '')
+                validator: (value) =>
+                    RegExp(r'^\d{5}$').hasMatch(value?.trim() ?? '')
                     ? null
                     : 'Enter a 5-digit postal code',
                 keyboardType: TextInputType.number,
@@ -428,14 +443,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
               const SizedBox(height: 10),
               if (_deliveryQuote?.serviceable == true)
-                Text('Delivery ${formatNprMinor(_deliveryQuote!.deliveryFee ?? 0)}',
-                    style: const TextStyle(
-                        color: AppColors.brand, fontWeight: FontWeight.w800))
+                Text(
+                  'Delivery ${formatNprMinor(_deliveryQuote!.deliveryFee ?? 0)}',
+                  style: const TextStyle(
+                    color: AppColors.brand,
+                    fontWeight: FontWeight.w800,
+                  ),
+                )
               else if (_municipalityId != null && _wardId != null)
                 Text(
                   _deliveryQuote == null
                       ? 'Checking delivery availability…'
-                      : _deliveryQuote!.reason ?? 'Delivery is unavailable for this address.',
+                      : _deliveryQuote!.reason ??
+                            'Delivery is unavailable for this address.',
                   style: const TextStyle(color: AppColors.danger),
                 ),
             ],
@@ -444,8 +464,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               controller: _notes,
               maxLines: 3,
               decoration: InputDecoration(
-                  labelText:
-                      '${_deliveryType == 'PICKUP' ? 'Pickup' : 'Delivery'} notes (optional)'),
+                labelText:
+                    '${_deliveryType == 'PICKUP' ? 'Pickup' : 'Delivery'} notes (optional)',
+              ),
             ),
             const SizedBox(height: 24),
             Card(
@@ -458,8 +479,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         Icon(Icons.payments_outlined, color: AppColors.brand),
                         SizedBox(width: 10),
                         Expanded(
-                          child: Text('Cash on delivery',
-                              style: TextStyle(fontWeight: FontWeight.w900)),
+                          child: Text(
+                            'Cash on delivery',
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
                         ),
                         Icon(Icons.check_circle, color: AppColors.brand),
                       ],
@@ -469,7 +492,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       Row(
                         children: [
                           const Expanded(child: Text('Regular subtotal')),
-                          Text(formatNprMinor(pricingQuote.regularSubtotalMinor)),
+                          Text(
+                            formatNprMinor(pricingQuote.regularSubtotalMinor),
+                          ),
                         ],
                       ),
                       if (pricingQuote == null &&
@@ -485,7 +510,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       Row(
                         children: [
                           const Expanded(child: Text('Member savings')),
-                          Text('-${formatNprMinor(pricingQuote.discountTotalMinor)}'),
+                          Text(
+                            '-${formatNprMinor(pricingQuote.discountTotalMinor)}',
+                          ),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -493,13 +520,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     Row(
                       children: [
                         const Expanded(child: Text('Authoritative payable')),
-                        Text(pricingQuote == null
-                                ? state.pricingBusy
+                        Text(
+                          pricingQuote == null
+                              ? state.pricingBusy
                                     ? 'Updating…'
                                     : state.pricingError ?? 'Price unavailable'
-                                : formatNprMinor(pricingQuote.finalTotalMinor),
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w900)),
+                              : formatNprMinor(pricingQuote.finalTotalMinor),
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
                       ],
                     ),
                     if (_deliveryType == 'DELIVERY' &&
@@ -507,31 +535,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       Row(
                         children: [
                           const Expanded(child: Text('Delivery')),
-                          Text(formatNprMinor(_deliveryQuote!.deliveryFee ?? 0)),
+                          Text(
+                            formatNprMinor(_deliveryQuote!.deliveryFee ?? 0),
+                          ),
                         ],
                       ),
                     if (_deliveryType == 'DELIVERY' &&
                         _deliveryQuote?.serviceable == true)
                       Row(
                         children: [
-                          const Expanded(child: Text('Total including delivery')),
-                          Text(formatNprMinor(
+                          const Expanded(
+                            child: Text('Total including delivery'),
+                          ),
+                          Text(
+                            formatNprMinor(
                               pricingQuote!.finalTotalMinor +
-                                  (_deliveryQuote!.deliveryFee ?? 0))),
+                                  (_deliveryQuote!.deliveryFee ?? 0),
+                            ),
+                          ),
                         ],
                       ),
                     if (pricingQuote != null)
-                      ...pricingQuote.items.map((line) => Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                '${line.sku} × ${line.quantity}: ${formatNprMinor(line.regularUnitMinor)} regular · ${formatNprMinor(line.appliedUnitMinor)} applied${line.promotionName == null ? '' : ' · ${line.promotionName}'}',
-                                style: const TextStyle(
-                                    color: AppColors.muted, fontSize: 12),
+                      ...pricingQuote.items.map(
+                        (line) => Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '${line.sku} × ${line.quantity}: ${formatNprMinor(line.regularUnitMinor)} regular · ${formatNprMinor(line.appliedUnitMinor)} applied${line.promotionName == null ? '' : ' · ${line.promotionName}'}',
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 12,
                               ),
                             ),
-                          )),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -551,7 +590,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             border: Border(top: BorderSide(color: AppColors.line)),
           ),
           child: ElevatedButton(
-            onPressed: _busy ||
+            onPressed:
+                _busy ||
                     pricingQuote == null ||
                     pricingQuote.isExpired ||
                     (_deliveryType == 'DELIVERY' &&
@@ -562,11 +602,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ? const SizedBox.square(
                     dimension: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
-                : Text(pricingQuote == null
-                    ? 'Authoritative price unavailable'
-                    : 'Place COD order · ${formatNprMinor(pricingQuote.finalTotalMinor)}'),
+                : Text(
+                    pricingQuote == null
+                        ? 'Authoritative price unavailable'
+                        : 'Place COD order · ${formatNprMinor(pricingQuote.finalTotalMinor)}',
+                  ),
           ),
         ),
       ),

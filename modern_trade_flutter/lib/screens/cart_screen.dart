@@ -21,7 +21,9 @@ class CartScreen extends StatelessWidget {
         title: 'Your cart is ready for good things',
         message: 'Add everyday essentials and come back when you are ready.',
         action: ElevatedButton(
-            onPressed: onShop, child: const Text('Start shopping')),
+          onPressed: onShop,
+          child: const Text('Start shopping'),
+        ),
       );
     }
     return Column(
@@ -50,12 +52,17 @@ class CartScreen extends StatelessWidget {
                 Row(
                   children: [
                     const Expanded(child: Text('Subtotal')),
-                    Text(pricingQuote == null && state.customer != null
-                        ? state.pricingBusy
-                            ? 'Updating…'
-                            : 'Price unavailable'
-                        : formatNprMinor(state.cartSubtotalMinor),
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                    Text(
+                      pricingQuote == null && state.customer != null
+                          ? state.pricingBusy
+                                ? 'Updating…'
+                                : 'Price unavailable'
+                          : formatNprMinor(state.cartSubtotalMinor),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 5),
@@ -78,15 +85,18 @@ class CartScreen extends StatelessWidget {
                         final signedIn = await Navigator.push<bool>(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const LoginScreen()),
+                            builder: (_) => const LoginScreen(),
+                          ),
                         );
                         if (signedIn != true || !context.mounted) return;
                       }
                       if (state.currentPricingQuote == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(state.pricingError ??
-                                'Waiting for an authoritative price quote.'),
+                            content: Text(
+                              state.pricingError ??
+                                  'Waiting for an authoritative price quote.',
+                            ),
                           ),
                         );
                         return;
@@ -94,7 +104,8 @@ class CartScreen extends StatelessWidget {
                       await Navigator.push<void>(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const CheckoutScreen()),
+                          builder: (_) => const CheckoutScreen(),
+                        ),
                       );
                     },
                     iconAlignment: IconAlignment.end,
@@ -118,7 +129,8 @@ class _CartLineItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final quotedItems = state.currentPricingQuote?.items
+    final quotedItems =
+        state.currentPricingQuote?.items
             .where((item) => item.sku == line.product.sku)
             .toList() ??
         const [];
@@ -139,34 +151,50 @@ class _CartLineItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(line.product.name,
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(
+                line.product.name,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 5),
               if (quoteItem != null) ...[
-                Text(formatNprMinor(quoteItem.appliedUnitMinor),
-                    style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w900)),
-                Text('Regular ${formatNprMinor(quoteItem.regularUnitMinor)} · Save ${formatNprMinor(quoteItem.savingPerUnitMinor)} per item',
-                    style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text(
+                  formatNprMinor(quoteItem.appliedUnitMinor),
+                  style: const TextStyle(
+                    color: AppColors.brand,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  'Regular ${formatNprMinor(quoteItem.regularUnitMinor)} · Save ${formatNprMinor(quoteItem.savingPerUnitMinor)} per item',
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                ),
                 if (quoteItem.promotionName != null)
-                  Text(quoteItem.promotionName!, style: const TextStyle(color: AppColors.brand, fontSize: 12)),
+                  Text(
+                    quoteItem.promotionName!,
+                    style: const TextStyle(
+                      color: AppColors.brand,
+                      fontSize: 12,
+                    ),
+                  ),
               ] else
                 Text(
                   state.customer == null
                       ? formatNpr(line.product.price)
                       : state.pricingBusy
-                          ? 'Updating price…'
-                          : 'Price unavailable',
-                  style: const TextStyle(color: AppColors.brand, fontWeight: FontWeight.w900),
+                      ? 'Updating price…'
+                      : 'Price unavailable',
+                  style: const TextStyle(
+                    color: AppColors.brand,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   _QuantityButton(
                     icon: Icons.remove,
-                    onTap: () => state.setCartQuantity(
-                      line.product,
-                      line.quantity - 1,
-                    ),
+                    onTap: () =>
+                        state.setCartQuantity(line.product, line.quantity - 1),
                   ),
                   SizedBox(
                     width: 38,
@@ -178,17 +206,17 @@ class _CartLineItem extends StatelessWidget {
                   ),
                   _QuantityButton(
                     icon: Icons.add,
-                    onTap: () => state.setCartQuantity(
-                      line.product,
-                      line.quantity + 1,
-                    ),
+                    onTap: () =>
+                        state.setCartQuantity(line.product, line.quantity + 1),
                   ),
                   const Spacer(),
                   IconButton(
                     tooltip: 'Remove item',
                     onPressed: () => state.setCartQuantity(line.product, 0),
-                    icon: const Icon(Icons.delete_outline,
-                        color: AppColors.danger),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.danger,
+                    ),
                   ),
                 ],
               ),
@@ -206,16 +234,16 @@ class _QuantityButton extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(7),
+    child: Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.line),
         borderRadius: BorderRadius.circular(7),
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.line),
-            borderRadius: BorderRadius.circular(7),
-          ),
-          child: Icon(icon, size: 18),
-        ),
-      );
+      ),
+      child: Icon(icon, size: 18),
+    ),
+  );
 }

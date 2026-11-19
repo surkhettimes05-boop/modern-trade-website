@@ -47,16 +47,21 @@ class _MembershipScreenState extends State<MembershipScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('FREE MEMBERSHIP',
-                      style: TextStyle(
-                          color: AppColors.brand,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.2)),
+                  const Text(
+                    'FREE MEMBERSHIP',
+                    style: TextStyle(
+                      color: AppColors.brand,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
                   const SizedBox(height: 8),
-                  Text('Member prices, verified by Pasalho',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w900,
-                          )),
+                  Text(
+                    'Member prices, verified by Pasalho',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   const Text(
                     'Pricing and eligibility are checked securely by Pasalho when you shop. Your membership tier is assigned by the membership service.',
@@ -68,7 +73,9 @@ class _MembershipScreenState extends State<MembershipScreen> {
           ),
           if (!state.isSignedIn) ...[
             const SizedBox(height: 20),
-            const Text('Sign in with a verified mobile number to view or join.'),
+            const Text(
+              'Sign in with a verified mobile number to view or join.',
+            ),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () => Navigator.push<bool>(
@@ -79,8 +86,10 @@ class _MembershipScreenState extends State<MembershipScreen> {
             ),
           ] else if (membership == null && state.pricingError != null) ...[
             const SizedBox(height: 20),
-            Text(state.pricingError!,
-                style: const TextStyle(color: AppColors.danger)),
+            Text(
+              state.pricingError!,
+              style: const TextStyle(color: AppColors.danger),
+            ),
             OutlinedButton(
               onPressed: state.reloadMemberPricing,
               child: const Text('Retry'),
@@ -88,8 +97,10 @@ class _MembershipScreenState extends State<MembershipScreen> {
           ] else if (membership == null) ...[
             const SizedBox(height: 20),
             if (state.pricingError != null)
-              Text(state.pricingError!,
-                  style: const TextStyle(color: AppColors.danger)),
+              Text(
+                state.pricingError!,
+                style: const TextStyle(color: AppColors.danger),
+              ),
             if (state.selectedStore == null)
               const Text('Choose an open store before enrolling.'),
             ElevatedButton(
@@ -106,16 +117,18 @@ class _MembershipScreenState extends State<MembershipScreen> {
                     const CircleAvatar(
                       radius: 25,
                       backgroundColor: AppColors.brand,
-                      child: Icon(Icons.verified_user,
-                          color: Colors.white, size: 27),
+                      child: Icon(
+                        Icons.verified_user,
+                        color: Colors.white,
+                        size: 27,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(
                       'Membership #${membership.number}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w900),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -123,8 +136,9 @@ class _MembershipScreenState extends State<MembershipScreen> {
                           ? 'Founding 1,000'
                           : 'Registered Member',
                       style: const TextStyle(
-                          color: AppColors.brand,
-                          fontWeight: FontWeight.w800),
+                        color: AppColors.brand,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     if (membership.foundingNumber != null)
                       Text('Founding member #${membership.foundingNumber}'),
@@ -154,7 +168,9 @@ class _MembershipScreenState extends State<MembershipScreen> {
                           : 'Member pricing is unavailable while this membership is inactive.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                          color: AppColors.muted, height: 1.4),
+                        color: AppColors.muted,
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ),

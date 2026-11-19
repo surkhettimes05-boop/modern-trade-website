@@ -28,8 +28,10 @@ class CustomerRepository {
   }
 
   Future<Membership> enrollMembership(String storeId) async {
-    final response = await api.post('/api/membership/enroll',
-        body: {'store_id': storeId});
+    final response = await api.post(
+      '/api/membership/enroll',
+      body: {'store_id': storeId},
+    );
     if (response is! Map || response['membership'] is! Map) {
       throw const ApiException(
         'Membership enrollment response was invalid.',
@@ -37,6 +39,7 @@ class CustomerRepository {
       );
     }
     return Membership.fromJson(
-        Map<String, dynamic>.from(response['membership'] as Map));
+      Map<String, dynamic>.from(response['membership'] as Map),
+    );
   }
 }

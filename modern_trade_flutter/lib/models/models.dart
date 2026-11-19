@@ -8,7 +8,9 @@ String _text(Object? value, [String fallback = '']) =>
     value?.toString() ?? fallback;
 
 int _moneyMinor(Object? value) {
-  final match = RegExp(r'^(\d+)(?:\.(\d{1,2}))?$').firstMatch(value?.toString() ?? '');
+  final match = RegExp(
+    r'^(\d+)(?:\.(\d{1,2}))?$',
+  ).firstMatch(value?.toString() ?? '');
   if (match == null) return 0;
   final whole = int.parse(match.group(1)!);
   final fraction = (match.group(2) ?? '').padRight(2, '0');
@@ -31,14 +33,14 @@ class Membership {
   bool get isActive => status == 'ACTIVE';
 
   factory Membership.fromJson(Map<String, dynamic> json) => Membership(
-        id: _text(json['id']),
-        number: int.tryParse(_text(json['membership_number'], '0')) ?? 0,
-        tier: _text(json['tier_key']),
-        status: _text(json['status']),
-        foundingNumber: json['founding_number'] == null
-            ? null
-            : int.tryParse(_text(json['founding_number'])),
-      );
+    id: _text(json['id']),
+    number: int.tryParse(_text(json['membership_number'], '0')) ?? 0,
+    tier: _text(json['tier_key']),
+    status: _text(json['status']),
+    foundingNumber: json['founding_number'] == null
+        ? null
+        : int.tryParse(_text(json['founding_number'])),
+  );
 }
 
 class MemberDisplayPrice {
@@ -126,28 +128,32 @@ class MemberPricingQuote {
   final String? membershipTier;
   bool get isExpired => !expiresAt.isAfter(DateTime.now());
 
-  factory MemberPricingQuote.fromJson(Map<String, dynamic> json) =>
-      MemberPricingQuote(
-        id: _text(json['quoteId']),
-        storeReference: _text(json['storeReference']),
-        customerReference: _text(json['customerReference']),
-        items: (json['items'] is List ? json['items'] as List : const [])
-            .whereType<Map>()
-            .map((item) => MemberPricingQuoteItem.fromJson(
-                Map<String, dynamic>.from(item)))
-            .toList(growable: false),
-        regularSubtotalMinor: _moneyMinor(json['subtotal']),
-        discountTotalMinor: _moneyMinor(json['discountTotal']),
-        finalTotalMinor: _moneyMinor(json['finalTotal']),
-        expiresAt: DateTime.tryParse(_text(json['expiresAt'])) ??
-            DateTime.fromMillisecondsSinceEpoch(0),
-        signedQuoteToken: _text(json['signedQuoteToken']),
-        membershipStatus: _text(json['membershipStatus']),
-        membershipNumber: json['membershipNumber'] == null
-            ? null
-            : int.tryParse(_text(json['membershipNumber'])),
-        membershipTier: json['membershipTier']?.toString(),
-      );
+  factory MemberPricingQuote.fromJson(
+    Map<String, dynamic> json,
+  ) => MemberPricingQuote(
+    id: _text(json['quoteId']),
+    storeReference: _text(json['storeReference']),
+    customerReference: _text(json['customerReference']),
+    items: (json['items'] is List ? json['items'] as List : const [])
+        .whereType<Map>()
+        .map(
+          (item) =>
+              MemberPricingQuoteItem.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .toList(growable: false),
+    regularSubtotalMinor: _moneyMinor(json['subtotal']),
+    discountTotalMinor: _moneyMinor(json['discountTotal']),
+    finalTotalMinor: _moneyMinor(json['finalTotal']),
+    expiresAt:
+        DateTime.tryParse(_text(json['expiresAt'])) ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+    signedQuoteToken: _text(json['signedQuoteToken']),
+    membershipStatus: _text(json['membershipStatus']),
+    membershipNumber: json['membershipNumber'] == null
+        ? null
+        : int.tryParse(_text(json['membershipNumber'])),
+    membershipTier: json['membershipTier']?.toString(),
+  );
 }
 
 class Product {
@@ -195,8 +201,9 @@ class Product {
 
   factory Product.fromJson(Map<String, dynamic> json) {
     final images = json['images'];
-    final firstImage =
-        images is List && images.isNotEmpty ? images.first : null;
+    final firstImage = images is List && images.isNotEmpty
+        ? images.first
+        : null;
     return Product(
       id: _text(json['id']),
       sku: json['sku']?.toString(),
@@ -264,13 +271,13 @@ class StoreLocation {
   final bool temporarilyClosed;
 
   factory StoreLocation.fromJson(Map<String, dynamic> json) => StoreLocation(
-        id: _text(json['id']),
-        name: _text(json['name'], 'NOVA MART'),
-        address: json['address']?.toString(),
-        phone: json['phone']?.toString(),
-        hours: json['hours']?.toString(),
-        temporarilyClosed: json['is_temporarily_closed'] == true,
-      );
+    id: _text(json['id']),
+    name: _text(json['name'], 'NOVA MART'),
+    address: json['address']?.toString(),
+    phone: json['phone']?.toString(),
+    hours: json['hours']?.toString(),
+    temporarilyClosed: json['is_temporarily_closed'] == true,
+  );
 }
 
 class CartLine {
@@ -283,9 +290,9 @@ class CartLine {
       CartLine(product: product, quantity: quantity ?? this.quantity);
 
   Map<String, dynamic> toJson() => {
-        'product_id': product.id,
-        'quantity': quantity,
-      };
+    'product_id': product.id,
+    'quantity': quantity,
+  };
 }
 
 class Customer {
@@ -303,12 +310,12 @@ class Customer {
   final String? verificationStatus;
 
   factory Customer.fromJson(Map<String, dynamic> json) => Customer(
-        id: _text(json['id']),
-        phoneMasked: json['phone_masked']?.toString(),
-        preferredName: json['preferred_name']?.toString(),
-        email: json['email']?.toString(),
-        verificationStatus: json['verification_status']?.toString(),
-      );
+    id: _text(json['id']),
+    phoneMasked: json['phone_masked']?.toString(),
+    preferredName: json['preferred_name']?.toString(),
+    email: json['email']?.toString(),
+    verificationStatus: json['verification_status']?.toString(),
+  );
 }
 
 class CustomerOrder {
@@ -329,15 +336,17 @@ class CustomerOrder {
   final String? deliveryType;
 
   factory CustomerOrder.fromJson(Map<String, dynamic> json) => CustomerOrder(
-        id: _text(json['id']),
-        orderNumber: json['order_number']?.toString(),
-        status: _text(json['status'], 'PENDING'),
-        total: _number(
-            json['total_amount'] ?? json['grand_total'] ?? json['total']),
-        orderDate:
-            DateTime.tryParse(_text(json['order_date'] ?? json['created_at'])),
-        deliveryType: json['delivery_type']?.toString(),
-      );
+    id: _text(json['id']),
+    orderNumber: json['order_number']?.toString(),
+    status: _text(json['status'], 'PENDING'),
+    total: _number(
+      json['total_amount'] ?? json['grand_total'] ?? json['total'],
+    ),
+    orderDate: DateTime.tryParse(
+      _text(json['order_date'] ?? json['created_at']),
+    ),
+    deliveryType: json['delivery_type']?.toString(),
+  );
 }
 
 String formatNpr(num value) => formatNprMinor((value * 100).round());
