@@ -20,11 +20,9 @@ class _ProductScreenState extends State<ProductScreen> {
   Widget build(BuildContext context) {
     final product = widget.product;
     final state = AppScope.of(context);
-    final memberPrice = product.sku == null
-        ? null
-        : state.memberPrices[product.sku];
-    final memberEligible =
-        state.membership?.isActive == true &&
+    final memberPrice =
+        product.sku == null ? null : state.memberPrices[product.sku];
+    final memberEligible = state.membership?.isActive == true &&
         memberPrice != null &&
         memberPrice.appliedUnitMinor < memberPrice.regularUnitMinor;
     return Scaffold(
@@ -57,9 +55,9 @@ class _ProductScreenState extends State<ProductScreen> {
                 Text(
                   product.name,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -1,
-                  ),
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1,
+                      ),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -130,8 +128,8 @@ class _ProductScreenState extends State<ProductScreen> {
                 Text(
                   'About this product',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+                        fontWeight: FontWeight.w900,
+                      ),
                 ),
                 const SizedBox(height: 8),
                 Text(

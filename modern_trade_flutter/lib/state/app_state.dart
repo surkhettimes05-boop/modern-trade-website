@@ -116,14 +116,13 @@ const _fallbackProducts = <Product>[
 
 class AppState extends ChangeNotifier {
   AppState({ApiClient? api})
-    : api =
-          api ??
-          ApiClient(
-            baseUrl: const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: 'https://storesync-backend-dg8z.onrender.com',
-            ),
-          ) {
+      : api = api ??
+            ApiClient(
+              baseUrl: const String.fromEnvironment(
+                'API_BASE_URL',
+                defaultValue: 'https://storesync-backend-dg8z.onrender.com',
+              ),
+            ) {
     authRepository = AuthRepository(this.api);
     catalogRepository = CatalogRepository(this.api);
     checkoutRepository = CheckoutRepository(this.api);
@@ -167,9 +166,8 @@ class AppState extends ChangeNotifier {
 
   List<CartLine> get cart => cartController.quantities.entries
       .map((entry) {
-        final product = products
-            .where((item) => item.id == entry.key)
-            .firstOrNull;
+        final product =
+            products.where((item) => item.id == entry.key).firstOrNull;
         return product == null
             ? null
             : CartLine(product: product, quantity: entry.value);
@@ -178,9 +176,9 @@ class AppState extends ChangeNotifier {
       .toList(growable: false);
 
   int get cartCount => cartController.quantities.values.fold(
-    0,
-    (sum, quantity) => sum + quantity,
-  );
+        0,
+        (sum, quantity) => sum + quantity,
+      );
   MemberPricingQuote? get currentPricingQuote {
     final quote = pricingQuote;
     if (customer == null ||
@@ -251,7 +249,7 @@ class AppState extends ChangeNotifier {
       final savedStore = prefs.getString('selected_store');
       selectedStore =
           stores.where((store) => store.id == savedStore).firstOrNull ??
-          stores.firstOrNull;
+              stores.firstOrNull;
       if (api.hasSession) await validateSession();
       await reloadMemberPricing();
       if (customer != null && cart.isNotEmpty) {
@@ -291,20 +289,16 @@ class AppState extends ChangeNotifier {
 
   List<Product> search(String query, {String? categoryId}) {
     final normalized = query.trim().toLowerCase();
-    return products
-        .where((product) {
-          final categoryMatch =
-              categoryId == null ||
-              product.categoryId == categoryId ||
-              product.category.toLowerCase() == categoryId.toLowerCase();
-          final textMatch =
-              normalized.isEmpty ||
-              '${product.name} ${product.brand} ${product.category}'
-                  .toLowerCase()
-                  .contains(normalized);
-          return categoryMatch && textMatch;
-        })
-        .toList(growable: false);
+    return products.where((product) {
+      final categoryMatch = categoryId == null ||
+          product.categoryId == categoryId ||
+          product.category.toLowerCase() == categoryId.toLowerCase();
+      final textMatch = normalized.isEmpty ||
+          '${product.name} ${product.brand} ${product.category}'
+              .toLowerCase()
+              .contains(normalized);
+      return categoryMatch && textMatch;
+    }).toList(growable: false);
   }
 
   Future<void> selectStore(StoreLocation store) async {
@@ -532,9 +526,10 @@ class AppState extends ChangeNotifier {
     String customerId,
     List<CartLine> lines,
   ) {
-    final entries =
-        lines.map((line) => '${line.product.sku}:${line.quantity}').toList()
-          ..sort();
+    final entries = lines
+        .map((line) => '${line.product.sku}:${line.quantity}')
+        .toList()
+      ..sort();
     return '$storeId|$customerId|${entries.join(',')}';
   }
 

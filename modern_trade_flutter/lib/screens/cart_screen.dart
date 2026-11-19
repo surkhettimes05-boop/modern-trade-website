@@ -55,8 +55,8 @@ class CartScreen extends StatelessWidget {
                     Text(
                       pricingQuote == null && state.customer != null
                           ? state.pricingBusy
-                                ? 'Updating…'
-                                : 'Price unavailable'
+                              ? 'Updating…'
+                              : 'Price unavailable'
                           : formatNprMinor(state.cartSubtotalMinor),
                       style: const TextStyle(
                         fontSize: 20,
@@ -129,8 +129,7 @@ class _CartLineItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final quotedItems =
-        state.currentPricingQuote?.items
+    final quotedItems = state.currentPricingQuote?.items
             .where((item) => item.sku == line.product.sku)
             .toList() ??
         const [];
@@ -181,8 +180,8 @@ class _CartLineItem extends StatelessWidget {
                   state.customer == null
                       ? formatNpr(line.product.price)
                       : state.pricingBusy
-                      ? 'Updating price…'
-                      : 'Price unavailable',
+                          ? 'Updating price…'
+                          : 'Price unavailable',
                   style: const TextStyle(
                     color: AppColors.brand,
                     fontWeight: FontWeight.w900,
@@ -234,16 +233,16 @@ class _QuantityButton extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(7),
-    child: Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.line),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(7),
-      ),
-      child: Icon(icon, size: 18),
-    ),
-  );
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.line),
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Icon(icon, size: 18),
+        ),
+      );
 }

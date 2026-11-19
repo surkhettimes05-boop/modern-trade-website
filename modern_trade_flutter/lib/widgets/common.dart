@@ -11,51 +11,51 @@ class NovaLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: compact ? 34 : 40,
-        height: compact ? 34 : 40,
-        decoration: BoxDecoration(
-          color: AppColors.brand,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          'N',
-          style: TextStyle(
-            color: AppColors.lime,
-            fontSize: compact ? 18 : 21,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ),
-      const SizedBox(width: 8),
-      const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'NOVA',
-            style: TextStyle(
-              height: .9,
-              letterSpacing: -.5,
-              fontWeight: FontWeight.w900,
+          Container(
+            width: compact ? 34 : 40,
+            height: compact ? 34 : 40,
+            decoration: BoxDecoration(
+              color: AppColors.brand,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              'N',
+              style: TextStyle(
+                color: AppColors.lime,
+                fontSize: compact ? 18 : 21,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
-          Text(
-            'MART',
-            style: TextStyle(
-              height: .9,
-              letterSpacing: -.5,
-              color: AppColors.brand,
-              fontWeight: FontWeight.w900,
-            ),
+          const SizedBox(width: 8),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'NOVA',
+                style: TextStyle(
+                  height: .9,
+                  letterSpacing: -.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                'MART',
+                style: TextStyle(
+                  height: .9,
+                  letterSpacing: -.5,
+                  color: AppColors.brand,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
           ),
         ],
-      ),
-    ],
-  );
+      );
 }
 
 class StoreSelector extends StatelessWidget {
@@ -96,9 +96,8 @@ class StoreSelector extends StatelessWidget {
                         if (store.address != null) store.address!,
                       ].join(' · '),
                       style: TextStyle(
-                        color: store.temporarilyClosed
-                            ? AppColors.danger
-                            : null,
+                        color:
+                            store.temporarilyClosed ? AppColors.danger : null,
                       ),
                     ),
                     leading: Icon(
@@ -161,36 +160,36 @@ class SectionHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (eyebrow != null)
-              Text(
-                eyebrow!.toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.brand,
-                  fontSize: 10,
-                  letterSpacing: 1.5,
-                  fontWeight: FontWeight.w900,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (eyebrow != null)
+                  Text(
+                    eyebrow!.toUpperCase(),
+                    style: const TextStyle(
+                      color: AppColors.brand,
+                      fontSize: 10,
+                      letterSpacing: 1.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -.7,
+                      ),
                 ),
-              ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w900,
-                letterSpacing: -.7,
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
-      if (action != null) action!,
-    ],
-  );
+          ),
+          if (action != null) action!,
+        ],
+      );
 }
 
 class ProductCard extends StatelessWidget {
@@ -200,11 +199,9 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final memberPrice = product.sku == null
-        ? null
-        : state.memberPrices[product.sku];
-    final memberEligible =
-        state.membership?.isActive == true &&
+    final memberPrice =
+        product.sku == null ? null : state.memberPrices[product.sku];
+    final memberEligible = state.membership?.isActive == true &&
         memberPrice != null &&
         memberPrice.appliedUnitMinor < memberPrice.regularUnitMinor;
     return Card(
@@ -369,11 +366,10 @@ class ProductImage extends StatelessWidget {
     return Image.network(
       url,
       fit: fit,
-      cacheWidth:
-          (MediaQuery.sizeOf(context).width *
-                  MediaQuery.devicePixelRatioOf(context))
-              .clamp(240, 1200)
-              .round(),
+      cacheWidth: (MediaQuery.sizeOf(context).width *
+              MediaQuery.devicePixelRatioOf(context))
+          .clamp(240, 1200)
+          .round(),
       errorBuilder: (_, __, ___) => const ColoredBox(
         color: AppColors.cream,
         child: Center(
@@ -409,29 +405,29 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 58, color: AppColors.brand),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 58, color: AppColors.brand),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.muted, height: 1.5),
+              ),
+              if (action != null) ...[const SizedBox(height: 20), action!],
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.muted, height: 1.5),
-          ),
-          if (action != null) ...[const SizedBox(height: 20), action!],
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 }

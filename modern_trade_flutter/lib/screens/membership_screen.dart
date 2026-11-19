@@ -59,8 +59,8 @@ class _MembershipScreenState extends State<MembershipScreen> {
                   Text(
                     'Member prices, verified by Pasalho',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+                          fontWeight: FontWeight.w900,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -127,8 +127,8 @@ class _MembershipScreenState extends State<MembershipScreen> {
                     Text(
                       'Membership #${membership.number}',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
+                            fontWeight: FontWeight.w900,
+                          ),
                     ),
                     const SizedBox(height: 6),
                     Text(

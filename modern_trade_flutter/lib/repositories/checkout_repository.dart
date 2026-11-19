@@ -56,9 +56,10 @@ class CheckoutWard {
   final int id;
   final int number;
   factory CheckoutWard.fromJson(Map<String, dynamic> json) => CheckoutWard(
-    id: int.tryParse(json['id'].toString()) ?? 0,
-    number: int.tryParse((json['ward_number'] ?? json['id']).toString()) ?? 0,
-  );
+        id: int.tryParse(json['id'].toString()) ?? 0,
+        number:
+            int.tryParse((json['ward_number'] ?? json['id']).toString()) ?? 0,
+      );
 }
 
 class CheckoutDeliveryQuote {
@@ -76,14 +77,14 @@ class CheckoutDeliveryQuote {
         deliveryFee: json['delivery_fee'] == null
             ? null
             : ((double.tryParse(json['delivery_fee'].toString()) ?? 0) * 100)
-                  .round(),
+                .round(),
         reason: json['reason']?.toString(),
       );
 }
 
 class CheckoutRepository {
   CheckoutRepository(this.api, {Random? random})
-    : _random = random ?? Random.secure();
+      : _random = random ?? Random.secure();
   final ApiClient api;
   final Random _random;
   static const _attemptKey = 'checkout_attempt_v1';
@@ -275,9 +276,10 @@ class CheckoutRepository {
     List<CartLine> lines,
     CheckoutDetails details,
   ) {
-    final entries =
-        lines.map((line) => '${line.product.id}:${line.quantity}').toList()
-          ..sort();
+    final entries = lines
+        .map((line) => '${line.product.id}:${line.quantity}')
+        .toList()
+      ..sort();
     return '$storeId|$customerId|${entries.join(',')}|${details.deliveryType}|${details.name}|${details.phone}|${details.address}|${details.municipalityId}|${details.wardId}|${details.postalCode}|${details.notes}';
   }
 }
@@ -299,20 +301,21 @@ class _Attempt {
     String? cartId,
     String? addressId,
     Set<String>? uploadedProductIds,
-  }) => _Attempt(
-    key: key,
-    fingerprint: fingerprint,
-    cartId: cartId ?? this.cartId,
-    addressId: addressId ?? this.addressId,
-    uploadedProductIds: uploadedProductIds ?? this.uploadedProductIds,
-  );
+  }) =>
+      _Attempt(
+        key: key,
+        fingerprint: fingerprint,
+        cartId: cartId ?? this.cartId,
+        addressId: addressId ?? this.addressId,
+        uploadedProductIds: uploadedProductIds ?? this.uploadedProductIds,
+      );
   Map<String, dynamic> toJson() => {
-    'key': key,
-    'fingerprint': fingerprint,
-    'cart_id': cartId,
-    'address_id': addressId,
-    'uploaded': uploadedProductIds.toList(),
-  };
+        'key': key,
+        'fingerprint': fingerprint,
+        'cart_id': cartId,
+        'address_id': addressId,
+        'uploaded': uploadedProductIds.toList(),
+      };
   static _Attempt? read(String? raw) {
     if (raw == null) return null;
     try {

@@ -139,6 +139,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final previousQuote = state.currentPricingQuote;
       final quoteExpired = previousQuote == null || previousQuote.isExpired;
       final acceptedQuote = await state.refreshPricingQuote();
+      if (!mounted) return;
       var acceptedDeliveryQuote = _deliveryQuote;
       if (_deliveryType == 'DELIVERY') {
         if (_municipalityId == null || _wardId == null) {
@@ -150,14 +151,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           wardId: _wardId!,
           orderValueMinor: acceptedQuote.finalTotalMinor,
         );
+        if (!mounted) return;
         if (!acceptedDeliveryQuote.serviceable) {
           throw const ApiException(
             'Delivery is not available for this address.',
           );
         }
       }
-      final quoteChanged =
-          previousQuote != null &&
+      final quoteChanged = previousQuote != null &&
           (previousQuote.regularSubtotalMinor !=
                   acceptedQuote.regularSubtotalMinor ||
               previousQuote.discountTotalMinor !=
@@ -209,22 +210,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         state.confirmPricingQuote();
       }
       Future<CustomerOrder> submit(MemberPricingQuote quote) => state.checkout(
-        deliveryType: _deliveryType,
-        name: _name.text.trim(),
-        phone: _phone.text.trim(),
-        address: _address.text.trim(),
-        postalCode: _postalCode.text.trim(),
-        municipalityId: _municipalityId,
-        wardId: _wardId,
-        acceptedQuote: quote,
-        notes: _notes.text.trim(),
-      );
+            deliveryType: _deliveryType,
+            name: _name.text.trim(),
+            phone: _phone.text.trim(),
+            address: _address.text.trim(),
+            postalCode: _postalCode.text.trim(),
+            municipalityId: _municipalityId,
+            wardId: _wardId,
+            acceptedQuote: quote,
+            notes: _notes.text.trim(),
+          );
       late CustomerOrder order;
       try {
         order = await submit(acceptedQuote);
       } on ApiException catch (exception) {
         if (exception.statusCode != 409) rethrow;
         final refreshedQuote = await state.refreshPricingQuote();
+        if (!mounted) return;
         state.requirePricingQuoteConfirmation();
         final approved = await showDialog<bool>(
           context: context,
@@ -356,8 +358,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               controller: _phone,
               validator: (value) =>
                   RegExp(r'^(\+977)?9[6-9]\d{8}$').hasMatch(value?.trim() ?? '')
-                  ? null
-                  : 'Enter a valid Nepal mobile number',
+                      ? null
+                      : 'Enter a valid Nepal mobile number',
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: 'Mobile number'),
@@ -435,8 +437,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 controller: _postalCode,
                 validator: (value) =>
                     RegExp(r'^\d{5}$').hasMatch(value?.trim() ?? '')
-                    ? null
-                    : 'Enter a 5-digit postal code',
+                        ? null
+                        : 'Enter a 5-digit postal code',
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(labelText: 'Postal code'),
@@ -455,7 +457,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   _deliveryQuote == null
                       ? 'Checking delivery availability…'
                       : _deliveryQuote!.reason ??
-                            'Delivery is unavailable for this address.',
+                          'Delivery is unavailable for this address.',
                   style: const TextStyle(color: AppColors.danger),
                 ),
             ],
@@ -497,15 +499,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           ),
                         ],
                       ),
-                      if (pricingQuote == null &&
-                          state.customer != null &&
-                          state.cart.isNotEmpty &&
-                          !state.pricingBusy)
-                        TextButton.icon(
-                          onPressed: _retryPricing,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Refresh authoritative price'),
-                        ),
                       const SizedBox(height: 6),
                       Row(
                         children: [
@@ -517,14 +510,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ),
                       const SizedBox(height: 6),
                     ],
+                    if (pricingQuote == null &&
+                        state.customer != null &&
+                        state.cart.isNotEmpty &&
+                        !state.pricingBusy)
+                      TextButton.icon(
+                        onPressed: _retryPricing,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Refresh authoritative price'),
+                      ),
                     Row(
                       children: [
                         const Expanded(child: Text('Authoritative payable')),
                         Text(
                           pricingQuote == null
                               ? state.pricingBusy
-                                    ? 'Updating…'
-                                    : state.pricingError ?? 'Price unavailable'
+                                  ? 'Updating…'
+                                  : state.pricingError ?? 'Price unavailable'
                               : formatNprMinor(pricingQuote.finalTotalMinor),
                           style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
@@ -590,8 +592,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             border: Border(top: BorderSide(color: AppColors.line)),
           ),
           child: ElevatedButton(
-            onPressed:
-                _busy ||
+            onPressed: _busy ||
                     pricingQuote == null ||
                     pricingQuote.isExpired ||
                     (_deliveryType == 'DELIVERY' &&
