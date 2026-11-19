@@ -68,7 +68,7 @@ void main() {
         if (request.url.path == '/api/addresses') {
           return jsonResponse({'id': 'address-1'});
         }
-        if (request.url.path == '/api/checkout/cod') {
+        if (request.url.path == '/api/app/checkout/cod') {
           return jsonResponse({'id': 'order-1', 'total': 799});
         }
         return jsonResponse({});
@@ -86,7 +86,7 @@ void main() {
       '/api/shopping-cart',
       '/api/shopping-cart/cart-1/items',
       '/api/addresses',
-      '/api/checkout/cod',
+      '/api/app/checkout/cod',
     ]);
     expect(
       (await SharedPreferences.getInstance()).getString('checkout_attempt_v1'),
@@ -109,7 +109,7 @@ void main() {
           if (request.url.path == '/api/addresses') {
             return jsonResponse({'id': 'address-1'});
           }
-          if (request.url.path == '/api/checkout/cod') {
+          if (request.url.path == '/api/app/checkout/cod') {
             keys.add(
               (jsonDecode(request.body) as Map)['idempotency_key'].toString(),
             );
