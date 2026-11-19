@@ -113,20 +113,21 @@ void main() {
             keys.add(
               (jsonDecode(request.body) as Map)['idempotency_key'].toString(),
             );
-            if (checkoutCalls++ == 0)
+            if (checkoutCalls++ == 0) {
               throw TimeoutException('uncertain outcome');
+            }
             return jsonResponse({'id': 'order-1'});
           }
           return jsonResponse({});
         }),
       );
       Future<CustomerOrder> args() => repo.checkout(
-        store: store,
-        customer: customer,
-        lines: const [CartLine(product: product, quantity: 1)],
-        quote: quote,
-        details: details,
-      );
+            store: store,
+            customer: customer,
+            lines: const [CartLine(product: product, quantity: 1)],
+            quote: quote,
+            details: details,
+          );
       await expectLater(
         args(),
         throwsA(

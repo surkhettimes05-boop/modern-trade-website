@@ -26,16 +26,6 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Capture Dart 3.50 formatter output
-        run: dart format .
-      - name: Upload formatted Flutter sources
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: flutter-formatted-sources
-          path: |
-            modern_trade_flutter/lib/**/*.dart
-            modern_trade_flutter/test/app_state_test.dart
-            modern_trade_flutter/test/checkout_repository_test.dart
       - run: dart format --output=none --set-exit-if-changed .
       - run: flutter analyze
       - run: flutter test

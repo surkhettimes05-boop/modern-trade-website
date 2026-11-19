@@ -46,17 +46,16 @@ void main() {
   );
 
   test('failed cart upload keeps local cart intact', () async {
-    final state =
-        AppState(
-            api: testApi((request) async {
-              if (request.url.path == '/api/shopping-cart') {
-                return jsonResponse({'id': 'cart'});
-              }
-              return jsonResponse({'error': 'stock changed'}, 409);
-            }),
-          )
-          ..products = const [stateProduct]
-          ..selectedStore = const StoreLocation(id: 's', name: 'Store');
+    final state = AppState(
+      api: testApi((request) async {
+        if (request.url.path == '/api/shopping-cart') {
+          return jsonResponse({'id': 'cart'});
+        }
+        return jsonResponse({'error': 'stock changed'}, 409);
+      }),
+    )
+      ..products = const [stateProduct]
+      ..selectedStore = const StoreLocation(id: 's', name: 'Store');
     await state.addToCart(stateProduct);
     state.customer = const Customer(id: 'c');
     await expectLater(_checkout(state), throwsA(isA<ApiException>()));
@@ -64,18 +63,17 @@ void main() {
   });
 
   test('successful checkout clears local cart', () async {
-    final state =
-        AppState(
-            api: testApi((request) async {
-              if (request.url.path == '/api/shopping-cart') {
-                return jsonResponse({'id': 'cart'});
-              }
-              if (request.url.path.endsWith('/items')) return jsonResponse({});
-              return jsonResponse({'id': 'order'});
-            }),
-          )
-          ..products = const [stateProduct]
-          ..selectedStore = const StoreLocation(id: 's', name: 'Store');
+    final state = AppState(
+      api: testApi((request) async {
+        if (request.url.path == '/api/shopping-cart') {
+          return jsonResponse({'id': 'cart'});
+        }
+        if (request.url.path.endsWith('/items')) return jsonResponse({});
+        return jsonResponse({'id': 'order'});
+      }),
+    )
+      ..products = const [stateProduct]
+      ..selectedStore = const StoreLocation(id: 's', name: 'Store');
     await state.addToCart(stateProduct);
     state.customer = const Customer(id: 'c');
     expect((await _checkout(state)).id, 'order');
