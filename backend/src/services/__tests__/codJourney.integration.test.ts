@@ -180,7 +180,9 @@ test("customer → address → serviceability → assigned cart → COD recovery
       return code;
     });
   try {
-    const phone = "9812345678";
+    // The development seed already contains 9812345678; referral attribution
+    // requires a genuinely new, OTP-verified customer.
+    const phone = `98${String(Math.floor(Math.random() * 100_000_000)).padStart(8, "0")}`;
     const slug = `qa-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     const creator = await query(
       `INSERT INTO creators (creator_code, display_name, contact_phone, referral_slug, created_by)
