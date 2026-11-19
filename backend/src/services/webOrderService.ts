@@ -351,11 +351,6 @@ export class WebOrderService {
       );
       const order = current.rows[0];
       if (!order) throw new Error("Order not found");
-      if (order.payment_method === "COD") {
-        throw new Error(
-          "COD payment status is controlled only by delivery settlement",
-        );
-      }
       if (!this.validStatusTransitions[order.status]?.includes(status)) {
         throw new Error(`Invalid transition from ${order.status} to ${status}`);
       }
