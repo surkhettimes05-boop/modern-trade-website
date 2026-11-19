@@ -105,7 +105,9 @@ jobs:
       - name: Frontend lint
         run: npm run lint --prefix frontend
       - name: Frontend build
-        run: npm run build --prefix frontend
+        run: NEXT_STANDALONE=1 npm run build --prefix frontend
+      - name: First-party creator referral HTTP smoke
+        run: node frontend/scripts/check-creator-referral-smoke.mjs
       - name: Production dependency audit
         run: |
           npm audit --prefix backend --audit-level=high --omit=dev
