@@ -70,6 +70,34 @@ jobs:
         run: npm run type-check --prefix backend
       - name: Backend tests
         run: npm run test:ci --prefix backend
+      - name: Prove isolated PostgreSQL backup and restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This is the disposable CI database, never a production database.
+          container='${{ job.services.postgres.id }}'
+          docker exec "$container" pg_dump -U postgres --format=custom \
+            --file=/tmp/storesync-ci.dump storesync_jest_test
+          docker exec "$container" createdb -U postgres storesync_restore_test
+          docker exec "$container" pg_restore -U postgres --no-owner \
+            --no-privileges --exit-on-error --dbname=storesync_restore_test \
+            /tmp/storesync-ci.dump
+          original="$(docker exec "$container" psql -U postgres -d storesync_jest_test -At \
+            -c 'SELECT COUNT(*) FROM schema_migrations')"
+          restored="$(docker exec "$container" psql -U postgres -d storesync_restore_test -At \
+            -c 'SELECT COUNT(*) FROM schema_migrations')"
+          test "$original" -ge 53
+          test "$restored" = "$original"
+          for table in customers web_orders creator_referral_visits \
+            creator_customer_attributions creator_purchase_events creator_reward_ledger \
+            cod_cash_collections; do
+            source_count="$(docker exec "$container" psql -U postgres -d storesync_jest_test -At \
+              -c "SELECT COUNT(*) FROM $table")"
+            restore_count="$(docker exec "$container" psql -U postgres -d storesync_restore_test -At \
+              -c "SELECT COUNT(*) FROM $table")"
+            test "$source_count" = "$restore_count"
+          done
+          echo "Isolated CI database restored: $restored migration checksums, commerce and creator row counts match"
       - name: Backend lint baseline
         run: npm run lint:ci --prefix backend
       - name: Frontend type-check
