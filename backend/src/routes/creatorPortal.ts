@@ -11,6 +11,11 @@ const CSRF_COOKIE = "pasalho_creator_csrf";
 const SESSION_DAYS = 7;
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
+export const creatorOtpVerifySchema = z.object({
+  phone: z.string().min(10).max(20),
+  otp_code: z.string().regex(/^\d{6}$/),
+});
+
 function csrfMatches(request: FastifyRequest) {
   const cookie = (request as any).cookies?.[CSRF_COOKIE];
   const header = request.headers["x-csrf-token"];
@@ -55,7 +60,7 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/otp/verify", { config: { rateLimit: { max: 8, timeWindow: "15 minutes" } } }, async (request, reply) => {
-    const parsed = z.object({ phone: z.string().min(10).max(20), otp_code: z.string().regex(/^\\d{6}$/) }).safeParse(request.body);
+    const parsed = creatorOtpVerifySchema.safeParse(request.body);
     if (!parsed.success || !validatePhone(parsed.data.phone)) return reply.status(400).send({ error: "Invalid phone number or code." });
     const phone = normalizePhone(parsed.data.phone);
     const creator = await query(
