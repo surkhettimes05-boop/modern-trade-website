@@ -200,6 +200,7 @@ describe("protected resource scope", () => {
     "/api/admin/products",
     "/api/admin/customers/customer-a/orders",
     "/api/admin/notifications/read",
+    "/api/admin/member-pricing/promotions",
   ])(
     "allows an internally scoped admin handler to derive scope for %s",
     async (url) => {

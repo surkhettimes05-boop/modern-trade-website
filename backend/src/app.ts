@@ -22,6 +22,9 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { validateProductionEnvironment } from "./config/environment.js";
 import { redisService } from "./services/redisService.js";
 import { loyaltyMvpRoutes } from "./routes/loyaltyMvp.js";
+import { membershipRoutes } from "./routes/membership.js";
+import { memberPricingServiceRoutes } from "./routes/memberPricingService.js";
+import { customerMemberPricingRoutes } from "./routes/customerMemberPricing.js";
 import { paymentWebhookRoutes } from "./routes/payments.js";
 import { creatorAttributionRoutes } from "./routes/creatorAttribution.js";
 import { creatorPortalRoutes } from "./routes/creatorPortal.js";
@@ -194,6 +197,11 @@ export async function buildApp(
   }
 
   await fastify.register(authRoutes, { prefix: "/api/auth" });
+  await fastify.register(membershipRoutes, { prefix: "/api" });
+  await fastify.register(customerMemberPricingRoutes, { prefix: "/api" });
+  await fastify.register(memberPricingServiceRoutes, {
+    prefix: "/api/internal/member-pricing",
+  });
   await fastify.register(foundingRoutes, { prefix: "/api" });
   await fastify.register(shoppingCartRoutes, { prefix: "/api" });
   await fastify.register(checkoutRoutes, { prefix: "/api" });

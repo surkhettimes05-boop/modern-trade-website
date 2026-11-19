@@ -24,11 +24,18 @@ describe("production route security inventory", () => {
 
   it("keeps privileged and protected plugin boundaries explicit", () => {
     expect(PRODUCTION_ROUTE_SECURITY.protectedOperations).toBe("STAFF_SESSION");
+    expect(PRODUCTION_ROUTE_SECURITY.membershipRoutes).toBe("MIXED_EXPLICIT");
     expect(PRODUCTION_ROUTE_SECURITY.privilegedAdministration).toBe(
       "PRIVILEGED_STAFF_MFA",
     );
     expect(PRODUCTION_ROUTE_SECURITY.paymentWebhookRoutes).toBe(
       "SIGNED_WEBHOOK",
+    );
+    expect(PRODUCTION_ROUTE_SECURITY.memberPricingServiceRoutes).toBe(
+      "SERVICE_TO_SERVICE_AUTH",
+    );
+    expect(PRODUCTION_ROUTE_SECURITY.customerMemberPricingRoutes).toBe(
+      "CUSTOMER_SESSION",
     );
   });
 });

@@ -17,6 +17,7 @@ export const PILOT_FEATURES = {
   externalTaxIntegration: false,
   returns: false,
   promotionEngine: false,
+  memberPricing: false,
   customerSegments: false,
   offlineSync: false,
   hardwareDevices: false,
@@ -54,4 +55,10 @@ export function deferredFeatureEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   return env.NODE_ENV !== "production" && env[envName] === "true";
+}
+
+export function memberPricingEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.ENABLE_MEMBER_PRICING === "true";
 }

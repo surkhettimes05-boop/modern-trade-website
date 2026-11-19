@@ -14,14 +14,14 @@ export async function orderLifecycleRoutes(fastify: FastifyInstance) {
 
     const bodySchema = z.object({
       to_status: z.enum([
-        "DRAFT",
-        "PENDING_PAYMENT",
+        "RECEIVED",
         "CONFIRMED",
-        "PICKING",
-        "PACKED",
+        "PROCESSING",
+        "READY",
         "OUT_FOR_DELIVERY",
         "DELIVERED",
         "CANCELLED",
+        "FAILED",
       ]),
       reason: z.string().optional(),
       created_by: z.string().optional(),

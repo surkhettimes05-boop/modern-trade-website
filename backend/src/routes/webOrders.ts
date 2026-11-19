@@ -136,17 +136,14 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
       store_id: z.string().uuid().optional(),
       status: z
         .enum([
-          "PENDING",
-          "PENDING_PAYMENT",
+          "RECEIVED",
           "CONFIRMED",
-          "PICKING",
-          "PACKED",
+          "PROCESSING",
+          "READY",
           "OUT_FOR_DELIVERY",
           "DELIVERED",
-          "RETURN_REQUESTED",
-          "RETURNED",
           "CANCELLED",
-          "REFUNDED",
+          "FAILED",
         ])
         .optional(),
       payment_status: z
@@ -225,9 +222,9 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
         await client.query("ROLLBACK");
         return reply.status(409).send({ error: "Pickup orders do not require delivery assignment" });
       }
-      if (order.status !== "PACKED") {
+      if (order.status !== "READY") {
         await client.query("ROLLBACK");
-        return reply.status(409).send({ error: "Order must be PACKED before delivery assignment" });
+        return reply.status(409).send({ error: "Order must be READY before delivery assignment" });
       }
 
       const existing = await client.query(
@@ -353,13 +350,14 @@ export async function webOrderRoutes(fastify: FastifyInstance) {
 
     const bodySchema = z.object({
       status: z.enum([
-        "PENDING_PAYMENT",
+        "RECEIVED",
         "CONFIRMED",
-        "PICKING",
-        "PACKED",
+        "PROCESSING",
+        "READY",
         "OUT_FOR_DELIVERY",
         "DELIVERED",
         "CANCELLED",
+        "FAILED",
       ]),
       reason: z.string().trim().min(1).max(500).optional(),
       cod_received: z.boolean().optional().default(false),

@@ -65,8 +65,9 @@ describe("web order lifecycle integrity", () => {
           rows: [
             {
               id: "order-1",
-              status: "PENDING_PAYMENT",
+              status: "RECEIVED",
               payment_status: "PENDING",
+              payment_method: "COD",
               cart_id: "cart-1",
               store_id: "store-1",
             },
@@ -74,7 +75,15 @@ describe("web order lifecycle integrity", () => {
         };
       }
       if (sql.includes("UPDATE web_orders")) {
-        return { rows: [{ id: "order-1", status: "CONFIRMED" }] };
+        return {
+          rows: [
+            {
+              id: "order-1",
+              status: "CONFIRMED",
+              payment_status: "PENDING",
+            },
+          ],
+        };
       }
       return { rows: [], rowCount: 1 };
     });
@@ -86,12 +95,41 @@ describe("web order lifecycle integrity", () => {
     );
 
     expect(result.status).toBe("CONFIRMED");
+    expect(result.payment_status).toBe("PENDING");
     expect(
       clientQuery.mock.calls.some(([sql]) =>
         String(sql).includes("GREATEST(expires_at"),
       ),
     ).toBe(true);
     expect(clientQuery).toHaveBeenCalledWith("COMMIT");
+  });
+
+  it("requires COD cash receipt before transitioning to delivered", async () => {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.startsWith("SELECT * FROM web_orders")) {
+        return {
+          rows: [
+            {
+              id: "order-1",
+              status: "OUT_FOR_DELIVERY",
+              payment_status: "PENDING",
+              payment_method: "COD",
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    await expect(
+      new WebOrderService().updateWebOrderStatus(
+        "order-1",
+        "DELIVERED",
+        "staff-1",
+      ),
+    ).rejects.toThrow("COD cash receipt must be confirmed before delivery");
+    expect(clientQuery).toHaveBeenCalledWith("ROLLBACK");
+    expect(release).toHaveBeenCalled();
   });
 
   it("deducts batch inventory and consumes reservations on delivery", async () => {
@@ -144,7 +182,7 @@ describe("web order lifecycle integrity", () => {
   it("rejects an invalid status transition and rolls back", async () => {
     clientQuery.mockImplementation(async (sql: string) => {
       if (sql.startsWith("SELECT * FROM web_orders")) {
-        return { rows: [{ id: "order-1", status: "PENDING_PAYMENT" }] };
+        return { rows: [{ id: "order-1", status: "RECEIVED" }] };
       }
       return { rows: [] };
     });

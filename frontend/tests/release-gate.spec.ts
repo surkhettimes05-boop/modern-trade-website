@@ -220,7 +220,8 @@ test("complete Pasalho COD order flow reconciles inventory and payment", async (
     items: Array<{ product_id: string; quantity: number }>;
   };
 
-  expect(order.status).toBe("PENDING_PAYMENT");
+  expect(order.status).toBe("RECEIVED");
+  expect(order.payment_status).toBe("PENDING");
   expect(order.items.length).toBeGreaterThan(0);
   const firstItem = order.items[0];
 
@@ -258,10 +259,10 @@ test("complete Pasalho COD order flow reconciles inventory and payment", async (
   await expect(page.getByText(/SKU:/).first()).toBeVisible();
 
   await page.getByRole("button", { name: "ACCEPT & START ORDER" }).click();
-  await expect(page.getByRole("button", { name: "Start picking" })).toBeVisible();
-  await page.getByRole("button", { name: "Start picking" }).click();
-  await expect(page.getByRole("button", { name: "Mark packed" })).toBeVisible();
-  await page.getByRole("button", { name: "Mark packed" }).click();
+  await expect(page.getByRole("button", { name: "Start processing" })).toBeVisible();
+  await page.getByRole("button", { name: "Start processing" }).click();
+  await expect(page.getByRole("button", { name: "Mark ready" })).toBeVisible();
+  await page.getByRole("button", { name: "Mark ready" }).click();
   await expect(page.getByRole("button", { name: "Send for delivery" })).toBeVisible();
   await page.getByRole("button", { name: "Send for delivery" }).click();
   await expect(page.getByRole("dialog", { name: "Assign delivery person" })).toBeVisible();

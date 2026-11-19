@@ -51,11 +51,10 @@ interface WebOrderItem {
 
 export class WebOrderService {
   private readonly validStatusTransitions: Record<string, string[]> = {
-    PENDING: ["CONFIRMED", "CANCELLED"],
-    PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
-    CONFIRMED: ["PICKING", "CANCELLED"],
-    PICKING: ["PACKED", "CANCELLED"],
-    PACKED: ["OUT_FOR_DELIVERY", "CANCELLED"],
+    RECEIVED: ["CONFIRMED", "CANCELLED", "FAILED"],
+    CONFIRMED: ["PROCESSING", "CANCELLED"],
+    PROCESSING: ["READY", "CANCELLED", "FAILED"],
+    READY: ["OUT_FOR_DELIVERY", "CANCELLED", "FAILED"],
     OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED"],
     // Returns and refunds are deliberately unavailable for the COD pilot.
     // Historical rows remain readable, but no service transition can create
@@ -126,7 +125,7 @@ export class WebOrderService {
         shipping_name, shipping_phone, shipping_address, shipping_city,
         shipping_state, shipping_postal_code, shipping_country,
         delivery_type, delivery_date, delivery_time_slot, notes, metadata
-      ) VALUES ($1, $2, $3, NOW(), 'PENDING_PAYMENT', $4, $5, $6, $7, $8, $9, 'PENDING', $10,
+      ) VALUES ($1, $2, $3, NOW(), 'RECEIVED', $4, $5, $6, $7, $8, $9, 'PENDING', $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *`,
       [
@@ -548,7 +547,7 @@ export class WebOrderService {
 
       stage = "update-reservations";
       if (
-        ["CONFIRMED", "PICKING", "PACKED", "OUT_FOR_DELIVERY"].includes(status)
+        ["CONFIRMED", "PROCESSING", "READY", "OUT_FOR_DELIVERY"].includes(status)
       ) {
         await client.query(
           `UPDATE stock_reservations

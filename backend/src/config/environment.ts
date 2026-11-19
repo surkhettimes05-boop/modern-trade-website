@@ -115,6 +115,8 @@ export function validateProductionEnvironment(
     "COOKIE_SECRET",
     "ENCRYPTION_KEY",
     "SIGNATURE_SECRET",
+    "MEMBER_PRICING_SERVICE_TOKEN",
+    "MEMBER_PRICING_QUOTE_SECRET",
     "PAYMENT_ENCRYPTION_KEY",
     "OTP_HASH_SECRET",
     "PROXY_AUTH_SECRET",
@@ -199,6 +201,8 @@ export function validateProductionEnvironment(
     "OTP_HASH_SECRET",
     "PROXY_AUTH_SECRET",
     "PAYMENT_ENCRYPTION_KEY",
+    "MEMBER_PRICING_SERVICE_TOKEN",
+    "MEMBER_PRICING_QUOTE_SECRET",
   ] as const;
   const normalizedSecrets = secretNames.map((name) => env[name]!.trim());
   if (new Set(normalizedSecrets).size !== normalizedSecrets.length) {
@@ -265,6 +269,8 @@ export function validateProductionEnvironment(
     Buffer.byteLength(env.COOKIE_SECRET!, "utf8") < 32 ||
     Buffer.byteLength(env.ENCRYPTION_KEY!, "utf8") < 32 ||
     Buffer.byteLength(env.SIGNATURE_SECRET!, "utf8") < 32 ||
+    Buffer.byteLength(env.MEMBER_PRICING_SERVICE_TOKEN!, "utf8") < 32 ||
+    Buffer.byteLength(env.MEMBER_PRICING_QUOTE_SECRET!, "utf8") < 32 ||
     Buffer.byteLength(env.OTP_HASH_SECRET!, "utf8") < 32
   ) {
     throw new Error(

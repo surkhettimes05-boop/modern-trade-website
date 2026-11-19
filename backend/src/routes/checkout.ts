@@ -1,4 +1,4 @@
-import { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   authenticateCustomer,
@@ -12,6 +12,7 @@ import {
 import { DeliveryZoneService } from "../services/deliveryZoneService.js";
 import { AddressService } from "../services/addressService.js";
 import { CartValidationService } from "../services/cartValidationService.js";
+import { MemberPricingQuoteError } from "../services/memberPricingQuoteService.js";
 
 const checkout = new CheckoutService();
 const deliveryZones = new DeliveryZoneService();
@@ -40,7 +41,7 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
       customerId(request),
       idempotencyKey,
     );
-    return reply.send(order ? { status: "CONFIRMED", order } : { status: "NOT_FOUND" });
+    return reply.send(order ? { status: "RECEIVED", order } : { status: "NOT_FOUND" });
   });
   fastify.get("/customer/orders", async (request) => {
     const { limit, offset } = z
@@ -238,7 +239,8 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     return reply.status(quote.serviceable ? 200 : 400).send(quote);
   });
 
-  fastify.post("/checkout/cod", async (request, reply) => {
+  const createCodCheckout = (channel: "WEB" | "APP") =>
+    async (request: FastifyRequest, reply: FastifyReply) => {
     const body = CodCheckoutBodySchema.parse(request.body);
     try {
       return reply.status(201).send(
@@ -250,6 +252,8 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
             body.delivery_type === "DELIVERY" ? body.address_id : undefined,
           cartId: body.cart_id,
           idempotencyKey: body.idempotency_key,
+          signedQuoteToken: body.signed_quote_token,
+          channel,
           deliveryType: body.delivery_type,
           shippingName: body.shipping_name,
           shippingPhone: body.shipping_phone,
@@ -276,6 +280,12 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         }),
       );
     } catch (error) {
+      if (error instanceof MemberPricingQuoteError) {
+        return reply.status(error.statusCode).send({
+          error: error.message,
+          code: error.code,
+        });
+      }
       const message =
         error instanceof Error ? error.message : "Checkout failed";
       if (message === "IDEMPOTENCY_CONFLICT") {
@@ -297,5 +307,8 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
         .status(clientError ? 409 : 500)
         .send({ error: clientError ? message : "Checkout failed" });
     }
-  });
+  };
+
+  fastify.post("/checkout/cod", createCodCheckout("WEB"));
+  fastify.post("/app/checkout/cod", createCodCheckout("APP"));
 }

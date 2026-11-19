@@ -5,6 +5,12 @@ import { LedgerService } from "./ledgerService.js";
 import { EarnLotsService } from "./earnLotsService.js";
 import { normalizePhone } from "../utils/phoneNormalization.js";
 import { MARKET } from "../config/market.js";
+import {
+  calculatePricedLine,
+  centsMoney,
+  moneyCents,
+  resolveMemberPricing,
+} from "./memberPricingService.js";
 
 const customerService = new CustomerService();
 const ruleEngineService = new RuleEngineService();
@@ -216,48 +222,61 @@ export class POSService {
           sale_status: existing.rows[0].sale_status,
         };
       }
-      const priced = [];
-      let total = 0;
       for (const item of input.items) {
         if (
           !item.product_id ||
           !Number.isInteger(item.quantity) ||
           item.quantity < 1 ||
           item.quantity > 999
-        )
+        ) {
           throw new Error("Invalid sale quantity or product");
-        const result = await client.query(
-          `SELECT p.sku, p.name_en, COALESCE(
-            (SELECT price FROM product_prices WHERE product_id = p.id AND store_id = $2 AND active = TRUE
-             AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW()) ORDER BY valid_from DESC LIMIT 1),
-            (SELECT price FROM product_prices WHERE product_id = p.id AND store_id IS NULL AND active = TRUE
-             AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW()) ORDER BY valid_from DESC LIMIT 1)) AS price
-           FROM products p WHERE id = $1 AND status = 'PUBLISHED'`,
-          [item.product_id, input.store_id],
-        );
-        const product = result.rows[0];
-        const price = Number(product?.price);
-        if (!Number.isFinite(price) || price <= 0)
-          throw new Error("Product price unavailable");
-        const linePaisa = Math.round(price * 100) * item.quantity;
-        total += linePaisa;
+        }
+      }
+      const prices = await resolveMemberPricing(client, {
+        storeId: input.store_id,
+        customerId: input.customer_id,
+        channel: "POS",
+        productIds: input.items.map((item) => String(item.product_id)),
+      });
+      const pricesByProduct = new Map(
+        prices.map((price) => [price.product_id, price]),
+      );
+      const priced = [];
+      let totalPaisa = 0n;
+      let discountPaisa = 0n;
+      for (const item of input.items) {
+        if (!item.product_id) {
+          throw new Error("Invalid sale product");
+        }
+        const price = pricesByProduct.get(item.product_id);
+        if (!price) throw new Error("Product price unavailable");
+        const line = calculatePricedLine(price, item.quantity);
+        totalPaisa += moneyCents(line.lineTotal);
+        discountPaisa += moneyCents(line.discountAmount);
         priced.push({
           product_id: item.product_id,
           quantity: item.quantity,
-          price,
-          lineTotal: linePaisa / 100,
-          ...product,
+          sku: price.sku,
+          product_name: price.product_name,
+          regularPrice: line.regularUnitPrice,
+          discountAmount: line.discountAmount,
+          lineTotal: line.lineTotal,
+          promotionId: line.promotionId,
         });
       }
       const result = await client.query(
-        `INSERT INTO sales (sale_number, customer_id, store_id, total_amount, currency,
-          payment_method, sale_status, idempotency_key, created_by)
-         VALUES ($1, $2, $3, $4, 'NPR', 'CASH', 'DRAFT', $5, $6) RETURNING *`,
+        `INSERT INTO sales (
+          sale_number, customer_id, store_id, total_amount, discount_amount,
+          currency, payment_method, sale_status, idempotency_key, created_by
+         ) VALUES ($1, $2, $3, $4::numeric, $5::numeric,
+                   'NPR', 'CASH', 'DRAFT', $6, $7)
+         RETURNING *`,
         [
           input.sale_number,
           input.customer_id || null,
           input.store_id,
-          total / 100,
+          centsMoney(totalPaisa),
+          centsMoney(discountPaisa),
           input.idempotency_key,
           input.created_by,
         ],
@@ -265,16 +284,22 @@ export class POSService {
       const sale = result.rows[0];
       for (const item of priced) {
         await client.query(
-          `INSERT INTO sale_items (sale_id, product_id, sku, product_name, quantity, unit_price, line_total, discount_amount, points_eligible)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, TRUE)`,
+          `INSERT INTO sale_items (
+            sale_id, product_id, sku, product_name, quantity, unit_price,
+            line_total, discount_amount, points_eligible,
+            member_pricing_promotion_id
+           ) VALUES ($1, $2, $3, $4, $5, $6::numeric, $7::numeric,
+                     $8::numeric, TRUE, $9)`,
           [
             sale.id,
             item.product_id,
             item.sku,
-            item.name_en,
+            item.product_name,
             item.quantity,
-            item.price,
+            item.regularPrice,
             item.lineTotal,
+            item.discountAmount,
+            item.promotionId,
           ],
         );
       }
@@ -384,19 +409,76 @@ export class POSService {
    * Attach customer to sale
    */
   async attachCustomerToSale(saleId: string, customerId: string) {
+    const client = await getPool().connect();
     try {
-      const result = await query(
-        `UPDATE sales SET customer_id = $1 WHERE id = $2 AND sale_status = 'DRAFT' RETURNING *`,
-        [customerId, saleId],
+      await client.query("BEGIN");
+      const saleResult = await client.query(
+        `SELECT id, store_id
+           FROM sales
+          WHERE id = $1 AND sale_status = 'DRAFT'
+          FOR UPDATE`,
+        [saleId],
       );
-
-      if (result.rows.length === 0) {
+      if (!saleResult.rowCount) {
         throw new Error("Sale not found or not in DRAFT status");
       }
-
-      return result.rows[0];
-    } catch {
-      throw new Error("Failed to attach customer to sale");
+      const items = await client.query(
+        `SELECT id::text, product_id::text, quantity
+           FROM sale_items
+          WHERE sale_id = $1
+          ORDER BY id
+          FOR UPDATE`,
+        [saleId],
+      );
+      const prices = await resolveMemberPricing(client, {
+        storeId: String(saleResult.rows[0].store_id),
+        customerId,
+        channel: "POS",
+        productIds: items.rows.map((item) => String(item.product_id)),
+      });
+      const pricesByProduct = new Map(
+        prices.map((price) => [price.product_id, price]),
+      );
+      let totalPaisa = 0n;
+      let discountPaisa = 0n;
+      for (const item of items.rows) {
+        const price = pricesByProduct.get(String(item.product_id));
+        if (!price) throw new Error("Product price unavailable");
+        const line = calculatePricedLine(price, Number(item.quantity));
+        totalPaisa += moneyCents(line.lineTotal);
+        discountPaisa += moneyCents(line.discountAmount);
+        await client.query(
+          `UPDATE sale_items
+              SET unit_price = $2::numeric,
+                  line_total = $3::numeric,
+                  discount_amount = $4::numeric,
+                  member_pricing_promotion_id = $5
+            WHERE id = $1`,
+          [
+            item.id,
+            line.regularUnitPrice,
+            line.lineTotal,
+            line.discountAmount,
+            line.promotionId,
+          ],
+        );
+      }
+      const updated = await client.query(
+        `UPDATE sales
+            SET customer_id = $1,
+                total_amount = $2::numeric,
+                discount_amount = $3::numeric
+          WHERE id = $4
+          RETURNING *`,
+        [customerId, centsMoney(totalPaisa), centsMoney(discountPaisa), saleId],
+      );
+      await client.query("COMMIT");
+      return updated.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
   }
 

@@ -83,6 +83,12 @@ const navigation: NavItem[] = [
     ],
   },
   {
+    title: "Member pricing",
+    href: "/admin/member-pricing",
+    icon: Tags,
+    capability: "pricing.read",
+  },
+  {
     title: "Content",
     href: "/admin/content/pages",
     icon: FileText,

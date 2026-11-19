@@ -35,7 +35,7 @@ function quoteReason(reason: unknown): string {
 }
 
 export default function CheckoutPage() {
-  const { items, selectedStore, clear } = useShop();
+  const { items, selectedStore, clear, pricingQuote, pricingQuoteNeedsConfirmation, requirePricingQuoteConfirmation, confirmPricingQuote, pricingBusy, pricingError, refreshPricingQuote } = useShop();
   const router = useRouter();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,10 +45,15 @@ export default function CheckoutPage() {
   const [municipalityId, setMunicipalityId] = useState('');
   const [wardId, setWardId] = useState('');
   const [quote, setQuote] = useState<DeliveryQuote | null>(null);
-  const subtotal = useMemo(
+  const catalogSubtotal = useMemo(
     () => items.reduce((total, item) => total + item.product.price * item.qty, 0),
     [items],
   );
+  const subtotal = pricingQuote
+    ? Number(pricingQuote.finalTotal)
+    : authenticated === false
+      ? catalogSubtotal
+      : 0;
   const wards = useMemo(
     () =>
       municipalities.find(
@@ -59,10 +64,11 @@ export default function CheckoutPage() {
   const quoteKey =
     deliveryType === 'DELIVERY' &&
     authenticated &&
+    pricingQuote &&
     selectedStore &&
     municipalityId &&
     wardId
-      ? [selectedStore.id, municipalityId, wardId, subtotal].join(':')
+      ? [selectedStore.id, municipalityId, wardId, pricingQuote.quoteId, subtotal].join(':')
       : '';
   const activeQuote = quote?.key === quoteKey ? quote : null;
 
@@ -157,6 +163,34 @@ export default function CheckoutPage() {
 
     const form = new FormData(event.currentTarget);
     const csrf = customerCsrf();
+    const previousPriceQuote = pricingQuote;
+    const quoteExpired = !previousPriceQuote || Date.parse(previousPriceQuote.expiresAt) <= Date.now();
+    let acceptedPriceQuote: typeof previousPriceQuote;
+    try {
+      acceptedPriceQuote = await refreshPricingQuote();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not refresh authoritative pricing.');
+      return;
+    }
+    if (!acceptedPriceQuote || Date.parse(acceptedPriceQuote.expiresAt) <= Date.now()) {
+      setError('The authoritative price quote expired. Please review the updated cart and try again.');
+      return;
+    }
+    const quoteChanged = previousPriceQuote && JSON.stringify({
+      subtotal: previousPriceQuote.subtotal,
+      discountTotal: previousPriceQuote.discountTotal,
+      finalTotal: previousPriceQuote.finalTotal,
+      items: previousPriceQuote.items.map(({ sku, quantity, regularUnitPrice, appliedUnitPrice, lineDiscount, lineTotal }) => [sku, quantity, regularUnitPrice, appliedUnitPrice, lineDiscount, lineTotal]),
+    }) !== JSON.stringify({
+      subtotal: acceptedPriceQuote.subtotal,
+      discountTotal: acceptedPriceQuote.discountTotal,
+      finalTotal: acceptedPriceQuote.finalTotal,
+      items: acceptedPriceQuote.items.map(({ sku, quantity, regularUnitPrice, appliedUnitPrice, lineDiscount, lineTotal }) => [sku, quantity, regularUnitPrice, appliedUnitPrice, lineDiscount, lineTotal]),
+    });
+    if ((pricingQuoteNeedsConfirmation || quoteExpired || quoteChanged) && !window.confirm(
+      `The authoritative price quote ${pricingQuoteNeedsConfirmation || quoteExpired ? 'expired or was refreshed' : 'changed'}. The updated payable amount is ${formatPrice(Number(acceptedPriceQuote.finalTotal))}. Continue?`,
+    )) return;
+    if (pricingQuoteNeedsConfirmation || quoteExpired || quoteChanged) confirmPricingQuote();
     const fingerprint = JSON.stringify({
       store: selectedStore.id,
       items: items.map((item) => [item.product.id, item.qty]).sort(),
@@ -217,7 +251,7 @@ export default function CheckoutPage() {
         deliveryAddressId = savedAddress.id;
       }
 
-      const payload =
+      let payload =
         deliveryType === 'DELIVERY'
           ? {
               cart_id: cart.id,
@@ -232,6 +266,7 @@ export default function CheckoutPage() {
               shipping_ward_id: Number(wardId),
               shipping_postal_code: form.get('postal_code'),
               shipping_country: MARKET.countryCode,
+              signed_quote_token: acceptedPriceQuote.signedQuoteToken,
             }
           : {
               cart_id: cart.id,
@@ -240,15 +275,39 @@ export default function CheckoutPage() {
               delivery_type: 'PICKUP',
               shipping_name: form.get('name'),
               shipping_phone: form.get('phone'),
+              signed_quote_token: acceptedPriceQuote.signedQuoteToken,
             };
 
-      const response = await resilientFetch('/api/checkout/cod', {
+      let response = await resilientFetch('/api/checkout/cod', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
         body: JSON.stringify(payload),
       });
-      const result = await response.json();
+      let result = await response.json();
+      if (
+        !response.ok &&
+        response.status === 409 &&
+        result &&
+        typeof result === 'object' &&
+        ['PRICING_CHANGED', 'QUOTE_EXPIRED'].includes((result as { code?: string }).code || '')
+      ) {
+        const refreshedQuote = await refreshPricingQuote();
+        requirePricingQuoteConfirmation();
+        const accepted = window.confirm(
+          `The price changed before order creation. The updated payable amount is ${formatPrice(Number(refreshedQuote.finalTotal))}. Continue?`,
+        );
+        if (!accepted) throw new Error('Review the updated price before placing your order.');
+        confirmPricingQuote();
+        payload = { ...payload, signed_quote_token: refreshedQuote.signedQuoteToken };
+        response = await resilientFetch('/api/checkout/cod', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+          body: JSON.stringify(payload),
+        });
+        result = await response.json();
+      }
       if (!response.ok) throw new Error(apiErrorMessage(result, 'Checkout failed'));
 
       sessionStorage.removeItem(idempotencyStorageKey);
@@ -388,15 +447,24 @@ export default function CheckoutPage() {
         )}
 
         <div className="rounded-xl bg-slate-50 p-4 text-sm">
-          <p className="flex justify-between"><span>Products</span><strong>{formatPrice(subtotal)}</strong></p>
+          {pricingQuote ? <>
+            <p className="mb-2 font-semibold">Authoritative pricing · {pricingQuote.membershipTier === 'FOUNDING_1000' ? 'Founding 1,000' : pricingQuote.membershipStatus === 'ACTIVE' ? 'Registered member' : 'Regular pricing'}</p>
+            {pricingQuote.items.map((line) => <p key={line.sku} className="mb-2 flex justify-between gap-4"><span>{line.sku} × {line.quantity}<small className="block text-slate-500">Regular {formatPrice(Number(line.regularUnitPrice))} · Applied {formatPrice(Number(line.appliedUnitPrice))}</small></span><strong>{formatPrice(Number(line.lineTotal))}</strong></p>)}
+            <p className="flex justify-between"><span>Regular subtotal</span><strong>{formatPrice(Number(pricingQuote.subtotal))}</strong></p>
+            <p className="mt-2 flex justify-between"><span>Member savings</span><strong>-{formatPrice(Number(pricingQuote.discountTotal))}</strong></p>
+          </> : <p className="flex justify-between"><span>Products</span><strong>{pricingBusy ? 'Updating price…' : 'Price unavailable'}</strong></p>}
           <p className="mt-2 flex justify-between"><span>Delivery</span><strong>{deliveryType === 'PICKUP' ? formatPrice(0) : activeQuote?.serviceable ? formatPrice(Number(activeQuote.delivery_fee || 0)) : 'Calculated by area'}</strong></p>
-          <p className="mt-3 flex justify-between border-t border-slate-200 pt-3 text-base"><span>Total</span><strong>{formatPrice(subtotal + (deliveryType === 'DELIVERY' && activeQuote?.serviceable ? Number(activeQuote.delivery_fee || 0) : 0))}</strong></p>
+          <p className="mt-3 flex justify-between border-t border-slate-200 pt-3 text-base"><span>Total</span><strong>{pricingQuote ? formatPrice(subtotal + (deliveryType === 'DELIVERY' && activeQuote?.serviceable ? Number(activeQuote.delivery_fee || 0) : 0)) : 'Price unavailable'}</strong></p>
+          {pricingBusy && <p role="status" className="mt-2 text-slate-600">Refreshing authoritative prices…</p>}
+          {pricingError && <p role="alert" className="mt-2 text-red-700">{pricingError}</p>}
         </div>
 
         {error ? <p role="alert" className="rounded bg-red-50 p-3 text-red-700">{error}</p> : null}
         <button
           disabled={
             busy ||
+            pricingBusy ||
+            !pricingQuote ||
             authenticated !== true ||
             !selectedStore ||
             selectedStore.is_temporarily_closed ||

@@ -7,6 +7,155 @@ double _number(Object? value) => value is num
 String _text(Object? value, [String fallback = '']) =>
     value?.toString() ?? fallback;
 
+int _moneyMinor(Object? value) {
+  final match = RegExp(
+    r'^(\d+)(?:\.(\d{1,2}))?$',
+  ).firstMatch(value?.toString() ?? '');
+  if (match == null) return 0;
+  final whole = int.parse(match.group(1)!);
+  final fraction = (match.group(2) ?? '').padRight(2, '0');
+  return whole * 100 + (fraction.isEmpty ? 0 : int.parse(fraction));
+}
+
+class Membership {
+  const Membership({
+    required this.id,
+    required this.number,
+    required this.tier,
+    required this.status,
+    this.foundingNumber,
+  });
+  final String id;
+  final int number;
+  final String tier;
+  final String status;
+  final int? foundingNumber;
+  bool get isActive => status == 'ACTIVE';
+
+  factory Membership.fromJson(Map<String, dynamic> json) => Membership(
+        id: _text(json['id']),
+        number: int.tryParse(_text(json['membership_number'], '0')) ?? 0,
+        tier: _text(json['tier_key']),
+        status: _text(json['status']),
+        foundingNumber: json['founding_number'] == null
+            ? null
+            : int.tryParse(_text(json['founding_number'])),
+      );
+}
+
+class MemberDisplayPrice {
+  const MemberDisplayPrice({
+    required this.sku,
+    required this.regularUnitMinor,
+    required this.appliedUnitMinor,
+    required this.savingPerUnitMinor,
+    this.promotionName,
+  });
+  final String sku;
+  final int regularUnitMinor;
+  final int appliedUnitMinor;
+  final int savingPerUnitMinor;
+  final String? promotionName;
+
+  factory MemberDisplayPrice.fromJson(Map<String, dynamic> json) {
+    final promotion = json['promotionSnapshot'];
+    return MemberDisplayPrice(
+      sku: _text(json['sku']),
+      regularUnitMinor: _moneyMinor(json['regularUnitPrice']),
+      appliedUnitMinor: _moneyMinor(json['appliedUnitPrice']),
+      savingPerUnitMinor: _moneyMinor(json['savingPerUnit']),
+      promotionName: promotion is Map ? promotion['name']?.toString() : null,
+    );
+  }
+}
+
+class MemberPricingQuoteItem extends MemberDisplayPrice {
+  const MemberPricingQuoteItem({
+    required super.sku,
+    required super.regularUnitMinor,
+    required super.appliedUnitMinor,
+    required super.savingPerUnitMinor,
+    required this.quantity,
+    required this.lineDiscountMinor,
+    required this.lineTotalMinor,
+    super.promotionName,
+  });
+  final int quantity;
+  final int lineDiscountMinor;
+  final int lineTotalMinor;
+
+  factory MemberPricingQuoteItem.fromJson(Map<String, dynamic> json) {
+    final price = MemberDisplayPrice.fromJson(json);
+    return MemberPricingQuoteItem(
+      sku: price.sku,
+      regularUnitMinor: price.regularUnitMinor,
+      appliedUnitMinor: price.appliedUnitMinor,
+      savingPerUnitMinor: price.savingPerUnitMinor,
+      quantity: int.tryParse(_text(json['quantity'], '0')) ?? 0,
+      lineDiscountMinor: _moneyMinor(json['lineDiscount']),
+      lineTotalMinor: _moneyMinor(json['lineTotal']),
+      promotionName: price.promotionName,
+    );
+  }
+}
+
+class MemberPricingQuote {
+  const MemberPricingQuote({
+    required this.id,
+    required this.storeReference,
+    required this.customerReference,
+    required this.items,
+    required this.regularSubtotalMinor,
+    required this.discountTotalMinor,
+    required this.finalTotalMinor,
+    required this.expiresAt,
+    required this.signedQuoteToken,
+    required this.membershipStatus,
+    this.membershipNumber,
+    this.membershipTier,
+  });
+  final String id;
+  final String storeReference;
+  final String customerReference;
+  final List<MemberPricingQuoteItem> items;
+  final int regularSubtotalMinor;
+  final int discountTotalMinor;
+  final int finalTotalMinor;
+  final DateTime expiresAt;
+  final String signedQuoteToken;
+  final String membershipStatus;
+  final int? membershipNumber;
+  final String? membershipTier;
+  bool get isExpired => !expiresAt.isAfter(DateTime.now());
+
+  factory MemberPricingQuote.fromJson(
+    Map<String, dynamic> json,
+  ) =>
+      MemberPricingQuote(
+        id: _text(json['quoteId']),
+        storeReference: _text(json['storeReference']),
+        customerReference: _text(json['customerReference']),
+        items: (json['items'] is List ? json['items'] as List : const [])
+            .whereType<Map>()
+            .map(
+              (item) => MemberPricingQuoteItem.fromJson(
+                  Map<String, dynamic>.from(item)),
+            )
+            .toList(growable: false),
+        regularSubtotalMinor: _moneyMinor(json['subtotal']),
+        discountTotalMinor: _moneyMinor(json['discountTotal']),
+        finalTotalMinor: _moneyMinor(json['finalTotal']),
+        expiresAt: DateTime.tryParse(_text(json['expiresAt'])) ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        signedQuoteToken: _text(json['signedQuoteToken']),
+        membershipStatus: _text(json['membershipStatus']),
+        membershipNumber: json['membershipNumber'] == null
+            ? null
+            : int.tryParse(_text(json['membershipNumber'])),
+        membershipTier: json['membershipTier']?.toString(),
+      );
+}
+
 class Product {
   const Product({
     required this.id,
@@ -190,9 +339,11 @@ class CustomerOrder {
         orderNumber: json['order_number']?.toString(),
         status: _text(json['status'], 'PENDING'),
         total: _number(
-            json['total_amount'] ?? json['grand_total'] ?? json['total']),
-        orderDate:
-            DateTime.tryParse(_text(json['order_date'] ?? json['created_at'])),
+          json['total_amount'] ?? json['grand_total'] ?? json['total'],
+        ),
+        orderDate: DateTime.tryParse(
+          _text(json['order_date'] ?? json['created_at']),
+        ),
         deliveryType: json['delivery_type']?.toString(),
       );
 }
