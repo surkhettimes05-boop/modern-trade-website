@@ -220,7 +220,8 @@ test("complete Pasalho COD order flow reconciles inventory and payment", async (
     items: Array<{ product_id: string; quantity: number }>;
   };
 
-  expect(order.status).toBe("PENDING_PAYMENT");
+  expect(order.status).toBe("RECEIVED");
+  expect(order.payment_status).toBe("PENDING");
   expect(order.items.length).toBeGreaterThan(0);
   const firstItem = order.items[0];
 
