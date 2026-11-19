@@ -10,7 +10,9 @@ import { addressRoutes } from "../../routes/addresses.js";
 import { OTPService } from "../otpService.js";
 import { errorHandler } from "../../middleware/errorHandler.js";
 import { publicRoutes } from "../../routes/public.js";
+import { creatorAttributionRoutes } from "../../routes/creatorAttribution.js";
 import { createMemberPricingQuote } from "../memberPricingQuoteService.js";
+import { WebOrderService } from "../webOrderService.js";
 
 // Real PostgreSQL, services, routes, transactions and migrations. Only SMS is
 // replaced with the existing test transport. Executed by test:ci.
@@ -168,6 +170,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
   await app.register(checkoutRoutes, { prefix: "/api" });
   await app.register(addressRoutes, { prefix: "/api" });
   await app.register(publicRoutes, { prefix: "/api/public" });
+  await app.register(creatorAttributionRoutes, { prefix: "/api" });
   const original = OTPService.prototype.createOTP;
   let code = "";
   const capture = jest
@@ -178,6 +181,27 @@ test("customer → address → serviceability → assigned cart → COD recovery
     });
   try {
     const phone = "9812345678";
+    const slug = `qa-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const creator = await query(
+      `INSERT INTO creators (creator_code, display_name, contact_phone, referral_slug, created_by)
+       VALUES ($1, 'CI Creator', '9800000012', $2, 'integration-test') RETURNING id`,
+      [`PAS-QA-${slug}`, slug],
+    );
+    const referral = await app.inject({
+      method: "GET",
+      url: `/api/public/creators/${slug}/visit`,
+    });
+    expect(referral.statusCode).toBe(302);
+    const referralCookie = referral.cookies.find(
+      (item) => item.name === "pasalho_creator_referral",
+    );
+    expect(referralCookie?.value).toMatch(/^[a-f0-9]{64}$/);
+    const visit = await query(
+      "SELECT id, creator_id FROM creator_referral_visits WHERE creator_id = $1",
+      [creator.rows[0].id],
+    );
+    expect(visit.rows).toHaveLength(1);
+
     await query("DELETE FROM customer_otp WHERE phone_normalized = $1", [
       phone,
     ]);
@@ -191,6 +215,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/otp/verify",
+      headers: { cookie: `pasalho_creator_referral=${referralCookie!.value}` },
       payload: { phone, otp_code: code, purpose: "LOGIN" },
     });
     expect(login.statusCode).toBe(200);
@@ -206,6 +231,16 @@ test("customer → address → serviceability → assigned cart → COD recovery
       "SELECT id FROM customers WHERE phone_normalized = $1",
       [phone],
     );
+    const attribution = await query(
+      `SELECT a.creator_id, a.referral_visit_id
+         FROM creator_customer_attributions a WHERE a.customer_id = $1`,
+      [customer.rows[0].id],
+    );
+    expect(attribution.rows).toHaveLength(1);
+    expect(attribution.rows[0]).toMatchObject({
+      creator_id: creator.rows[0].id,
+      referral_visit_id: visit.rows[0].id,
+    });
     const birendranagar = await query(
       `SELECT m.id AS municipality_id, w.id AS ward_id
          FROM nepal_municipalities m JOIN nepal_wards w ON w.municipality_id = m.id
@@ -692,6 +727,62 @@ test("customer → address → serviceability → assigned cart → COD recovery
       url: `/api/customer/orders/${orderId}`,
     });
     expect(unauthenticatedDetail.statusCode).toBe(401);
+
+    // Creator reward is created exactly once only after actual COD collection
+    // and delivery, not on checkout placement or a duplicated checkout retry.
+    const noPrematureReward = await query(
+      "SELECT id FROM creator_purchase_events WHERE source_system = 'COMMERCE' AND source_transaction_id = $1",
+      [orderId],
+    );
+    expect(noPrematureReward.rowCount).toBe(0);
+    await query(
+      `INSERT INTO order_fulfillment (order_id, fulfillment_type, status, assigned_to)
+       VALUES ($1, 'DELIVERY', 'ASSIGNED', 'ci-delivery')`,
+      [orderId],
+    );
+    const fulfilment = new WebOrderService();
+    const actor = randomUUID();
+    for (const status of ["CONFIRMED", "PROCESSING", "READY", "OUT_FOR_DELIVERY"]) {
+      await fulfilment.updateWebOrderStatus(orderId, status, actor);
+    }
+    await expect(
+      fulfilment.updateWebOrderStatus(orderId, "DELIVERED", actor),
+    ).rejects.toThrow("COD cash receipt must be confirmed");
+    await fulfilment.updateWebOrderStatus(orderId, "DELIVERED", actor, undefined, true);
+    const purchase = await query(
+      `SELECT creator_id, customer_id, source_system, event_status,
+              eligible_spend_npr::text, reward_rate_percent::text,
+              reward_amount_npr::text
+         FROM creator_purchase_events
+        WHERE source_system = 'COMMERCE' AND source_transaction_id = $1`,
+      [orderId],
+    );
+    expect(purchase.rows).toHaveLength(1);
+    expect(purchase.rows[0]).toMatchObject({
+      creator_id: creator.rows[0].id,
+      customer_id: customer.rows[0].id,
+      source_system: "COMMERCE",
+      event_status: "PENDING",
+      reward_rate_percent: "1.00",
+    });
+    const expectedReward = Math.round(Number(purchase.rows[0].eligible_spend_npr) * 0.01 * 100) / 100;
+    expect(Number(purchase.rows[0].reward_amount_npr)).toBe(expectedReward);
+    const ledger = await query(
+      `SELECT COUNT(*)::int AS entries, COALESCE(SUM(amount_npr), 0)::text AS earned
+         FROM creator_reward_ledger WHERE purchase_event_id = (
+           SELECT id FROM creator_purchase_events
+            WHERE source_system = 'COMMERCE' AND source_transaction_id = $1
+         )`,
+      [orderId],
+    );
+    expect(ledger.rows[0]).toMatchObject({ entries: 1 });
+    expect(Number(ledger.rows[0].earned)).toBe(expectedReward);
+    const cash = await query(
+      "SELECT amount::text FROM cod_cash_collections WHERE order_id = $1",
+      [orderId],
+    );
+    expect(cash.rows).toHaveLength(1);
+    expect(Number(cash.rows[0].amount)).toBe(Number(order.rows[0].total_amount));
   } finally {
     capture.mockRestore();
     await app.close();
