@@ -117,7 +117,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     migration_037_count: "1",
     fingerprint_nullable: "YES",
   });
-  expect(Number(migrationState.rows[0].migration_count)).toBe(53); // 019 is intentionally absent.
+  expect(Number(migrationState.rows[0].migration_count)).toBe(54); // 019 is intentionally absent; preserve deployed payment migration.
   const migrationIds = await query(
     "SELECT migration_id FROM schema_migrations ORDER BY migration_id",
   );
@@ -137,6 +137,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     ).toBe(true);
   }
   for (const migration of [
+    "042_payment_intent_runtime_contract",
     "042_membership_foundation",
     "043_membership_integrity",
     "044_member_pricing_engine",
