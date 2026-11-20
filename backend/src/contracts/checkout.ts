@@ -5,6 +5,7 @@ const commonCheckoutFields = {
   cart_id: z.string().uuid(),
   store_id: z.string().uuid(),
   idempotency_key: z.string().min(8).max(100),
+  signed_quote_token: z.string().min(20).max(32_768),
   shipping_name: z.string().trim().min(1).max(200),
   shipping_phone: NepalPhoneSchema,
   notes: z.string().trim().max(1_000).optional(),

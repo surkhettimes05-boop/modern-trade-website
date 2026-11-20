@@ -6,6 +6,7 @@ import 'addresses_screen.dart';
 import 'info_screen.dart';
 import 'login_screen.dart';
 import 'loyalty_screen.dart';
+import 'membership_screen.dart';
 import 'orders_screen.dart';
 
 class AccountScreen extends StatelessWidget {
@@ -106,6 +107,16 @@ class AccountScreen extends StatelessWidget {
           child: Column(
             children: [
               _AccountTile(
+                icon: Icons.card_membership_outlined,
+                title: 'Pasalho membership',
+                subtitle: 'Free membership and member pricing',
+                onTap: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MembershipScreen()),
+                ),
+              ),
+              const Divider(height: 1, indent: 58),
+              _AccountTile(
                 icon: Icons.receipt_long_outlined,
                 title: 'My orders',
                 subtitle: 'Track and manage your purchases',
@@ -113,6 +124,22 @@ class AccountScreen extends StatelessWidget {
                   context,
                   MaterialPageRoute(builder: (_) => const OrdersScreen()),
                 ),
+              ),
+              const Divider(height: 1, indent: 58),
+              _AccountTile(
+                icon: Icons.card_membership_outlined,
+                title: 'Pasalho membership',
+                subtitle: 'Membership card and member pricing',
+                onTap: () async {
+                  await state.reloadMemberPricing();
+                  if (context.mounted) {
+                    Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const MembershipScreen()),
+                    );
+                  }
+                },
               ),
               const Divider(height: 1, indent: 58),
               _AccountTile(

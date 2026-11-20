@@ -428,7 +428,7 @@ export async function assertProtectedResourceScope(
   // client-controlled value the source of truth.
   const path = request.url.split("?", 1)[0].replace(/^\/api/, "");
   if (
-    /^\/admin\/(?:dashboard|context\/stores|notifications(?:\/read)?|search|products(?:\/[^/]+)?|categories(?:\/[^/]+)?|stores(?:\/[^/]+)?|inventory|inventory-adjustments|customers(?:\/[^/]+(?:\/orders)?)?|roles(?:\/[^/]+)?|audit(?:\/[^/]+)?|pages(?:\/[^/]+)?|orders(?:\/[^/]+(?:\/items)?)?|batches|suppliers(?:\/[^/]+)?|purchase-orders(?:\/[^/]+(?:\/items)?)?|receiving(?:\/[^/]+(?:\/items)?)?|staff(?:\/[^/]+)?)$/.test(
+    /^\/admin\/(?:dashboard|context\/stores|notifications(?:\/read)?|search|products(?:\/[^/]+)?|categories(?:\/[^/]+)?|stores(?:\/[^/]+)?|inventory|inventory-adjustments|customers(?:\/[^/]+(?:\/orders)?)?|roles(?:\/[^/]+)?|audit(?:\/[^/]+)?|pages(?:\/[^/]+)?|orders(?:\/[^/]+(?:\/items)?)?|batches|suppliers(?:\/[^/]+)?|purchase-orders(?:\/[^/]+(?:\/items)?)?|receiving(?:\/[^/]+(?:\/items)?)?|staff(?:\/[^/]+)?|member-pricing\/promotions(?:\/[^/]+(?:\/(?:preview|performance|activate|pause|archive))?)?)$/.test(
       path,
     )
   ) {

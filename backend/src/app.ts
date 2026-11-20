@@ -24,7 +24,12 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { validateProductionEnvironment } from "./config/environment.js";
 import { redisService } from "./services/redisService.js";
 import { loyaltyMvpRoutes } from "./routes/loyaltyMvp.js";
+import { membershipRoutes } from "./routes/membership.js";
+import { memberPricingServiceRoutes } from "./routes/memberPricingService.js";
+import { customerMemberPricingRoutes } from "./routes/customerMemberPricing.js";
 import { paymentWebhookRoutes } from "./routes/payments.js";
+import { creatorAttributionRoutes } from "./routes/creatorAttribution.js";
+import { creatorPortalRoutes } from "./routes/creatorPortal.js";
 import { deferredFeatureEnabled } from "./config/releaseFeatures.js";
 import { verifyDatabaseSecurityPosture } from "./database/databaseSecurity.js";
 import { getResilienceConfig } from "./config/resilience.js";
@@ -194,6 +199,11 @@ export async function buildApp(
   }
 
   await fastify.register(authRoutes, { prefix: "/api/auth" });
+  await fastify.register(membershipRoutes, { prefix: "/api" });
+  await fastify.register(customerMemberPricingRoutes, { prefix: "/api" });
+  await fastify.register(memberPricingServiceRoutes, {
+    prefix: "/api/internal/member-pricing",
+  });
   await fastify.register(foundingRoutes, { prefix: "/api" });
   await fastify.register(shoppingCartRoutes, { prefix: "/api" });
   await fastify.register(checkoutRoutes, { prefix: "/api" });
@@ -201,6 +211,8 @@ export async function buildApp(
   await fastify.register(customerFavoritesRoutes, { prefix: "/api" });
   await fastify.register(customerOrderNotificationRoutes, { prefix: "/api" });
   await fastify.register(loyaltyMvpRoutes, { prefix: "/api" });
+  await fastify.register(creatorAttributionRoutes, { prefix: "/api" });
+  await fastify.register(creatorPortalRoutes, { prefix: "/api/creator-portal" });
 
   if (process.env.ENABLE_ADMIN_API === "true") {
     await fastify.register(operationsAuthRoutes, {

@@ -76,25 +76,30 @@ class StoreSelector extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Choose your store',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        )),
+                Text(
+                  'Choose your store',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
                 const SizedBox(height: 10),
                 ...state.stores.map(
                   (store) => ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(store.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    title: Text(
+                      store.name,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     subtitle: Text(
-                        [
-                          if (store.temporarilyClosed) 'TEMPORARILY CLOSED',
-                          if (store.address != null) store.address!,
-                        ].join(' · '),
-                        style: TextStyle(
-                            color: store.temporarilyClosed
-                                ? AppColors.danger
-                                : null)),
+                      [
+                        if (store.temporarilyClosed) 'TEMPORARILY CLOSED',
+                        if (store.address != null) store.address!,
+                      ].join(' · '),
+                      style: TextStyle(
+                        color:
+                            store.temporarilyClosed ? AppColors.danger : null,
+                      ),
+                    ),
                     leading: Icon(
                       state.selectedStore?.id == store.id
                           ? Icons.check_circle
@@ -128,8 +133,10 @@ class StoreSelector extends StatelessWidget {
               child: Text(
                 state.selectedStore?.name ?? 'Choose store',
                 overflow: TextOverflow.ellipsis,
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const Icon(Icons.expand_more, size: 18),
@@ -192,6 +199,11 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final memberPrice =
+        product.sku == null ? null : state.memberPrices[product.sku];
+    final memberEligible = state.membership?.isActive == true &&
+        memberPrice != null &&
+        memberPrice.appliedUnitMinor < memberPrice.regularUnitMinor;
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.zero,
@@ -266,12 +278,34 @@ class ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 7),
                   Text(
-                    formatNpr(product.price),
+                    memberEligible
+                        ? formatNprMinor(memberPrice.appliedUnitMinor)
+                        : formatNpr(product.price),
                     style: const TextStyle(
                       color: AppColors.brand,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
+                  if (memberEligible) ...[
+                    Text(
+                      'Regular ${formatNprMinor(memberPrice.regularUnitMinor)}',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 11,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                    Text(
+                      state.membership!.tier == 'FOUNDING_1000'
+                          ? 'Founding 1,000 member price'
+                          : 'Registered member price',
+                      style: const TextStyle(
+                        color: AppColors.brand,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
@@ -284,8 +318,9 @@ class ProductCard extends StatelessWidget {
                                 ..hideCurrentSnackBar()
                                 ..showSnackBar(
                                   SnackBar(
-                                    content:
-                                        Text('${product.name} added to cart'),
+                                    content: Text(
+                                      '${product.name} added to cart',
+                                    ),
                                     duration: const Duration(seconds: 1),
                                   ),
                                 );
@@ -320,8 +355,11 @@ class ProductImage extends StatelessWidget {
       return const ColoredBox(
         color: AppColors.cream,
         child: Center(
-          child: Icon(Icons.inventory_2_outlined,
-              color: AppColors.muted, size: 42),
+          child: Icon(
+            Icons.inventory_2_outlined,
+            color: AppColors.muted,
+            size: 42,
+          ),
         ),
       );
     }
@@ -335,8 +373,11 @@ class ProductImage extends StatelessWidget {
       errorBuilder: (_, __, ___) => const ColoredBox(
         color: AppColors.cream,
         child: Center(
-          child: Icon(Icons.inventory_2_outlined,
-              color: AppColors.muted, size: 42),
+          child: Icon(
+            Icons.inventory_2_outlined,
+            color: AppColors.muted,
+            size: 42,
+          ),
         ),
       ),
       loadingBuilder: (context, child, progress) => progress == null
@@ -374,10 +415,9 @@ class EmptyState extends StatelessWidget {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w900),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 8),
               Text(

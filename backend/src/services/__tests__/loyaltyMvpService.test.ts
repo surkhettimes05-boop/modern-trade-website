@@ -130,4 +130,37 @@ describe("Nepal loyalty MVP lifecycle", () => {
       summary.history.map((entry: any) => entry.source_type).sort(),
     ).toEqual(["CANCELLED", "COD_ORDER"]);
   });
+
+  it("reverses COD loyalty after the full return-request and refund lifecycle", async () => {
+    await service.enroll(CUSTOMER);
+    await query(
+      `INSERT INTO web_orders(id,order_number,customer_id,store_id,status,subtotal,total_amount,currency,payment_method)
+      VALUES ($1,'LOYALTY-MVP-RETURN',$2,$3,'CONFIRMED',2099,2099,'NPR','COD')`,
+      [ORDER, CUSTOMER, STORE],
+    );
+    await query(`UPDATE web_orders SET status='DELIVERED' WHERE id=$1`, [
+      ORDER,
+    ]);
+    await query(`UPDATE web_orders SET status='RETURN_REQUESTED' WHERE id=$1`, [
+      ORDER,
+    ]);
+    await query(`UPDATE web_orders SET status='RETURNED' WHERE id=$1`, [ORDER]);
+    await query(`UPDATE web_orders SET status='REFUNDED' WHERE id=$1`, [ORDER]);
+
+    const summary: any = await service.getCustomerSummary(CUSTOMER);
+    expect(summary.account.current_points).toBe(0);
+    expect(
+      summary.history.map((entry: any) => entry.points_signed).sort(),
+    ).toEqual([-20, 20]);
+    expect(
+      summary.history.find((entry: any) => entry.entry_type === "REVERSAL"),
+    ).toMatchObject({ source_type: "REFUNDED", source_id: ORDER });
+    const reversal = await query(
+      `SELECT reversal_of_id
+         FROM loyalty_ledger
+        WHERE source_type = 'REFUNDED' AND source_id = $1`,
+      [ORDER],
+    );
+    expect(reversal.rows[0]?.reversal_of_id).toBeTruthy();
+  });
 });

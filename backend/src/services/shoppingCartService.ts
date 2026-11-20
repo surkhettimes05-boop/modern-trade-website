@@ -25,6 +25,38 @@ interface CartItem {
 }
 
 export class ShoppingCartService {
+  private async getAvailableQuantity(
+    productId: string,
+    storeId: string,
+  ): Promise<number> {
+    const result = await query(
+      `SELECT GREATEST(
+                0,
+                COALESCE((
+                  SELECT SUM(quantity)::int
+                    FROM batch_inventory
+                   WHERE product_id = $1 AND store_id = $2
+                ), 0)
+                -
+                COALESCE((
+                  SELECT SUM(quantity)::int
+                    FROM stock_reservations
+                   WHERE product_id = $1 AND store_id = $2
+                     AND status = 'ACTIVE'
+                ), 0)
+              )::int AS available`,
+      [productId, storeId],
+    );
+    if (
+      !result ||
+      !Array.isArray(result.rows) ||
+      result.rows[0]?.available === undefined
+    ) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    return Number(result.rows[0].available);
+  }
+
   // Replace a checkout snapshot atomically; retries never increment quantities.
   async replaceItems(
     cartId: string,
@@ -55,6 +87,13 @@ export class ShoppingCartService {
         const amount = Number(price.rows[0]?.price);
         if (!Number.isFinite(amount) || amount <= 0)
           throw new Error("Product price unavailable");
+        const available = await this.getAvailableQuantity(
+          item.product_id,
+          cart.rows[0].store_id,
+        );
+        if (available < item.quantity) {
+          throw new Error("Insufficient stock for cart product");
+        }
         await client.query(
           `INSERT INTO cart_items (cart_id, product_id, quantity, unit_price, discount_amount, line_total)
            VALUES ($1, $2, $3::integer, $4::numeric, 0, $3::integer * $4::numeric)`,
@@ -253,6 +292,15 @@ export class ShoppingCartService {
     );
     if (!price.rows[0] || price.rows[0].price === null)
       throw new Error("Product price is no longer available");
+    if (updates.quantity !== undefined) {
+      const available = await this.getAvailableQuantity(
+        current.rows[0].product_id,
+        current.rows[0].store_id,
+      );
+      if (available < updates.quantity) {
+        throw new Error("Insufficient stock for cart product");
+      }
+    }
     const fields: string[] = ["unit_price = $1"];
     const values: any[] = [Number(price.rows[0].price)];
     let paramIndex = 2;

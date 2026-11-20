@@ -26,6 +26,7 @@ import { complianceReportRoutes } from "../routes/complianceReports.js";
 import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
 import { bindAuthenticatedAuditActor } from "../utils/auditActor.js";
 import { recordSecurityEvent } from "../services/securityEventService.js";
+import { creatorManagementRoutes } from "../routes/creatorManagement.js";
 
 export async function requirePrivilegedAdministration(
   request: FastifyRequest,
@@ -123,6 +124,7 @@ export async function privilegedAdministration(fastify: FastifyInstance) {
   await fastify.register(auditTrailRoutes);
   await fastify.register(securityIncidentRoutes);
   await fastify.register(encryptionRoutes);
+  await fastify.register(creatorManagementRoutes);
 
   if (deferredFeatureEnabled("ENABLE_PROMOTION_ENGINE")) {
     await fastify.register(promotionRoutes);

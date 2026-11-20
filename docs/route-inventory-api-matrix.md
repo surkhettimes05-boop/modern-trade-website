@@ -44,8 +44,21 @@ This document catalogs all existing backend routes and their authorization requi
 | Route | Methods | Status | Auth Required | Scope | Notes |
 |-------|---------|--------|--------------|-------|-------|
 | `/api/promotions` | GET, POST, PUT, DELETE | REQUIRES_EXTENSION | `promotions.read`, `promotions.write` | ORGANIZATION | Needs conflict detection |
+| `/api/admin/member-pricing/promotions` | GET, POST | USABLE | Owner/Admin; `pricing.read` or `pricing.write` | ORGANIZATION | Explicit SKU prices, tier/channel eligibility; POST requires CSRF |
+| `/api/admin/member-pricing/promotions/:id` | GET, PUT | USABLE | Owner/Admin; `pricing.read` or `pricing.write` | ORGANIZATION | Draft/paused edits only; PUT requires CSRF and a reason |
+| `/api/admin/member-pricing/promotions/:id/preview` | POST | USABLE | Owner/Admin; `pricing.read` | ORGANIZATION | Validates current prices, cost/margin floor, SKU and category; requires CSRF |
+| `/api/admin/member-pricing/promotions/:id/activate` | POST | USABLE | Owner/Admin; `pricing.approve` | ORGANIZATION | Checks overlapping active promotions; requires CSRF and a reason |
+| `/api/admin/member-pricing/promotions/:id/pause` | POST | USABLE | Owner/Admin; `pricing.write` | ORGANIZATION | Audited transition; requires CSRF and a reason |
+| `/api/admin/member-pricing/promotions/:id/archive` | POST | USABLE | Owner/Admin; `pricing.write` | ORGANIZATION | Audited transition; requires CSRF and a reason |
+| `/api/admin/member-pricing/promotions/:id/performance` | GET | USABLE | Owner/Admin; `reports.sales` | ORGANIZATION | Sales and savings attributed to the immutable promotion reference |
+| `/api/internal/member-pricing/quotes` | POST | USABLE | Authenticated Lite service | Service-to-service | Issues five-minute signed POS pricing quotes from the authoritative catalog and membership record |
+| `/api/internal/member-pricing/quotes/validate` | POST | USABLE | Authenticated Lite service | Service-to-service | Verifies quote signature, expiry, cart/customer/channel/store binding, and one-sale replay binding |
+| `/api/internal/member-pricing/customers/verify` | POST | USABLE | Authenticated Lite service | Service-to-service | Verifies mapped customer reference against the server-owned phone identity |
+| `/api/internal/member-pricing/catalog` | GET | USABLE | Authenticated Lite service | Service-to-service | Returns SKU, regular price, active state, and member-pricing eligibility for reconciliation |
 | `/api/collections` | GET, POST, PUT, DELETE | NEW | `merchandising.read`, `merchandising.write` | ORGANIZATION | Product collections |
 | `/api/homepage` | GET, POST, PUT | NEW | `merchandising.read`, `merchandising.write` | ORGANIZATION | Homepage layout |
+
+Member pricing is separate from the points-based loyalty ledger. The authoritative engine stores decimal NPR member prices per SKU, does not stack overlapping promotions for the same SKU/tier/channel, and never rewrites completed sales or orders.
 
 ### Orders & Fulfilment
 | Route | Methods | Status | Auth Required | Scope | Notes |

@@ -83,6 +83,12 @@ const navigation: NavItem[] = [
     ],
   },
   {
+    title: "Member pricing",
+    href: "/admin/member-pricing",
+    icon: Tags,
+    capability: "pricing.read",
+  },
+  {
     title: "Content",
     href: "/admin/content/pages",
     icon: FileText,
@@ -191,6 +197,12 @@ const navigation: NavItem[] = [
     href: "/admin/audit",
     icon: FileClock,
     capability: "audit.read",
+  },
+  {
+    title: "Creator Programme",
+    href: "/admin/marketing/creators",
+    icon: Megaphone,
+    capability: "system.manage",
   },
   {
     title: "Settings",
