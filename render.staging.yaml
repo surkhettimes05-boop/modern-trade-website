@@ -101,6 +101,15 @@ services:
         value: "100"
       - key: ENABLE_ELECTRONIC_PAYMENTS
         value: "false"
+      # Creator QR links must point to the real staging website (CUSTOMER_WEB_URL).
+      # Keep the backend's public URL available for administrative QR exports.
+      # Set after the first approved Render deployment; it must use HTTPS.
+      - key: PUBLIC_API_BASE_URL
+        sync: false
+      # Sign Lite POS attribution with the exact same secret configured in Lite.
+      # Distinct from PROXY_AUTH_SECRET; never commit or display its value.
+      - key: CREATOR_ATTRIBUTION_HMAC_SECRET
+        sync: false
       # A real Nepal-capable OTP provider is required for NODE_ENV=production.
       # Never expose demo OTP on a public staging endpoint.
       - key: SMS_PROVIDER
