@@ -35,7 +35,7 @@ export function ProductGallery({ product }: { product: Product }) {
 }
 
 export function BuyBox({ product }: { product: Product }) {
-  const { add, displayPrices, membership } = useShop();
+  const { add, displayPrices, membership, browseOnly } = useShop();
   const [quantity, setQuantity] = useState(1);
   const save = product.originalPrice ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
   const memberPrice = product.sku ? displayPrices[product.sku] : undefined;
@@ -47,8 +47,10 @@ export function BuyBox({ product }: { product: Product }) {
     <div className="pdp-price"><strong>{memberEligible ? formatPrice(Number(memberPrice.appliedUnitPrice)) : formatPrice(product.price)}</strong>{memberEligible ? <><del>{formatPrice(Number(memberPrice.regularUnitPrice))}</del><span>{membership.tier_key === 'FOUNDING_1000' ? 'Founding 1,000 price' : 'Member price'}</span><small className="block">Save {formatPrice(Number(memberPrice.savingPerUnit))} per unit</small>{memberPrice.promotionSnapshot && <small className="block text-slate-500">{memberPrice.promotionSnapshot.name}</small>}</> : product.originalPrice && <><del>{formatPrice(product.originalPrice)}</del><span>Save {save}%</span></>}</div>
     <small>Inclusive of all taxes · {product.unit}</small>
     <div className="availability"><b>● {product.availability}</b><span>Based on your selected store</span></div>
-    <div className="fulfilment"><div><Truck /><span><b>Delivery</b><small>Eligibility shown at checkout</small></span><strong>CHECK</strong></div><div><ShoppingBag /><span><b>Store pickup</b><small>Ready time depends on store stock</small></span><strong>CHECK</strong></div></div>
-    <div className="buy-actions"><div className="quantity standalone"><button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus /></button><span>{quantity}</span><button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)}><Plus /></button></div><button className="primary-btn" disabled={unavailable} onClick={() => Array.from({ length: quantity }).forEach(() => add(product))}>Add to cart</button></div>
-    <button className="wishlist-btn" aria-label="Save to wishlist"><Heart /> Save to wishlist</button><p className="safe-copy">COD checkout · Store-based fulfilment · Pasalho quality promise</p>
+    {browseOnly ? <p className="safe-copy">Catalogue preview only. Orders, delivery and pickup are not available yet.</p> : <>
+      <div className="fulfilment"><div><Truck /><span><b>Delivery</b><small>Eligibility shown at checkout</small></span><strong>CHECK</strong></div><div><ShoppingBag /><span><b>Store pickup</b><small>Ready time depends on store stock</small></span><strong>CHECK</strong></div></div>
+      <div className="buy-actions"><div className="quantity standalone"><button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus /></button><span>{quantity}</span><button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)}><Plus /></button></div><button className="primary-btn" disabled={unavailable} onClick={() => Array.from({ length: quantity }).forEach(() => add(product))}>Add to cart</button></div>
+      <button className="wishlist-btn" aria-label="Save to wishlist"><Heart /> Save to wishlist</button><p className="safe-copy">COD checkout · Store-based fulfilment · Pasalho quality promise</p>
+    </>}
   </div>;
 }

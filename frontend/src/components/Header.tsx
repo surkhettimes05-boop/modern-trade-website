@@ -1,8 +1,30 @@
 "use client";
-import Link from "next/link"; import {Heart,MapPin,Menu,UserRound,X} from "lucide-react"; import {useState} from "react";
-import {CartButton,MegaMenu,SearchBox,useShop} from "./CommerceClient";
-export default function Header(){const[mega,setMega]=useState(false);const[mobile,setMobile]=useState(false);const{selectedStore}=useShop();return <>
- <div className="utility"><div className="shell"><span><MapPin size={13}/> Delivering to <b>{selectedStore?.name || 'Choose a store'}</b></span><nav><Link href="/stores">Find a store</Link><Link href="/faq">Help</Link><Link href="/about">Careers</Link><Link href="/about">Business / Wholesale</Link><Link href="/account">Sign in</Link></nav></div></div>
- <header className="site-header"><div className="shell header-row"><Link href="/" className="logo" aria-label="Pasalho home"><i>P</i><span>PASALHO</span></Link><button className="category-trigger" onClick={()=>setMega(!mega)} aria-expanded={mega}><Menu size={19}/> Categories</button><SearchBox/><nav className="main-links"><Link href="/offers">Offers</Link><Link href="/shop?sort=new">New Arrivals</Link><Link href="/membership">Membership</Link><Link href="/stores">Stores</Link></nav><div className="header-actions"><Link className="nav-action" href="/account"><UserRound/><span>Account</span></Link><Link className="nav-action" href="/account"><Heart/><span>Wishlist</span></Link><CartButton/></div><button className="mobile-menu" onClick={()=>setMobile(!mobile)} aria-label="Menu">{mobile?<X/>:<Menu/>}</button></div>
- {mega?<div className="mega-wrap"><MegaMenu open={mega} onClose={()=>setMega(false)}/></div>:null}{mobile?<nav className="mobile-panel"><Link href="/shop">Shop all products</Link><Link href="/offers">Today’s offers</Link><Link href="/membership">Membership</Link><Link href="/stores">Find a store</Link><Link href="/account">My account</Link></nav>:null}
- </header></>}
+
+import Link from "next/link";
+import { Heart, MapPin, Menu, UserRound, X } from "lucide-react";
+import { useState } from "react";
+import { CartButton, MegaMenu, SearchBox, useShop } from "./CommerceClient";
+
+export default function Header({ browseOnly = false }: { browseOnly?: boolean }) {
+  const [mega, setMega] = useState(false);
+  const [mobile, setMobile] = useState(false);
+  const { selectedStore } = useShop();
+
+  return <>
+    <div className="utility"><div className="shell">
+      <span><MapPin size={13} /> {browseOnly ? 'Browsing products near' : 'Delivering to'} <b>{selectedStore?.name || 'Choose a store'}</b></span>
+      <nav><Link href="/stores">Find a store</Link><Link href="/faq">Help</Link><Link href="/about">Careers</Link><Link href="/about">Business / Wholesale</Link>{!browseOnly && <Link href="/account">Sign in</Link>}</nav>
+    </div></div>
+    <header className="site-header"><div className="shell header-row">
+      <Link href="/" className="logo" aria-label="Pasalho home"><i>P</i><span>PASALHO</span></Link>
+      <button className="category-trigger" onClick={() => setMega(!mega)} aria-expanded={mega}><Menu size={19} /> Categories</button>
+      <SearchBox />
+      <nav className="main-links"><Link href="/offers">Offers</Link><Link href="/shop?sort=new">New Arrivals</Link>{!browseOnly && <Link href="/membership">Membership</Link>}<Link href="/stores">Stores</Link></nav>
+      {!browseOnly && <div className="header-actions"><Link className="nav-action" href="/account"><UserRound /><span>Account</span></Link><Link className="nav-action" href="/account"><Heart /><span>Wishlist</span></Link><CartButton /></div>}
+      <button className="mobile-menu" onClick={() => setMobile(!mobile)} aria-label="Menu">{mobile ? <X /> : <Menu />}</button>
+    </div>
+      {mega && <div className="mega-wrap"><MegaMenu open={mega} onClose={() => setMega(false)} /></div>}
+      {mobile && <nav className="mobile-panel"><Link href="/shop">Browse all products</Link><Link href="/offers">Today’s offers</Link>{!browseOnly && <Link href="/membership">Membership</Link>}<Link href="/stores">Find a store</Link>{!browseOnly && <Link href="/account">My account</Link>}</nav>}
+    </header>
+  </>;
+}
