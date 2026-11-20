@@ -75,6 +75,23 @@ describe("integration health snapshot", () => {
     );
   });
 
+  it("allows deliberately disabled SMS only for the read-only public catalogue", () => {
+    expect(() => validateProductionIntegrations({
+      NODE_ENV: "production",
+      SMS_PROVIDER: "disabled",
+      PUBLIC_CATALOG_ONLY: "true",
+    })).not.toThrow();
+    expect(() => validateProductionIntegrations({
+      NODE_ENV: "production",
+      SMS_PROVIDER: "disabled",
+    })).toThrow("SMS_PROVIDER must be twilio, twilio_verify, or demo");
+    expect(() => validateProductionIntegrations({
+      NODE_ENV: "production",
+      SMS_PROVIDER: "demo",
+      PUBLIC_CATALOG_ONLY: "true",
+    })).toThrow("SMS_PROVIDER=demo is forbidden in production");
+  });
+
   it("reports a configured map provider as enabled", () => {
     const snapshot = getIntegrationSnapshot({
       DEFAULT_MAP_PROVIDER: "Baato",
