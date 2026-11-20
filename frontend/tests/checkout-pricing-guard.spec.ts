@@ -34,11 +34,13 @@ async function mockCheckoutCatalog(page: Page) {
 }
 
 async function addProductAndChooseDelivery(page: Page) {
+  // A stale store from an older session must not replace an open SSR catalog store.
   await page.goto('/shop');
   const firstProduct = page.locator('.product-card').first();
   await expect(firstProduct).toBeVisible({ timeout: 15_000 });
   await firstProduct.getByRole('button', { name: 'Add to cart' }).click();
   await page.goto('/checkout');
+  await expect(page.getByText('Cash on delivery · Selected store', { exact: false })).toHaveCount(0);
   await expect(page.getByLabel('Municipality')).toContainText('QA Municipality');
   await page.getByLabel('Municipality').selectOption('1');
   await page.getByLabel('Ward').selectOption('2');
@@ -68,6 +70,7 @@ test('missing pricing endpoint explains the block without endlessly checking del
 
 test('signed quote drives member prices, delivery fee, and checkout eligibility', async ({ page }) => {
   await mockCheckoutCatalog(page);
+  await page.addInitScript(() => localStorage.setItem('pasalho-store', 'ffffffff-ffff-4fff-8fff-ffffffffffff'));
   let requestedSku = '';
   await page.route('**/api/customer-pricing/web/quotes', async (route) => {
     const body = route.request().postDataJSON() as { store_id: string; items: Array<{ sku: string; quantity: number }> };
