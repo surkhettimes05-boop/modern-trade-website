@@ -102,10 +102,8 @@ services:
       - key: ENABLE_ELECTRONIC_PAYMENTS
         value: "false"
       # Creator QR links must point to the real staging website (CUSTOMER_WEB_URL).
-      # Keep the backend's public URL available for administrative QR exports.
-      # Set after the first approved Render deployment; it must use HTTPS.
-      - key: PUBLIC_API_BASE_URL
-        sync: false
+      # PUBLIC_API_BASE_URL is optional and not yet known before first service creation.
+      # Set it privately to the issued Render HTTPS URL only after approved deploy.
       # Sign Lite POS attribution with the exact same secret configured in Lite.
       # Distinct from PROXY_AUTH_SECRET; never commit or display its value.
       - key: CREATOR_ATTRIBUTION_HMAC_SECRET
