@@ -432,8 +432,10 @@ export default function CheckoutPage() {
 
             {municipalityId && wardId ? (
               <div className={`rounded-xl border p-4 text-sm ${activeQuote?.serviceable ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
-                {activeQuote === null
-                  ? 'Checking delivery availability…'
+                {!quoteKey
+                  ? 'Delivery pricing will appear when the product price quote is available.'
+                  : activeQuote === null
+                    ? 'Checking delivery availability…'
                   : activeQuote.serviceable
                     ? `${activeQuote.zone_name || 'Delivery area'} · Delivery ${formatPrice(Number(activeQuote.delivery_fee || 0))}${activeQuote.estimated_delivery_hours ? ` · about ${activeQuote.estimated_delivery_hours}h` : ''}`
                     : quoteReason(activeQuote.reason)}
