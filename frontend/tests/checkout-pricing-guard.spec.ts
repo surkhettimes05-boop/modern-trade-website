@@ -61,7 +61,7 @@ test('missing pricing endpoint explains the block without endlessly checking del
 
   await addProductAndChooseDelivery(page);
 
-  await expect(page.getByRole('alert')).toContainText('Checkout pricing is unavailable on this backend.');
+  await expect(page.getByRole('alert').filter({ hasText: 'Checkout pricing is unavailable on this backend.' })).toContainText('Checkout pricing is unavailable on this backend.');
   await expect(page.getByText('Delivery pricing will appear when the product price quote is available.')).toBeVisible();
   await expect(page.getByText('Checking delivery availability…')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Place COD order' })).toBeDisabled();
