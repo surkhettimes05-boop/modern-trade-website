@@ -40,4 +40,13 @@ describe("pilot feature controls", () => {
     expect(stagingCustomerOrdersBlocked({ STAGING_DISABLE_CUSTOMER_ORDERS: "false" })).toBe(false);
     expect(stagingCustomerOrdersBlocked({ STAGING_DISABLE_CUSTOMER_ORDERS: "true" })).toBe(true);
   });
+
+  it("blocks production COD regardless of staging flag or a stray enable override", () => {
+    expect(stagingCustomerOrdersBlocked({ NODE_ENV: "production" })).toBe(true);
+    expect(stagingCustomerOrdersBlocked({
+      NODE_ENV: "production",
+      STAGING_DISABLE_CUSTOMER_ORDERS: "false",
+      ENABLE_LIVE_CUSTOMER_ORDERS: "true",
+    })).toBe(true);
+  });
 });

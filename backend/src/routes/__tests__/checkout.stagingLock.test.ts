@@ -67,6 +67,32 @@ describe("public staging checkout lock", () => {
     }
   });
 
+  it.each(["/api/checkout/cod", "/api/app/checkout/cod"])(
+    "blocks %s in production even if the staging flag is false",
+    async (url) => {
+      const priorEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      process.env.STAGING_DISABLE_CUSTOMER_ORDERS = "false";
+      const createOrder = jest.spyOn(CheckoutService.prototype, "createCodOrder");
+      const instance = await app();
+      try {
+        const response = await instance.inject({
+          method: "POST",
+          url,
+          headers: { "x-test-customer-id": "qa-customer" },
+          payload: {},
+        });
+        expect(response.statusCode).toBe(503);
+        expect(response.json()).toMatchObject({ code: "STAGING_ORDERS_DISABLED" });
+        expect(createOrder).not.toHaveBeenCalled();
+      } finally {
+        if (priorEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = priorEnv;
+        await instance.close();
+      }
+    },
+  );
+
   it("preserves the normal checkout validation when staging lock is absent", async () => {
     delete process.env.STAGING_DISABLE_CUSTOMER_ORDERS;
     const createOrder = jest.spyOn(CheckoutService.prototype, "createCodOrder");

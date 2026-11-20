@@ -244,7 +244,7 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
     if (stagingCustomerOrdersBlocked()) {
       return reply.status(503).send({
-        error: "Customer orders are disabled in this staging environment",
+        error: "Customer orders are temporarily disabled until launch verification is complete",
         code: "STAGING_ORDERS_DISABLED",
       });
     }

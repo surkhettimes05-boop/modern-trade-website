@@ -63,10 +63,12 @@ export function memberPricingEnabled(
   return env.ENABLE_MEMBER_PRICING === "true";
 }
 
-// A public preview must not create real COD orders. This is separate from
-// ENABLE_ELECTRONIC_PAYMENTS, which does not control cash orders.
+// Production is deployed for live verification with real customer orders
+// unapproved. A later, separately reviewed release must remove this gate
+// before accepting COD orders. Staging can also explicitly lock checkout.
+// ENABLE_ELECTRONIC_PAYMENTS does not control cash-on-delivery orders.
 export function stagingCustomerOrdersBlocked(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return env.STAGING_DISABLE_CUSTOMER_ORDERS === "true";
+  return env.NODE_ENV === "production" || env.STAGING_DISABLE_CUSTOMER_ORDERS === "true";
 }
