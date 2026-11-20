@@ -34,7 +34,9 @@ Do **not** share the two applications' databases or introduce a new Lite microse
 8. **Deploy Lite separately when desired** as one Next.js server app backed by its own Neon database. It needs an approved HTTPS Modern Trade pricing URL, store UUID and secret token. No Lite host choice is forced by the Modern Trade plan.
 
 
-> **Safety gate:** `ENABLE_ELECTRONIC_PAYMENTS=false` does **not** disable cash-on-delivery checkout. The current release feature configuration enables COD; do not expose a staging website publicly or invite real orders before an enforceable staging-only checkout block or equivalent controlled access is implemented and verified.
+> **Safety gate:** `ENABLE_ELECTRONIC_PAYMENTS=false` does **not** disable cash-on-delivery checkout. The review Blueprint explicitly sets `STAGING_DISABLE_CUSTOMER_ORDERS=true`. The backend returns `503` / `STAGING_ORDERS_DISABLED` for both `/api/checkout/cod` and `/api/app/checkout/cod`, even when a customer is authenticated. Keep it enabled during staging setup; temporarily disabling it for a supervised synthetic COD test requires separate approval and controlled access. This application gate does not block every possible staff/POS write: do not invite real orders, use live customer data, or expose unreviewed admin/POS credentials.
+
+**Source alignment:** The staging Blueprint in this release-gate review points to `fix/creator-member-release-gates-20261120`, which contains the combined OTP/referral/QR and migration guard changes. The earlier `chore/staging-render-neon-config-20261120` head does **not** contain all later fixes. Confirm the exact SHA/branch in Render before *any* approved first sync; `autoDeployTrigger: off` does not prevent that initial deployment.
 
 ## Supervised real-world acceptance gates
 
@@ -55,7 +57,7 @@ Record test operator, environment, build SHA, date/time, unique order/referral I
 
 ## Verified automation before staging
 
-- Modern combined creator code: [QA-only draft PR #98](https://github.com/surkhettimes05-boop/modern-trade-website/pull/98); [full-stack CI #44668305192](https://github.com/surkhettimes05-boop/modern-trade-website/actions/runs/44668305192) passed: 384/384 PostgreSQL-backed tests, 53 migrations and 81 browser checks passed (one configured mobile COD skip). Desktop COD reconciliation passed in disposable containers.
+- Modern combined creator code: [QA-only draft PR #102](https://github.com/surkhettimes05-boop/modern-trade-website/pull/102); [full-stack CI #44708764701](https://github.com/surkhettimes05-boop/modern-trade-website/actions/runs/44708764701) passed: 385/385 backend tests, 54 PostgreSQL migrations and 85 Chromium checks passed (one configured mobile COD skip), including desktop/mobile QR regression coverage. Production `publish` job was skipped.
 - Pasalho Lite: [CI #44590418201](https://github.com/surkhettimes05-boop/Pasalho-lite/actions/runs/44590418201) passed, 135 tests and isolated backup/restore. PRs #26 and #27 remain review-only.
 
 These are **synthetic release checks**, not evidence that live staging or physical QR/POS/SMS flows have passed.

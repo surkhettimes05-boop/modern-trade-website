@@ -23,7 +23,7 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
     return { settings: result.rows[0] ?? null };
   });
 
-  fastify.patch("/creator-reward-settings", async (request, reply) => {
+  fastify.patch("/creator-reward-settings", async (request) => {
     const input = z.object({
       default_rate_percent: z.number().min(0).max(10),
       attribution_window_days: z.number().int().min(1).max(90),

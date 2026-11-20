@@ -8,7 +8,9 @@ services:
     name: pasalho-modern-staging-api
     runtime: docker
     repo: https://github.com/surkhettimes05-boop/modern-trade-website
-    branch: chore/staging-render-neon-config-20261120
+    # Review release candidate with creator QR, OTP and 54-migration continuity.
+    # Keep this branch pinned until a separately approved staging deployment.
+    branch: fix/creator-member-release-gates-20261120
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     region: singapore
@@ -27,6 +29,10 @@ services:
       # Keep the administrative routes off until supervised staging QA.
       - key: ENABLE_ADMIN_API
         value: "false"
+      # Electronic payments off DOES NOT block cash-on-delivery checkout.
+      # Keep both web and app COD order endpoints closed to public staging.
+      - key: STAGING_DISABLE_CUSTOMER_ORDERS
+        value: "true"
       - key: ACTIVE_MARKET
         value: NP
       - key: DEFAULT_COUNTRY_CODE
@@ -91,6 +97,10 @@ services:
         value: storesync-operations
       - key: MEMBER_PRICING_SERVICE_TOKEN
         sync: false
+      # Exercise the existing membership pricing flow in protected staging;
+      # COD order creation remains blocked by the staging-specific lock.
+      - key: ENABLE_MEMBER_PRICING
+        value: "true"
       - key: MEMBER_PRICING_QUOTE_SECRET
         generateValue: true
       - key: PAYMENT_ENCRYPTION_KEY

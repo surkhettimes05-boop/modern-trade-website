@@ -1,6 +1,7 @@
 import {
   PILOT_FEATURES,
   memberPricingEnabled,
+  stagingCustomerOrdersBlocked,
   validatePilotFeatureEnvironment,
 } from "../releaseFeatures.js";
 
@@ -32,5 +33,11 @@ describe("pilot feature controls", () => {
     expect(memberPricingEnabled({})).toBe(false);
     expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "false" })).toBe(false);
     expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "true" })).toBe(true);
+  });
+
+  it("locks staging COD only on an explicit server-side setting", () => {
+    expect(stagingCustomerOrdersBlocked({})).toBe(false);
+    expect(stagingCustomerOrdersBlocked({ STAGING_DISABLE_CUSTOMER_ORDERS: "false" })).toBe(false);
+    expect(stagingCustomerOrdersBlocked({ STAGING_DISABLE_CUSTOMER_ORDERS: "true" })).toBe(true);
   });
 });
