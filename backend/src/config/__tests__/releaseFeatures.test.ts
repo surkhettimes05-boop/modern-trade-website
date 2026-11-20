@@ -1,6 +1,7 @@
 import {
   PILOT_FEATURES,
   memberPricingEnabled,
+  publicCatalogOnly,
   stagingCustomerOrdersBlocked,
   validatePilotFeatureEnvironment,
 } from "../releaseFeatures.js";
@@ -48,5 +49,12 @@ describe("pilot feature controls", () => {
       STAGING_DISABLE_CUSTOMER_ORDERS: "false",
       ENABLE_LIVE_CUSTOMER_ORDERS: "true",
     })).toBe(true);
+  });
+
+  it("requires an explicit read-only launch flag", () => {
+    expect(publicCatalogOnly({})).toBe(false);
+    expect(publicCatalogOnly({ PUBLIC_CATALOG_ONLY: "false" })).toBe(false);
+    expect(publicCatalogOnly({ PUBLIC_CATALOG_ONLY: "true" })).toBe(true);
+    expect(stagingCustomerOrdersBlocked({ PUBLIC_CATALOG_ONLY: "true" })).toBe(true);
   });
 });

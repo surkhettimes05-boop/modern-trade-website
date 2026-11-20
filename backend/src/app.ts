@@ -31,6 +31,7 @@ import { paymentWebhookRoutes } from "./routes/payments.js";
 import { creatorAttributionRoutes } from "./routes/creatorAttribution.js";
 import { creatorPortalRoutes } from "./routes/creatorPortal.js";
 import { deferredFeatureEnabled } from "./config/releaseFeatures.js";
+import { catalogOnlyGuard } from "./middleware/catalogOnlyGuard.js";
 import { verifyDatabaseSecurityPosture } from "./database/databaseSecurity.js";
 import { getResilienceConfig } from "./config/resilience.js";
 import { closePool } from "./database/connection.js";
@@ -100,6 +101,9 @@ export async function buildApp(
       runWithRequestContext(request.id, done);
     });
   }
+
+  // Protect direct Render requests as well as Vercel traffic.
+  fastify.addHook("onRequest", catalogOnlyGuard);
 
   if (workerRuntime) {
     fastify.addHook("onResponse", async () => {

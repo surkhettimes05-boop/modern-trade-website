@@ -1,3 +1,5 @@
+import { publicCatalogOnly } from "./releaseFeatures.js";
+
 export type IntegrationStatus = "ENABLED" | "DISABLED" | "MISCONFIGURED";
 
 export interface IntegrationSnapshot {
@@ -130,6 +132,9 @@ export function validateProductionIntegrations(
       "EMAIL_PROVIDER and EMAIL_PROVIDER_API_KEY must be configured together",
     );
   }
+  // Public catalogue-only releases have no customer sign-in or write endpoints.
+  // Disabling OTP is safe only while the server enforces the read-only gate.
+  if (publicCatalogOnly(env) && env.SMS_PROVIDER === "disabled") return;
   if (!present(env, "SMS_PROVIDER")) {
     throw new Error("SMS_PROVIDER is required in production for customer OTP");
   }
