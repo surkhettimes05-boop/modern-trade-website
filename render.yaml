@@ -107,6 +107,12 @@ services:
         generateValue: true
       - key: SIGNATURE_SECRET
         generateValue: true
+      # Required at production startup. The service token must be supplied to
+      # Pasalho Lite separately; do not commit either secret to this repo.
+      - key: MEMBER_PRICING_SERVICE_TOKEN
+        sync: false
+      - key: MEMBER_PRICING_QUOTE_SECRET
+        generateValue: true
       - key: PROXY_AUTH_SECRET
         sync: false
       - key: OTP_HASH_SECRET
