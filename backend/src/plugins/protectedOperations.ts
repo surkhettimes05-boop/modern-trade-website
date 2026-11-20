@@ -22,6 +22,7 @@ import { staffRoutes } from "../routes/staff.js";
 import { auditReportRoutes } from "../routes/auditReports.js";
 import { posDeviceRoutes } from "../routes/posDevices.js";
 import { campaignAdminRoutes } from "../routes/campaigns.js";
+import { memberPricingRoutes } from "../routes/memberPricing.js";
 import { authenticateStaff } from "../middleware/authentication.js";
 import { csrfMatches } from "../utils/csrf.js";
 import { deferredFeatureEnabled } from "../config/releaseFeatures.js";
@@ -127,6 +128,11 @@ const capabilityAccess: Array<{
     prefix: "/admin/campaigns",
     read: ["content.read"],
     write: ["content.write"],
+  },
+  {
+    prefix: "/admin/member-pricing",
+    read: ["pricing.read"],
+    write: ["pricing.write"],
   },
 ];
 
@@ -273,6 +279,7 @@ export async function protectedOperations(fastify: FastifyInstance) {
 
   await fastify.register(adminRoutes, { prefix: "/admin" });
   await fastify.register(campaignAdminRoutes, { prefix: "/admin" });
+  await fastify.register(memberPricingRoutes);
   await fastify.register(customerRoutes, { prefix: "/customers" });
   await fastify.register(consentRoutes, { prefix: "/consent" });
   await fastify.register(posRoutes, { prefix: "/pos" });

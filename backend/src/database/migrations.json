@@ -162,5 +162,57 @@
   [
     "042_payment_intent_runtime_contract",
     "../database/042_payment_intent_runtime_contract.sql"
+  ],
+  [
+    "042_creator_attribution_rewards",
+    "../database/042_creator_attribution_rewards.sql"
+  ],
+  [
+    "043_creator_portal_otp_sessions",
+    "../database/043_creator_portal_otp_sessions.sql"
+  ],
+  [
+    "044_creator_purchase_cost_evidence",
+    "../database/044_creator_purchase_cost_evidence.sql"
+  ],
+  [
+    "045_creator_manual_payouts",
+    "../database/045_creator_manual_payouts.sql"
+  ],
+  [
+    "042_membership_foundation",
+    "../database/042_membership_foundation.sql"
+  ],
+  [
+    "043_membership_integrity",
+    "../database/043_membership_integrity.sql"
+  ],
+  [
+    "044_member_pricing_engine",
+    "../database/044_member_pricing_engine.sql"
+  ],
+  [
+    "045_member_pricing_quotes",
+    "../database/045_member_pricing_quotes.sql"
+  ],
+  [
+    "046_web_order_member_pricing_snapshots",
+    "../database/046_web_order_member_pricing_snapshots.sql"
+  ],
+  [
+    "047_unique_member_pricing_quote_sale_reference",
+    "../database/047_unique_member_pricing_quote_sale_reference.sql"
+  ],
+  [
+    "048_cod_member_pricing_channel",
+    "../database/048_cod_member_pricing_channel.sql"
+  ],
+  [
+    "049_web_order_loyalty_return_reversal",
+    "../database/049_web_order_loyalty_return_reversal.sql"
+  ],
+  [
+    "050_cod_launch_lifecycle",
+    "../database/050_cod_launch_lifecycle.sql"
   ]
 ]

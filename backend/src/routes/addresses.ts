@@ -6,6 +6,7 @@ import {
   customerId,
 } from "../middleware/customerAuthentication.js";
 import { requirePrivilegedAdministration } from "../plugins/privilegedAdministration.js";
+import { NepalPhoneSchema, NepalPostalCodeSchema } from "../contracts/platform.js";
 
 const addressService = new AddressService();
 
@@ -17,16 +18,16 @@ export async function addressRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const schema = z
         .object({
-          province_id: z.number().optional(),
-          district_id: z.number().optional(),
-          municipality_id: z.number().optional(),
-          ward_id: z.number().optional(),
+          province_id: z.number().int().positive().optional(),
+          district_id: z.number().int().positive().optional(),
+          municipality_id: z.number().int().positive(),
+          ward_id: z.number().int().positive(),
           tole_locality: z.string().optional(),
           landmark: z.string().optional(),
           street: z.string().optional(),
           house_number: z.string().optional(),
-          postal_code: z.string().optional(),
-          phone: z.string().optional(),
+          postal_code: NepalPostalCodeSchema.optional(),
+          phone: NepalPhoneSchema.optional(),
           delivery_instructions: z.string().optional(),
           latitude: z.number().optional(),
           longitude: z.number().optional(),
@@ -45,7 +46,13 @@ export async function addressRoutes(fastify: FastifyInstance) {
           created_by: customerId(request),
         });
         return reply.status(201).send(address);
-      } catch {
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          ["A complete municipality and ward is required", "Municipality and ward do not match"].includes(error.message)
+        ) {
+          return reply.status(400).send({ error: error.message });
+        }
         return reply.status(500).send({ error: "Failed to create address" });
       }
     },

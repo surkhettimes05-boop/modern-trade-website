@@ -38,6 +38,7 @@ import {
 } from "@/components/admin/AdminPrimitives";
 import { useAdminShell } from "@/components/admin/AdminShellContext";
 import { CampaignsPage } from "@/components/admin/CampaignsPage";
+import { MemberPricingPage } from "@/components/admin/MemberPricingPage";
 import { useStaffSession } from "@/components/StaffSessionProvider";
 import { resilientFetch } from "@/lib/resilientFetch";
 import {
@@ -79,17 +80,14 @@ const statusOptions = [
   "UNPUBLISHED",
 ].map((value) => ({ label: value.replaceAll("_", " "), value }));
 const orderStatuses = [
-  "PENDING",
-  "PENDING_PAYMENT",
+  "RECEIVED",
   "CONFIRMED",
-  "PICKING",
-  "PACKED",
+  "PROCESSING",
+  "READY",
   "OUT_FOR_DELIVERY",
   "DELIVERED",
-  "RETURN_REQUESTED",
-  "RETURNED",
   "CANCELLED",
-  "REFUNDED",
+  "FAILED",
 ].map((value) => ({ label: value.replaceAll("_", " "), value }));
 
 const resources: Record<string, ResourceConfig> = {
@@ -735,11 +733,10 @@ function csrfToken() {
 }
 
 const nextOrderStatus: Record<string, { status: string; label: string }> = {
-  PENDING: { status: "CONFIRMED", label: "Confirm order" },
-  PENDING_PAYMENT: { status: "CONFIRMED", label: "Confirm order" },
-  CONFIRMED: { status: "PICKING", label: "Start picking" },
-  PICKING: { status: "PACKED", label: "Mark packed" },
-  PACKED: { status: "OUT_FOR_DELIVERY", label: "Send for delivery" },
+  RECEIVED: { status: "CONFIRMED", label: "Confirm order" },
+  CONFIRMED: { status: "PROCESSING", label: "Start processing" },
+  PROCESSING: { status: "READY", label: "Mark ready" },
+  READY: { status: "OUT_FOR_DELIVERY", label: "Send for delivery" },
   OUT_FOR_DELIVERY: { status: "DELIVERED", label: "Mark delivered" },
 };
 
@@ -1624,6 +1621,8 @@ export function AdminWorkspace() {
     return hasCapability("settings.manage") ? <SettingsPage /> : <Forbidden />;
   if (key === "content/campaigns")
     return hasCapability("content.read") ? <CampaignsPage /> : <Forbidden />;
+  if (key === "member-pricing")
+    return hasCapability("pricing.read") ? <MemberPricingPage /> : <Forbidden />;
   const direct = resources[key];
   if (direct)
     return hasCapability(direct.capability) ? (

@@ -5,6 +5,7 @@ export type ProductionRouteBoundary =
   | "STAFF_SESSION"
   | "PRIVILEGED_STAFF_MFA"
   | "SIGNED_WEBHOOK"
+  | "SERVICE_TO_SERVICE_AUTH"
   | "MIXED_EXPLICIT";
 
 /**
@@ -25,6 +26,11 @@ export const PRODUCTION_ROUTE_SECURITY: Readonly<
   customerFavoritesRoutes: "CUSTOMER_SESSION",
   customerOrderNotificationRoutes: "CUSTOMER_SESSION",
   loyaltyMvpRoutes: "MIXED_EXPLICIT",
+  membershipRoutes: "MIXED_EXPLICIT",
+  customerMemberPricingRoutes: "CUSTOMER_SESSION",
+  memberPricingServiceRoutes: "SERVICE_TO_SERVICE_AUTH",
+  creatorAttributionRoutes: "MIXED_EXPLICIT",
+  creatorPortalRoutes: "MIXED_EXPLICIT",
   paymentWebhookRoutes: "SIGNED_WEBHOOK",
   operationsAuthRoutes: "MIXED_EXPLICIT",
   protectedOperations: "STAFF_SESSION",

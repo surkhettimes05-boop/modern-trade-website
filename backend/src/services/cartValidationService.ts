@@ -141,6 +141,7 @@ export async function loadCanonicalCartItems(
   const ids = requested.map((item) => item.product_id);
   const productsResult = await db.query(
     `SELECT requested.product_id,
+            p.sku,
             p.name_en,
             p.status AS product_status,
             COALESCE(store_price.price, organization_price.price) AS authoritative_price
@@ -223,6 +224,7 @@ export async function loadCanonicalCartItems(
     }
     return {
       product_id: requestedItem.product_id,
+      sku: product?.sku ? String(product.sku) : null,
       product_name: product?.name_en ?? null,
       name_en: product?.name_en ?? null,
       quantity: validatedQuantity,

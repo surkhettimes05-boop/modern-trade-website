@@ -17,6 +17,7 @@ export const PILOT_FEATURES = {
   externalTaxIntegration: false,
   returns: false,
   promotionEngine: false,
+  memberPricing: false,
   customerSegments: false,
   offlineSync: false,
   hardwareDevices: false,
@@ -54,4 +55,20 @@ export function deferredFeatureEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   return env.NODE_ENV !== "production" && env[envName] === "true";
+}
+
+export function memberPricingEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.ENABLE_MEMBER_PRICING === "true";
+}
+
+// Production is deployed for live verification with real customer orders
+// unapproved. A later, separately reviewed release must remove this gate
+// before accepting COD orders. Staging can also explicitly lock checkout.
+// ENABLE_ELECTRONIC_PAYMENTS does not control cash-on-delivery orders.
+export function stagingCustomerOrdersBlocked(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.NODE_ENV === "production" || env.STAGING_DISABLE_CUSTOMER_ORDERS === "true";
 }

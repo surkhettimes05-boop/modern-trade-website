@@ -175,8 +175,7 @@ export class PaymentEvidenceService {
       );
 
       const updated = await client.query(
-        `SELECT *, intent_id AS intent_number, amount AS amount_npr,
-                provider_intent_id AS provider_transaction_id
+        `SELECT *, provider_intent_id AS provider_transaction_id
            FROM payment_intents WHERE id = $1`,
         [params.paymentIntentId],
       );

@@ -7,6 +7,7 @@ const common = {
   cart_id: "1f4d234c-2bcc-4e44-91dd-30e4f481451b",
   store_id: "2e4c6879-d846-4b34-9894-7412850db715",
   idempotency_key: "checkout-12345678",
+  signed_quote_token: "signed-pricing-quote-token-for-test",
   shipping_name: "Aakriti Shahi",
   shipping_phone: "+9779812345678",
 };
@@ -37,7 +38,7 @@ describe("COD checkout contract", () => {
       CodCheckoutBodySchema.parse({
         ...common,
         delivery_type: "DELIVERY",
-        address_id: "19bb5697-c6bc-4a6e-9e04-f4c08c2d8563",
+        address_id: "3f4d234c-2bcc-4e44-91dd-30e4f481451b",
         shipping_address: "Ward 6, Birendranagar",
         shipping_municipality_id: 1,
         shipping_ward_id: 1,
@@ -46,7 +47,7 @@ describe("COD checkout contract", () => {
       }),
     ).toMatchObject({
       delivery_type: "DELIVERY",
-      address_id: "19bb5697-c6bc-4a6e-9e04-f4c08c2d8563",
+      address_id: "3f4d234c-2bcc-4e44-91dd-30e4f481451b",
       shipping_country: "NP",
     });
   });

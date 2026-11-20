@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,6 +10,7 @@ import '../repositories/cart_controller.dart';
 import '../repositories/catalog_repository.dart';
 import '../repositories/checkout_repository.dart';
 import '../repositories/customer_repository.dart';
+import '../repositories/member_pricing_repository.dart';
 
 const _fallbackProducts = <Product>[
   Product(
@@ -124,7 +127,16 @@ class AppState extends ChangeNotifier {
     catalogRepository = CatalogRepository(this.api);
     checkoutRepository = CheckoutRepository(this.api);
     customerRepository = CustomerRepository(this.api);
+    memberPricingRepository = MemberPricingRepository(this.api);
     this.api.onSessionExpired = _onSessionExpired;
+  }
+
+  Future<void> _refreshQuoteQuietly() async {
+    try {
+      await refreshPricingQuote();
+    } on ApiException {
+      // The service sets pricingError; checkout remains blocked without a quote.
+    }
   }
 
   final ApiClient api;
@@ -132,12 +144,22 @@ class AppState extends ChangeNotifier {
   late final CatalogRepository catalogRepository;
   late final CheckoutRepository checkoutRepository;
   late final CustomerRepository customerRepository;
+  late final MemberPricingRepository memberPricingRepository;
   final CartController cartController = CartController();
   List<Product> products = const [];
   List<ProductCategory> categories = const [];
   List<StoreLocation> stores = const [];
   StoreLocation? selectedStore;
   Customer? customer;
+  Membership? membership;
+  Map<String, MemberDisplayPrice> memberPrices = const {};
+  MemberPricingQuote? pricingQuote;
+  bool pricingQuoteNeedsConfirmation = false;
+  Timer? _pricingQuoteExpiryTimer;
+  bool pricingBusy = false;
+  String? pricingError;
+  int _pricingRequestGeneration = 0;
+  int _memberRequestGeneration = 0;
   bool loading = true;
   bool usingFallbackCatalog = false;
   String? error;
@@ -153,12 +175,68 @@ class AppState extends ChangeNotifier {
       .whereType<CartLine>()
       .toList(growable: false);
 
-  int get cartCount => cartController.quantities.values
-      .fold(0, (sum, quantity) => sum + quantity);
-  int get cartSubtotalMinor =>
+  int get cartCount => cartController.quantities.values.fold(
+        0,
+        (sum, quantity) => sum + quantity,
+      );
+  MemberPricingQuote? get currentPricingQuote {
+    final quote = pricingQuote;
+    if (customer == null ||
+        quote == null ||
+        quote.isExpired ||
+        quote.storeReference != selectedStore?.id ||
+        quote.customerReference != customer?.id ||
+        quote.items.length != cart.length) {
+      return null;
+    }
+    final quoted = {for (final item in quote.items) item.sku: item.quantity};
+    if (cart.any(
+      (line) =>
+          line.product.sku == null || quoted[line.product.sku] != line.quantity,
+    )) {
+      return null;
+    }
+    return quote;
+  }
+
+  int get regularSubtotalMinor =>
       cart.fold(0, (sum, line) => sum + line.totalMinor);
+  int get cartSubtotalMinor => customer == null
+      ? regularSubtotalMinor
+      : currentPricingQuote?.finalTotalMinor ?? 0;
   double get cartSubtotal => cartSubtotalMinor / 100;
   bool get isSignedIn => customer != null;
+
+  void _replacePricingQuote(MemberPricingQuote? quote) {
+    _pricingQuoteExpiryTimer?.cancel();
+    _pricingQuoteExpiryTimer = null;
+    pricingQuote = quote;
+    if (quote == null) return;
+
+    final delay = quote.expiresAt.difference(DateTime.now());
+    _pricingQuoteExpiryTimer = Timer(
+      delay.isNegative ? Duration.zero : delay,
+      () {
+        if (pricingQuote?.id != quote.id || customer == null || cart.isEmpty) {
+          return;
+        }
+        unawaited(_refreshExpiredPricingQuote());
+      },
+    );
+  }
+
+  Future<void> _refreshExpiredPricingQuote() async {
+    try {
+      await refreshPricingQuote(requireConfirmation: true);
+    } on ApiException {
+      // The service sets pricingError and checkout remains blocked.
+    }
+  }
+
+  void _clearPricingQuote() {
+    _replacePricingQuote(null);
+    pricingQuoteNeedsConfirmation = false;
+  }
 
   Future<void> initialize() async {
     loading = true;
@@ -173,6 +251,10 @@ class AppState extends ChangeNotifier {
           stores.where((store) => store.id == savedStore).firstOrNull ??
               stores.firstOrNull;
       if (api.hasSession) await validateSession();
+      await reloadMemberPricing();
+      if (customer != null && cart.isNotEmpty) {
+        await _refreshQuoteQuietly();
+      }
     } catch (exception) {
       error = userMessage(exception);
     } finally {
@@ -223,22 +305,41 @@ class AppState extends ChangeNotifier {
     selectedStore = store;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('selected_store', store.id);
+    _clearPricingQuote();
+    _pricingRequestGeneration++;
+    _memberRequestGeneration++;
     notifyListeners();
+    unawaited(reloadMemberPricing());
+    if (customer != null && cart.isNotEmpty) {
+      unawaited(_refreshQuoteQuietly());
+    }
   }
 
   Future<void> addToCart(Product product, {int quantity = 1}) async {
     await cartController.add(product, quantity: quantity);
+    _clearPricingQuote();
+    _pricingRequestGeneration++;
     notifyListeners();
+    if (customer != null && cart.isNotEmpty) {
+      unawaited(_refreshQuoteQuietly());
+    }
   }
 
   Future<void> setCartQuantity(Product product, int quantity) async {
     await cartController.set(product, quantity);
+    _clearPricingQuote();
+    _pricingRequestGeneration++;
     notifyListeners();
+    if (customer != null && cart.isNotEmpty) {
+      unawaited(_refreshQuoteQuietly());
+    }
   }
 
   Future<void> clearCart() async {
     await cartController.clear();
     await checkoutRepository.abandonAttempt();
+    _clearPricingQuote();
+    _pricingRequestGeneration++;
     notifyListeners();
   }
 
@@ -246,15 +347,34 @@ class AppState extends ChangeNotifier {
 
   Future<void> verifyOtp(String phone, String code) async {
     customer = await authRepository.verifyOtp(phone, code);
+    _clearPricingQuote();
+    _pricingRequestGeneration++;
+    _memberRequestGeneration++;
+    await reloadMemberPricing();
+    if (cart.isNotEmpty) {
+      await _refreshQuoteQuietly();
+    }
     notifyListeners();
   }
 
   Future<void> validateSession() async {
     try {
       customer = await authRepository.validateSession();
+      _clearPricingQuote();
+      _pricingRequestGeneration++;
+      _memberRequestGeneration++;
+      await reloadMemberPricing();
+      if (cart.isNotEmpty) {
+        await _refreshQuoteQuietly();
+      }
     } on ApiException catch (exception) {
       if (exception.statusCode == 401) await api.clearSession();
       customer = null;
+      membership = null;
+      memberPrices = const {};
+      _clearPricingQuote();
+      _pricingRequestGeneration++;
+      _memberRequestGeneration++;
     }
     notifyListeners();
   }
@@ -264,44 +384,227 @@ class AppState extends ChangeNotifier {
       await authRepository.logout();
     } finally {
       customer = null;
+      membership = null;
+      memberPrices = const {};
+      _clearPricingQuote();
+      _pricingRequestGeneration++;
+      _memberRequestGeneration++;
       notifyListeners();
     }
   }
 
   Future<List<CustomerOrder>> loadOrders() => customerRepository.loadOrders();
 
+  Future<void> reloadMemberPricing() async {
+    final store = selectedStore;
+    final requestCustomer = customer;
+    final requestGeneration = ++_memberRequestGeneration;
+    if (requestCustomer == null || store == null || usingFallbackCatalog) {
+      membership = null;
+      memberPrices = const {};
+      return;
+    }
+    try {
+      final loadedMembership = await customerRepository.loadMembership();
+      if (requestGeneration != _memberRequestGeneration ||
+          selectedStore?.id != store.id ||
+          customer?.id != requestCustomer.id) {
+        return;
+      }
+      membership = loadedMembership;
+    } catch (exception) {
+      if (requestGeneration != _memberRequestGeneration) return;
+      membership = null;
+      memberPrices = const {};
+      pricingError = userMessage(exception);
+      notifyListeners();
+      return;
+    }
+    try {
+      final prices = await memberPricingRepository.loadDisplayPrices(
+        store.id,
+        products
+            .map((product) => product.sku)
+            .whereType<String>()
+            .toSet()
+            .toList(),
+      );
+      if (requestGeneration != _memberRequestGeneration ||
+          selectedStore?.id != store.id ||
+          customer?.id != requestCustomer.id) {
+        return;
+      }
+      memberPrices = {for (final price in prices) price.sku: price};
+      pricingError = null;
+    } catch (exception) {
+      if (requestGeneration != _memberRequestGeneration) return;
+      memberPrices = const {};
+      pricingError = userMessage(exception);
+    }
+    notifyListeners();
+  }
+
+  Future<MemberPricingQuote> refreshPricingQuote({
+    bool requireConfirmation = false,
+  }) async {
+    final store = selectedStore;
+    final requestCustomer = customer;
+    final lines = cart;
+    if (requestCustomer == null || store == null || lines.isEmpty) {
+      throw const ApiException(
+        'Sign in, choose a store, and add products before requesting a quote.',
+      );
+    }
+    if (lines.any(
+      (line) => line.product.sku == null || line.product.sku!.isEmpty,
+    )) {
+      throw const ApiException(
+        'A cart product is missing its SKU and cannot be priced.',
+      );
+    }
+    _pricingQuoteExpiryTimer?.cancel();
+    _pricingQuoteExpiryTimer = null;
+    pricingBusy = true;
+    if (requireConfirmation) pricingQuoteNeedsConfirmation = true;
+    pricingError = null;
+    final requestGeneration = ++_pricingRequestGeneration;
+    final cartFingerprint = _cartFingerprint(
+      store.id,
+      requestCustomer.id,
+      lines,
+    );
+    notifyListeners();
+    try {
+      final quote = await memberPricingRepository.createQuote(
+        storeId: store.id,
+        lines: lines,
+      );
+      if (quote.customerReference != requestCustomer.id) {
+        throw const ApiException(
+          'The authoritative quote belongs to a different customer.',
+          kind: ApiErrorKind.invalidResponse,
+        );
+      }
+      if (requestGeneration != _pricingRequestGeneration ||
+          selectedStore?.id != store.id ||
+          customer?.id != requestCustomer.id ||
+          _cartFingerprint(store.id, requestCustomer.id, cart) !=
+              cartFingerprint) {
+        throw const ApiException(
+          'The cart changed while pricing was being refreshed.',
+          kind: ApiErrorKind.conflict,
+        );
+      }
+      _replacePricingQuote(quote);
+      return quote;
+    } catch (exception) {
+      if (requestGeneration == _pricingRequestGeneration) {
+        _replacePricingQuote(null);
+        pricingError = userMessage(exception);
+      }
+      rethrow;
+    } finally {
+      if (requestGeneration == _pricingRequestGeneration) {
+        pricingBusy = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  void requirePricingQuoteConfirmation() {
+    pricingQuoteNeedsConfirmation = true;
+    notifyListeners();
+  }
+
+  void confirmPricingQuote() {
+    pricingQuoteNeedsConfirmation = false;
+    notifyListeners();
+  }
+
+  String _cartFingerprint(
+    String storeId,
+    String customerId,
+    List<CartLine> lines,
+  ) {
+    final entries = lines
+        .map((line) => '${line.product.sku}:${line.quantity}')
+        .toList()
+      ..sort();
+    return '$storeId|$customerId|${entries.join(',')}';
+  }
+
+  Future<Membership> enrollMembership() async {
+    final store = selectedStore;
+    if (customer == null || store == null || store.id == 'offline-store') {
+      throw const ApiException(
+        'Sign in and choose an open store before enrolling.',
+      );
+    }
+    final enrolled = await customerRepository.enrollMembership(store.id);
+    membership = enrolled;
+    _clearPricingQuote();
+    _pricingRequestGeneration++;
+    _memberRequestGeneration++;
+    await reloadMemberPricing();
+    if (cart.isNotEmpty) {
+      await _refreshQuoteQuietly();
+    }
+    notifyListeners();
+    return enrolled;
+  }
+
   Future<CustomerOrder> checkout({
     required String deliveryType,
     required String name,
     required String phone,
     required String address,
-    required String city,
-    required String state,
+    required int? municipalityId,
+    required int? wardId,
     required String postalCode,
+    required MemberPricingQuote acceptedQuote,
     String? notes,
   }) async {
     if (customer == null) {
-      throw const ApiException('Please sign in to checkout.',
-          kind: ApiErrorKind.authentication);
+      throw const ApiException(
+        'Please sign in to checkout.',
+        kind: ApiErrorKind.authentication,
+      );
     }
     final store = selectedStore;
     if (store == null || store.id == 'offline-store') {
       throw const ApiException('Choose a live store before checkout');
     }
     if (cart.isEmpty) throw const ApiException('Your cart is empty');
+    if (pricingQuoteNeedsConfirmation) {
+      throw const ApiException(
+        'Please confirm the refreshed authoritative price before checkout.',
+        kind: ApiErrorKind.conflict,
+      );
+    }
+    final currentQuote = currentPricingQuote;
+    if (currentQuote == null ||
+        currentQuote.id != acceptedQuote.id ||
+        acceptedQuote.isExpired) {
+      throw const ApiException(
+        'The authoritative price quote is no longer valid. Review the updated cart.',
+        kind: ApiErrorKind.conflict,
+      );
+    }
     final order = await checkoutRepository.checkout(
       store: store,
       customer: customer!,
       lines: cart,
+      quote: acceptedQuote,
       details: CheckoutDetails(
-          deliveryType: deliveryType,
-          name: name,
-          phone: phone,
-          address: address,
-          city: city,
-          state: state,
-          postalCode: postalCode,
-          notes: notes),
+        deliveryType: deliveryType,
+        name: name,
+        phone: phone,
+        address: address,
+        municipalityId: municipalityId,
+        wardId: wardId,
+        postalCode: postalCode,
+        notes: notes,
+      ),
     );
     await clearCart();
     return order;
@@ -309,11 +612,17 @@ class AppState extends ChangeNotifier {
 
   Future<void> _onSessionExpired() async {
     customer = null;
+    membership = null;
+    memberPrices = const {};
+    _clearPricingQuote();
+    _pricingRequestGeneration++;
+    _memberRequestGeneration++;
     notifyListeners();
   }
 
   @override
   void dispose() {
+    _pricingQuoteExpiryTimer?.cancel();
     api.close();
     super.dispose();
   }
@@ -335,9 +644,17 @@ const _fallbackCategories = <ProductCategory>[
     skuCount: 25,
   ),
   ProductCategory(
-      id: 'opening-5', name: 'Laundry', slug: 'laundry', skuCount: 25),
+    id: 'opening-5',
+    name: 'Laundry',
+    slug: 'laundry',
+    skuCount: 25,
+  ),
   ProductCategory(
-      id: 'opening-6', name: 'Hair care', slug: 'hair-care', skuCount: 25),
+    id: 'opening-6',
+    name: 'Hair care',
+    slug: 'hair-care',
+    skuCount: 25,
+  ),
 ];
 
 extension _FirstOrNull<T> on Iterable<T> {

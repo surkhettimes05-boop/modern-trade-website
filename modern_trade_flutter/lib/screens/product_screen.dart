@@ -20,6 +20,11 @@ class _ProductScreenState extends State<ProductScreen> {
   Widget build(BuildContext context) {
     final product = widget.product;
     final state = AppScope.of(context);
+    final memberPrice =
+        product.sku == null ? null : state.memberPrices[product.sku];
+    final memberEligible = state.membership?.isActive == true &&
+        memberPrice != null &&
+        memberPrice.appliedUnitMinor < memberPrice.regularUnitMinor;
     return Scaffold(
       appBar: AppBar(title: Text(product.category)),
       body: ListView(
@@ -66,18 +71,40 @@ class _ProductScreenState extends State<ProductScreen> {
                   ],
                 ),
                 const SizedBox(height: 18),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      formatNpr(product.price),
+                      memberEligible
+                          ? formatNprMinor(memberPrice.appliedUnitMinor)
+                          : formatNpr(product.price),
                       style: const TextStyle(
                         color: AppColors.brand,
                         fontSize: 25,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    if (product.originalPrice != null) ...[
-                      const SizedBox(width: 10),
+                    if (memberEligible) ...[
+                      Text(
+                        'Regular ${formatNprMinor(memberPrice.regularUnitMinor)}',
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                      Text(
+                        '${state.membership!.tier == 'FOUNDING_1000' ? 'Founding 1,000' : 'Registered member'} price · Save ${formatNprMinor(memberPrice.savingPerUnitMinor)} per unit',
+                        style: const TextStyle(
+                          color: AppColors.brand,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (memberPrice.promotionName != null)
+                        Text(
+                          memberPrice.promotionName!,
+                          style: const TextStyle(color: AppColors.muted),
+                        ),
+                    ] else if (product.originalPrice != null)
                       Text(
                         formatNpr(product.originalPrice!),
                         style: const TextStyle(
@@ -85,7 +112,6 @@ class _ProductScreenState extends State<ProductScreen> {
                           decoration: TextDecoration.lineThrough,
                         ),
                       ),
-                    ],
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -101,10 +127,9 @@ class _ProductScreenState extends State<ProductScreen> {
                 const Divider(height: 36),
                 Text(
                   'About this product',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w900),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -115,8 +140,10 @@ class _ProductScreenState extends State<ProductScreen> {
                 ),
                 if (product.unit != null) ...[
                   const SizedBox(height: 18),
-                  Text('Pack: ${product.unit}',
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(
+                    'Pack: ${product.unit}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ],
               ],
             ),
@@ -146,8 +173,10 @@ class _ProductScreenState extends State<ProductScreen> {
                           : null,
                       icon: const Icon(Icons.remove),
                     ),
-                    Text('$_quantity',
-                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Text(
+                      '$_quantity',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
                     IconButton(
                       onPressed: () => setState(() => _quantity++),
                       icon: const Icon(Icons.add),
@@ -164,8 +193,8 @@ class _ProductScreenState extends State<ProductScreen> {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                  content:
-                                      Text('${product.name} added to cart')),
+                                content: Text('${product.name} added to cart'),
+                              ),
                             );
                           }
                         }

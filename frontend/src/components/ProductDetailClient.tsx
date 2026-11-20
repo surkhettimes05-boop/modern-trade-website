@@ -35,14 +35,16 @@ export function ProductGallery({ product }: { product: Product }) {
 }
 
 export function BuyBox({ product }: { product: Product }) {
-  const { add } = useShop();
+  const { add, displayPrices, membership } = useShop();
   const [quantity, setQuantity] = useState(1);
   const save = product.originalPrice ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
+  const memberPrice = product.sku ? displayPrices[product.sku] : undefined;
+  const memberEligible = membership?.status === 'ACTIVE' && Boolean(membership.tier_key) && memberPrice && Number(memberPrice.appliedUnitPrice) < Number(memberPrice.regularUnitPrice);
   const unavailable = product.availability.toLowerCase().includes('out of');
   return <div className="buy-box">
     <span className="brand">{product.brand}</span><h1>{product.name}</h1>
     <div className="pdp-rating">★ {product.rating || '—'} <a href="#reviews">{product.reviews} reviews</a></div>
-    <div className="pdp-price"><strong>{formatPrice(product.price)}</strong>{product.originalPrice && <><del>{formatPrice(product.originalPrice)}</del><span>Save {save}%</span></>}</div>
+    <div className="pdp-price"><strong>{memberEligible ? formatPrice(Number(memberPrice.appliedUnitPrice)) : formatPrice(product.price)}</strong>{memberEligible ? <><del>{formatPrice(Number(memberPrice.regularUnitPrice))}</del><span>{membership.tier_key === 'FOUNDING_1000' ? 'Founding 1,000 price' : 'Member price'}</span><small className="block">Save {formatPrice(Number(memberPrice.savingPerUnit))} per unit</small>{memberPrice.promotionSnapshot && <small className="block text-slate-500">{memberPrice.promotionSnapshot.name}</small>}</> : product.originalPrice && <><del>{formatPrice(product.originalPrice)}</del><span>Save {save}%</span></>}</div>
     <small>Inclusive of all taxes · {product.unit}</small>
     <div className="availability"><b>● {product.availability}</b><span>Based on your selected store</span></div>
     <div className="fulfilment"><div><Truck /><span><b>Delivery</b><small>Eligibility shown at checkout</small></span><strong>CHECK</strong></div><div><ShoppingBag /><span><b>Store pickup</b><small>Ready time depends on store stock</small></span><strong>CHECK</strong></div></div>

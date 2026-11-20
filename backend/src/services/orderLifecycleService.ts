@@ -24,17 +24,14 @@ export class OrderLifecycleService {
    * Valid state transitions
    */
   private readonly validTransitions: Record<string, string[]> = {
-    DRAFT: ["PENDING_PAYMENT", "CANCELLED"],
-    PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
-    CONFIRMED: ["PICKING", "CANCELLED"],
-    PICKING: ["PACKED", "CANCELLED"],
-    PACKED: ["OUT_FOR_DELIVERY", "CANCELLED"],
-    OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED"],
-    DELIVERED: ["RETURN_REQUESTED"],
-    RETURN_REQUESTED: ["RETURNED"],
-    RETURNED: ["REFUNDED"],
+    RECEIVED: ["CONFIRMED", "CANCELLED", "FAILED"],
+    CONFIRMED: ["PROCESSING", "CANCELLED"],
+    PROCESSING: ["READY", "CANCELLED", "FAILED"],
+    READY: ["OUT_FOR_DELIVERY", "CANCELLED", "FAILED"],
+    OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED", "FAILED"],
+    DELIVERED: [],
+    FAILED: [],
     CANCELLED: [],
-    REFUNDED: [],
   };
 
   /**
@@ -161,7 +158,7 @@ export class OrderLifecycleService {
 
     // Check if order can be cancelled
     if (
-      !["DRAFT", "PENDING_PAYMENT", "CONFIRMED", "PICKING", "PACKED"].includes(
+      !["RECEIVED", "CONFIRMED", "PROCESSING", "READY"].includes(
         order.status,
       )
     ) {
@@ -274,11 +271,10 @@ export class OrderLifecycleService {
     toStatus: string,
   ): string {
     const transitionMap: Record<string, string> = {
-      "DRAFT->PENDING_PAYMENT": "CREATED",
-      "PENDING_PAYMENT->CONFIRMED": "CONFIRMED",
-      "CONFIRMED->PICKING": "PICKING",
-      "PICKING->PACKED": "PACKED",
-      "PACKED->OUT_FOR_DELIVERY": "SHIPPED",
+      "RECEIVED->CONFIRMED": "CONFIRMED",
+      "CONFIRMED->PROCESSING": "PROCESSING",
+      "PROCESSING->READY": "READY",
+      "READY->OUT_FOR_DELIVERY": "SHIPPED",
       "OUT_FOR_DELIVERY->DELIVERED": "DELIVERED",
       "DELIVERED->RETURN_REQUESTED": "RETURN_REQUESTED",
       "RETURN_REQUESTED->RETURNED": "RETURNED",

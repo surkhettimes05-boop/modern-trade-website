@@ -26,6 +26,28 @@ beforeEach(() => {
   db.mockImplementation(async (sql: string) => {
     if (sql.includes("FROM shopping_carts"))
       return { rowCount: 1, rows: [{ store_id: "store" }] };
+    if (sql.includes("FROM stores") && sql.includes("organization_id"))
+      return {
+        rowCount: 1,
+        rows: [{ id: "store", organization_id: "organization" }],
+      };
+    if (sql.includes("FROM products") && sql.includes("member_pricing_policies"))
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: "rice",
+            sku: "RICE",
+            name_en: "Rice",
+            product_status: "PUBLISHED",
+            regular_price: "125.50",
+            currency_code: "NPR",
+            weighted_cost: null,
+            has_missing_cost: false,
+            margin_floor: "5.00",
+          },
+        ],
+      };
     if (sql.includes("FROM products"))
       return {
         rowCount: 1,
@@ -95,6 +117,8 @@ test("checkout replay locks its key and returns the existing order without stock
     customerId: "customer",
     storeId: "store",
     idempotencyKey: "retry-key",
+    signedQuoteToken: "signed-pricing-quote-token-for-test",
+    channel: "WEB",
     deliveryType: "PICKUP",
     shippingName: "Test",
     shippingPhone: "9812345678",
@@ -130,11 +154,11 @@ test("POS derives all amounts from catalog and atomically creates cash NPR draft
     ],
   });
   const sale = db.mock.calls.find(([sql]) => sql.includes("INSERT INTO sales"));
-  expect(sale?.[1][3]).toBe(251);
+  expect(sale?.[1][3]).toBe("251.00");
   const item = db.mock.calls.find(([sql]) =>
     sql.includes("INSERT INTO sale_items"),
   );
-  expect(item?.[1].slice(4)).toEqual([2, "125.50", 251]);
+  expect(item?.[1].slice(4)).toEqual([2, "125.50", "251.00", "0.00", null]);
   expect(db).toHaveBeenCalledWith("COMMIT");
 });
 

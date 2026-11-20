@@ -1,10 +1,20 @@
 import { getPool, query } from "../../database/connection.js";
 import { createHash } from "node:crypto";
 import { CheckoutService } from "../checkoutService.js";
+import { resolveMemberPricing } from "../memberPricingService.js";
+import { validateMemberPricingQuote } from "../memberPricingQuoteService.js";
 
 jest.mock("../../database/connection.js", () => ({
   getPool: jest.fn(),
   query: jest.fn(),
+}));
+jest.mock("../memberPricingService.js", () => ({
+  ...jest.requireActual("../memberPricingService.js"),
+  resolveMemberPricing: jest.fn(),
+}));
+jest.mock("../memberPricingQuoteService.js", () => ({
+  ...jest.requireActual("../memberPricingQuoteService.js"),
+  validateMemberPricingQuote: jest.fn(),
 }));
 
 const databaseQuery = query as jest.Mock;
@@ -26,6 +36,42 @@ describe("COD checkout fulfillment authority", () => {
     clientQuery.mockReset();
     release.mockReset();
     databaseQuery.mockReset();
+    jest.mocked(resolveMemberPricing).mockReset().mockResolvedValue([{
+      product_id: productId,
+      sku: "RICE",
+      product_name: "Rice",
+      regular_price: "100.00",
+      final_price: "100.00",
+      discount_per_unit: "0.00",
+      promotion_id: null,
+    }]);
+    jest.mocked(validateMemberPricingQuote).mockReset().mockResolvedValue({
+      quoteId: "00000000-0000-0000-0000-000000000040",
+      channel: "WEB",
+      storeReference: serverStoreId,
+      customerReference: customerId,
+      membershipNumber: null,
+      membershipTier: null,
+      membershipStatus: "NOT_MEMBER",
+      customerStatus: "ACTIVE",
+      items: [{
+        sku: "RICE",
+        quantity: "1",
+        regularUnitPrice: "100.00",
+        appliedUnitPrice: "100.00",
+        lineDiscount: "0.00",
+        lineTotal: "100.00",
+        promotionReference: null,
+        promotionSnapshot: null,
+      }],
+      subtotal: "100.00",
+      discountTotal: "0.00",
+      finalTotal: "100.00",
+      currency: "NPR",
+      pricingRuleVersion: 1,
+      issuedAt: "2026-01-01T00:00:00.000Z",
+      expiresAt: "2026-01-01T00:05:00.000Z",
+    });
     databaseQuery.mockImplementation(
       async (sql: string, params?: unknown[]) => {
         if (sql.includes("FROM stores"))
@@ -96,8 +142,14 @@ describe("COD checkout fulfillment authority", () => {
       }
       if (sql.includes("p.name_en")) {
         return {
-          rows: [{ product_id: productId, name_en: "Rice", product_status: "PUBLISHED", authoritative_price: "100.00" }],
+          rows: [{ product_id: productId, sku: "RICE", name_en: "Rice", product_status: "PUBLISHED", authoritative_price: "100.00" }],
         };
+      }
+      if (sql.includes("FROM customers")) {
+        return { rows: [{ phone_normalized: "+9779812345678" }], rowCount: 1 };
+      }
+      if (sql.includes("FROM member_pricing_policies")) {
+        return { rows: [{ pricing_rule_version: 1 }], rowCount: 1 };
       }
       if (sql.includes("COALESCE(inventory.stock")) {
         expect(params?.[1]).toBe(serverStoreId);
@@ -140,6 +192,8 @@ describe("COD checkout fulfillment authority", () => {
       addressId,
       cartId,
       idempotencyKey: "same-order-attempt-123",
+      signedQuoteToken: "signed-qa-quote",
+      channel: "WEB",
       deliveryType: "DELIVERY",
       shippingName: "Customer",
       shippingPhone: "+9779812345678",
@@ -158,10 +212,10 @@ describe("COD checkout fulfillment authority", () => {
       item.sql.includes("INSERT INTO web_orders"),
     );
     expect(insertOrder?.params?.[2]).toBe(serverStoreId);
-    expect(insertOrder?.params?.[11]).toBe("12, Main Road, Surkhet");
-    expect(insertOrder?.params?.[14]).toBe("21700");
-    expect(insertOrder?.params?.[16]).toBe(10);
-    expect(insertOrder?.params?.[17]).toBe(20);
+    expect(insertOrder?.params?.[12]).toBe("12, Main Road, Surkhet");
+    expect(insertOrder?.params?.[15]).toBe("21700");
+    expect(insertOrder?.params?.[17]).toBe(10);
+    expect(insertOrder?.params?.[18]).toBe(20);
     expect(
       calls.some((item) => item.params?.includes(wrongClientStoreId)),
     ).toBe(false);
@@ -210,6 +264,8 @@ describe("COD checkout fulfillment authority", () => {
       addressId,
       cartId,
       idempotencyKey: "same-order-attempt-123",
+      signedQuoteToken: "signed-qa-quote",
+      channel: "WEB",
       deliveryType: "DELIVERY",
       shippingName: "Customer",
       shippingPhone: "+9779812345678",
@@ -245,6 +301,8 @@ describe("COD checkout fulfillment authority", () => {
         addressId,
         cartId,
         idempotencyKey: "same-order-attempt-123",
+        signedQuoteToken: "signed-qa-quote",
+        channel: "WEB",
         deliveryType: "DELIVERY",
         shippingName: "Changed customer name",
         shippingPhone: "+9779812345678",

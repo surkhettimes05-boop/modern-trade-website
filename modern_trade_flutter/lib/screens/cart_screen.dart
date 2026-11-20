@@ -14,13 +14,16 @@ class CartScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final pricingQuote = state.currentPricingQuote;
     if (state.cart.isEmpty) {
       return EmptyState(
         icon: Icons.shopping_cart_outlined,
         title: 'Your cart is ready for good things',
         message: 'Add everyday essentials and come back when you are ready.',
         action: ElevatedButton(
-            onPressed: onShop, child: const Text('Start shopping')),
+          onPressed: onShop,
+          child: const Text('Start shopping'),
+        ),
       );
     }
     return Column(
@@ -50,9 +53,15 @@ class CartScreen extends StatelessWidget {
                   children: [
                     const Expanded(child: Text('Subtotal')),
                     Text(
-                      formatNpr(state.cartSubtotal),
+                      pricingQuote == null && state.customer != null
+                          ? state.pricingBusy
+                              ? 'Updating…'
+                              : 'Price unavailable'
+                          : formatNprMinor(state.cartSubtotalMinor),
                       style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w900),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ],
                 ),
@@ -76,14 +85,27 @@ class CartScreen extends StatelessWidget {
                         final signedIn = await Navigator.push<bool>(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const LoginScreen()),
+                            builder: (_) => const LoginScreen(),
+                          ),
                         );
                         if (signedIn != true || !context.mounted) return;
+                      }
+                      if (state.currentPricingQuote == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              state.pricingError ??
+                                  'Waiting for an authoritative price quote.',
+                            ),
+                          ),
+                        );
+                        return;
                       }
                       await Navigator.push<void>(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const CheckoutScreen()),
+                          builder: (_) => const CheckoutScreen(),
+                        ),
                       );
                     },
                     iconAlignment: IconAlignment.end,
@@ -107,6 +129,11 @@ class _CartLineItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final quotedItems = state.currentPricingQuote?.items
+            .where((item) => item.sku == line.product.sku)
+            .toList() ??
+        const [];
+    final quoteItem = quotedItems.isEmpty ? null : quotedItems.first;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -123,23 +150,50 @@ class _CartLineItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(line.product.name,
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(
+                line.product.name,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 5),
-              Text(formatNpr(line.product.price),
+              if (quoteItem != null) ...[
+                Text(
+                  formatNprMinor(quoteItem.appliedUnitMinor),
                   style: const TextStyle(
                     color: AppColors.brand,
                     fontWeight: FontWeight.w900,
-                  )),
+                  ),
+                ),
+                Text(
+                  'Regular ${formatNprMinor(quoteItem.regularUnitMinor)} · Save ${formatNprMinor(quoteItem.savingPerUnitMinor)} per item',
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                ),
+                if (quoteItem.promotionName != null)
+                  Text(
+                    quoteItem.promotionName!,
+                    style: const TextStyle(
+                      color: AppColors.brand,
+                      fontSize: 12,
+                    ),
+                  ),
+              ] else
+                Text(
+                  state.customer == null
+                      ? formatNpr(line.product.price)
+                      : state.pricingBusy
+                          ? 'Updating price…'
+                          : 'Price unavailable',
+                  style: const TextStyle(
+                    color: AppColors.brand,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   _QuantityButton(
                     icon: Icons.remove,
-                    onTap: () => state.setCartQuantity(
-                      line.product,
-                      line.quantity - 1,
-                    ),
+                    onTap: () =>
+                        state.setCartQuantity(line.product, line.quantity - 1),
                   ),
                   SizedBox(
                     width: 38,
@@ -151,17 +205,17 @@ class _CartLineItem extends StatelessWidget {
                   ),
                   _QuantityButton(
                     icon: Icons.add,
-                    onTap: () => state.setCartQuantity(
-                      line.product,
-                      line.quantity + 1,
-                    ),
+                    onTap: () =>
+                        state.setCartQuantity(line.product, line.quantity + 1),
                   ),
                   const Spacer(),
                   IconButton(
                     tooltip: 'Remove item',
                     onPressed: () => state.setCartQuantity(line.product, 0),
-                    icon: const Icon(Icons.delete_outline,
-                        color: AppColors.danger),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.danger,
+                    ),
                   ),
                 ],
               ),

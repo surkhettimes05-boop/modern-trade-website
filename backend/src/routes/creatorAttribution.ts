@@ -1,0 +1,435 @@
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { getPool } from "../database/connection.js";
+
+const posSaleSchema = z.object({
+  schemaVersion: z.literal(1),
+  eventType: z.literal("POS_SALE_COMPLETED"),
+  sourceSystem: z.literal("POS"),
+  sourceTransactionId: z.string().uuid(),
+  sourceTransactionNumber: z.string().min(1).max(100),
+  customerPhoneHash: z.string().regex(/^[a-f0-9]{64}$/),
+  currency: z.literal("NPR"),
+  eligibleSpendNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),
+  cogsNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/).nullable().optional(),
+  costStatus: z.enum(["VERIFIED", "UNKNOWN"]).optional(),
+  completedAt: z.string().datetime(),
+});
+
+const posReturnSchema = z.object({
+  schemaVersion: z.literal(1),
+  eventType: z.literal("POS_SALE_RETURNED"),
+  sourceSystem: z.literal("POS"),
+  sourceTransactionId: z.string().uuid(),
+  originalSourceTransactionId: z.string().uuid(),
+  sourceTransactionNumber: z.string().min(1).max(100),
+  customerPhoneHash: z.string().regex(/^[a-f0-9]{64}$/),
+  refundAmountNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),
+  reversedCogsNpr: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/).nullable().optional(),
+  costStatus: z.enum(["VERIFIED", "UNKNOWN"]).optional(),
+  completedAt: z.string().datetime(),
+});
+
+function verifySignature(timestamp: string, signature: string, body: string) {
+  const secret = process.env.CREATOR_ATTRIBUTION_HMAC_SECRET;
+  if (!secret || !/^\d{10}$/.test(timestamp) || !/^[a-f0-9]{64}$/i.test(signature)) {
+    return false;
+  }
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isSafeInteger(timestampSeconds) || Math.abs(Date.now() / 1000 - timestampSeconds) > 300) {
+    return false;
+  }
+  const expected = createHmac("sha256", secret)
+    .update(`${timestamp}.${body}`)
+    .digest();
+  const received = Buffer.from(signature, "hex");
+  return received.length === expected.length && timingSafeEqual(received, expected);
+}
+
+export async function creatorAttributionRoutes(fastify: FastifyInstance) {
+  fastify.get(
+    "/public/creators/:slug/visit",
+    { config: { rateLimit: { max: 20, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const params = z.object({ slug: z.string().min(2).max(48) }).parse(request.params);
+      const creator = await getPool().query(
+        "SELECT id FROM creators WHERE referral_slug = $1 AND status = 'ACTIVE' LIMIT 1",
+        [params.slug],
+      );
+      if (!creator.rowCount) {
+        return reply.status(404).send({ error: "Creator referral is unavailable" });
+      }
+
+      const queryParams = z.object({ next: z.string().optional() }).safeParse(request.query);
+      const requestedNext = queryParams.success && queryParams.data.next?.startsWith("/") && !queryParams.data.next.startsWith("//")
+        ? queryParams.data.next
+        : "/";
+      const webBase = process.env.CUSTOMER_WEB_URL || process.env.CORS_ORIGIN || "/";
+      const existingToken = (request as any).cookies?.pasalho_creator_referral;
+      if (typeof existingToken === "string" && /^[a-f0-9]{64}$/i.test(existingToken)) {
+        const existingHash = createHash("sha256").update(existingToken).digest("hex");
+        const existingVisit = await getPool().query(
+          `SELECT v.landing_path
+             FROM creator_referral_visits v
+             JOIN creators c ON c.id = v.creator_id AND c.status = 'ACTIVE'
+            WHERE v.visit_token_hash = $1 AND v.expires_at > NOW()
+            LIMIT 1`,
+          [existingHash],
+        );
+        if (existingVisit.rowCount) {
+          const nextPath = existingVisit.rows[0].landing_path || requestedNext;
+          const destination = webBase === "/" ? nextPath : new URL(nextPath, webBase).toString();
+          reply.header("cache-control", "no-store");
+          return reply.redirect(destination);
+        }
+      }
+
+      const token = randomBytes(32).toString("hex");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
+      const visit = await getPool().query(
+        `INSERT INTO creator_referral_visits (
+           creator_id, visit_token_hash, landing_path, expires_at
+         ) VALUES (
+           $1, $2, $3,
+           NOW() + make_interval(days => COALESCE(
+             (SELECT attribution_window_days FROM creator_reward_settings WHERE id = 1), 30
+           ))
+         )
+         RETURNING expires_at`,
+        [creator.rows[0].id, tokenHash, requestedNext],
+      );
+      reply.setCookie("pasalho_creator_referral", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: Math.max(1, Math.floor((new Date(visit.rows[0].expires_at).getTime() - Date.now()) / 1000)),
+      });
+      reply.header("cache-control", "no-store");
+      const destination = webBase === "/" ? requestedNext : new URL(requestedNext, webBase).toString();
+      return reply.redirect(destination);
+    },
+  );
+
+
+  fastify.post("/creator-attribution/pos-sales", async (request, reply) => {
+    const timestamp = String(request.headers["x-pasalho-timestamp"] ?? "");
+    const signature = String(request.headers["x-pasalho-signature"] ?? "");
+    const eventKey = String(request.headers["x-pasalho-event-key"] ?? "");
+    const body = JSON.stringify(request.body ?? {});
+
+    if (!verifySignature(timestamp, signature, body)) {
+      return reply.status(401).send({ error: "Invalid or expired event signature" });
+    }
+    if (!/^pos-sale:[0-9a-f-]{36}$/i.test(eventKey)) {
+      return reply.status(400).send({ error: "Invalid event key" });
+    }
+
+    const parsed = posSaleSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid POS attribution event", details: parsed.error.issues });
+    }
+    const event = parsed.data;
+    if (eventKey !== `pos-sale:${event.sourceTransactionId}`) {
+      return reply.status(409).send({ error: "Event key does not match transaction" });
+    }
+
+    const payloadHash = createHash("sha256").update(body).digest("hex");
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const received = await client.query(
+        `INSERT INTO creator_integration_events (source_system, event_key, payload_hash)
+         VALUES ('POS', $1, $2)
+         ON CONFLICT (event_key) DO NOTHING
+         RETURNING id`,
+        [eventKey, payloadHash],
+      );
+
+      if (!received.rowCount) {
+        const prior = await client.query(
+          "SELECT payload_hash, processing_status FROM creator_integration_events WHERE event_key = $1",
+          [eventKey],
+        );
+        if (prior.rows[0]?.payload_hash !== payloadHash) {
+          await client.query("ROLLBACK");
+          return reply.status(409).send({ error: "Idempotency payload conflict" });
+        }
+        await client.query("COMMIT");
+        return { accepted: true, replay: true, status: prior.rows[0]?.processing_status };
+      }
+
+      const customer = await client.query(
+        `SELECT id FROM customers
+          WHERE phone_hash = $1 AND status = 'ACTIVE'
+            AND verification_status = 'VERIFIED' AND deleted_at IS NULL
+          LIMIT 1`,
+        [event.customerPhoneHash],
+      );
+      if (!customer.rowCount) {
+        await client.query(
+          `UPDATE creator_integration_events
+              SET processing_status = 'REJECTED', error_code = 'CUSTOMER_UNVERIFIED',
+                  processed_at = NOW()
+            WHERE event_key = $1`,
+          [eventKey],
+        );
+        await client.query("COMMIT");
+        return { accepted: true, attributed: false, reason: "CUSTOMER_UNVERIFIED" };
+      }
+
+      const attribution = await client.query(
+        `SELECT a.creator_id
+           FROM creator_customer_attributions a
+           JOIN creators c ON c.id = a.creator_id AND c.status = 'ACTIVE'
+          WHERE a.customer_id = $1`,
+        [customer.rows[0].id],
+      );
+      if (!attribution.rowCount) {
+        await client.query(
+          `UPDATE creator_integration_events
+              SET processing_status = 'PROCESSED', processed_at = NOW()
+            WHERE event_key = $1`,
+          [eventKey],
+        );
+        await client.query("COMMIT");
+        return { accepted: true, attributed: false, reason: "NO_CREATOR_ATTRIBUTION" };
+      }
+
+      const settings = await client.query(
+        "SELECT default_rate_percent, hold_days FROM creator_reward_settings WHERE id = 1",
+      );
+      const rate = settings.rows[0]?.default_rate_percent ?? "1.00";
+      const holdDays = Number(settings.rows[0]?.hold_days ?? 14);
+      const availableAt = new Date(Date.parse(event.completedAt) + holdDays * 86400000);
+
+      const purchase = await client.query(
+        `INSERT INTO creator_purchase_events (
+           creator_id, customer_id, source_system, source_transaction_id,
+           source_transaction_number, currency, eligible_spend_npr,
+           reward_rate_percent, reward_amount_npr, event_status, eligible_at,
+           available_at, payload_hash, cogs_npr, cost_status
+         )
+         VALUES (
+           $1, $2, 'POS', $3, $4, 'NPR', $5::numeric, $6::numeric,
+           ROUND($5::numeric * $6::numeric / 100, 2), 'PENDING',
+           $7::timestamptz, $8::timestamptz, $9, $10::numeric, $11
+         )
+         ON CONFLICT (source_system, source_transaction_id) DO NOTHING
+         RETURNING id, reward_amount_npr`,
+        [
+          attribution.rows[0].creator_id,
+          customer.rows[0].id,
+          event.sourceTransactionId,
+          event.sourceTransactionNumber,
+          event.eligibleSpendNpr,
+          rate,
+          event.completedAt,
+          availableAt.toISOString(),
+          payloadHash,
+          event.cogsNpr ?? null,
+          event.costStatus ?? (event.cogsNpr ? "VERIFIED" : "UNKNOWN"),
+        ],
+      );
+      if (!purchase.rowCount) {
+        await client.query("ROLLBACK");
+        return reply.status(409).send({ error: "Purchase event already exists with another event key" });
+      }
+
+      await client.query(
+        `INSERT INTO creator_reward_ledger (
+           creator_id, purchase_event_id, entry_type, amount_npr,
+           idempotency_key, note
+         ) VALUES ($1, $2, 'EARN', $3::numeric, $4, 'Pending POS creator reward')`,
+        [
+          attribution.rows[0].creator_id,
+          purchase.rows[0].id,
+          purchase.rows[0].reward_amount_npr,
+          `creator-earn:POS:${event.sourceTransactionId}`,
+        ],
+      );
+      await client.query(
+        `UPDATE creator_integration_events
+            SET processing_status = 'PROCESSED', processed_at = NOW()
+          WHERE event_key = $1`,
+        [eventKey],
+      );
+      await client.query("COMMIT");
+      return {
+        accepted: true,
+        attributed: true,
+        rewardStatus: "PENDING",
+        rewardAmountNpr: String(purchase.rows[0].reward_amount_npr),
+        availableAt: availableAt.toISOString(),
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  // Signed POS refund/recovery adjustment. Partial refunds reduce the original
+  // purchase's eligible spend and reward; a full refund reverses its remainder.
+  fastify.post("/creator-attribution/pos-returns", async (request, reply) => {
+    const timestamp = String(request.headers["x-pasalho-timestamp"] ?? "");
+    const signature = String(request.headers["x-pasalho-signature"] ?? "");
+    const eventKey = String(request.headers["x-pasalho-event-key"] ?? "");
+    const body = JSON.stringify(request.body ?? {});
+    if (!verifySignature(timestamp, signature, body)) {
+      return reply.status(401).send({ error: "Invalid or expired event signature" });
+    }
+    if (!/^pos-return:[0-9a-f-]{36}$/i.test(eventKey)) {
+      return reply.status(400).send({ error: "Invalid return event key" });
+    }
+    const parsed = posReturnSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid POS return event", details: parsed.error.issues });
+    }
+    const event = parsed.data;
+    if (eventKey !== `pos-return:${event.sourceTransactionId}`) {
+      return reply.status(409).send({ error: "Event key does not match return transaction" });
+    }
+
+    const payloadHash = createHash("sha256").update(body).digest("hex");
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const received = await client.query(
+        `INSERT INTO creator_integration_events (source_system, event_key, payload_hash)
+         VALUES ('POS', $1, $2) ON CONFLICT (event_key) DO NOTHING RETURNING id`,
+        [eventKey, payloadHash],
+      );
+      if (!received.rowCount) {
+        const prior = await client.query(
+          "SELECT payload_hash, processing_status FROM creator_integration_events WHERE event_key = $1",
+          [eventKey],
+        );
+        if (prior.rows[0]?.payload_hash !== payloadHash) {
+          await client.query("ROLLBACK");
+          return reply.status(409).send({ error: "Idempotency payload conflict" });
+        }
+        await client.query("COMMIT");
+        return { accepted: true, replay: true, status: prior.rows[0]?.processing_status };
+      }
+
+      const customer = await client.query(
+        `SELECT id FROM customers WHERE phone_hash = $1 AND status = 'ACTIVE'
+          AND verification_status = 'VERIFIED' AND deleted_at IS NULL LIMIT 1`,
+        [event.customerPhoneHash],
+      );
+      if (!customer.rowCount) {
+        await client.query(
+          `UPDATE creator_integration_events SET processing_status = 'REJECTED',
+            error_code = 'CUSTOMER_UNVERIFIED', processed_at = NOW() WHERE event_key = $1`,
+          [eventKey],
+        );
+        await client.query("COMMIT");
+        return { accepted: true, attributed: false, reason: "CUSTOMER_UNVERIFIED" };
+      }
+
+      const original = await client.query(
+        `SELECT id, creator_id, customer_id, eligible_spend_npr, reward_rate_percent,
+                reward_amount_npr, event_status, available_at, cogs_npr, cost_status
+           FROM creator_purchase_events
+          WHERE source_system = 'POS' AND source_transaction_id = $1
+            AND customer_id = $2
+          FOR UPDATE`,
+        [event.originalSourceTransactionId, customer.rows[0].id],
+      );
+      if (!original.rowCount) {
+        await client.query(
+          `UPDATE creator_integration_events SET processing_status = 'PROCESSED',
+            processed_at = NOW() WHERE event_key = $1`,
+          [eventKey],
+        );
+        await client.query("COMMIT");
+        return { accepted: true, attributed: false, reason: "ORIGINAL_PURCHASE_NOT_ATTRIBUTED" };
+      }
+
+      const purchase = original.rows[0];
+      const refundable = Math.min(Number(event.refundAmountNpr), Number(purchase.eligible_spend_npr));
+      const rewardBefore = Number(purchase.reward_amount_npr);
+      const eligibleBefore = Number(purchase.eligible_spend_npr);
+      const rewardReversal = eligibleBefore <= 0 || refundable <= 0
+        ? 0
+        : refundable >= eligibleBefore
+          ? rewardBefore
+          : Math.min(rewardBefore, Math.round((rewardBefore * refundable / eligibleBefore) * 100) / 100);
+      const remainingSpend = Math.max(0, eligibleBefore - refundable);
+      const remainingReward = Math.max(0, rewardBefore - rewardReversal);
+      const nextStatus = remainingSpend <= 0.000001 ? "REVERSED" : purchase.event_status;
+      const hasReversedCostEvidence = purchase.cost_status === "VERIFIED" &&
+        event.costStatus === "VERIFIED" && event.reversedCogsNpr !== null && event.reversedCogsNpr !== undefined;
+      const reversedCogs = hasReversedCostEvidence
+        ? Math.min(Number(event.reversedCogsNpr), Number(purchase.cogs_npr ?? 0))
+        : 0;
+      const remainingCogs = hasReversedCostEvidence
+        ? Math.max(0, Number(purchase.cogs_npr ?? 0) - reversedCogs)
+        : null;
+      const nextCostStatus = hasReversedCostEvidence ? "VERIFIED" : "UNKNOWN";
+
+      const reversal = await client.query(
+        `INSERT INTO creator_purchase_events (
+           creator_id, customer_id, source_system, source_transaction_id,
+           source_transaction_number, currency, eligible_spend_npr,
+           reward_rate_percent, reward_amount_npr, event_status, eligible_at,
+           available_at, reversal_of_event_id, payload_hash, cogs_npr, cost_status
+         ) VALUES ($1, $2, 'POS', $3, $4, 'NPR', $5::numeric, $6::numeric,
+                   $7::numeric, 'REVERSED', $8::timestamptz, $9::timestamptz, $10, $11,
+                   $12::numeric, $13)
+         RETURNING id`,
+        [
+          purchase.creator_id, purchase.customer_id, event.sourceTransactionId,
+          event.sourceTransactionNumber, refundable.toFixed(2), purchase.reward_rate_percent,
+          rewardReversal.toFixed(2), event.completedAt, purchase.available_at,
+          purchase.id, payloadHash,
+          hasReversedCostEvidence ? reversedCogs.toFixed(2) : null,
+          event.costStatus ?? "UNKNOWN",
+        ],
+      );
+
+      await client.query(
+        `UPDATE creator_purchase_events
+            SET eligible_spend_npr = $2::numeric, reward_amount_npr = $3::numeric,
+                event_status = $4, cogs_npr = $5::numeric, cost_status = $6,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [purchase.id, remainingSpend.toFixed(2), remainingReward.toFixed(2), nextStatus,
+          remainingCogs === null ? null : remainingCogs.toFixed(2), nextCostStatus],
+      );
+      if (rewardReversal > 0) {
+        await client.query(
+          `INSERT INTO creator_reward_ledger (
+             creator_id, purchase_event_id, entry_type, amount_npr,
+             idempotency_key, note
+           ) VALUES ($1, $2, 'REVERSAL', $3::numeric, $4, $5)`,
+          [
+            purchase.creator_id, purchase.id, (-rewardReversal).toFixed(2),
+            `creator-reversal:POS:${event.sourceTransactionId}`,
+            `POS return ${event.sourceTransactionNumber}; reversed NPR ${rewardReversal.toFixed(2)}`,
+          ],
+        );
+      }
+      await client.query(
+        `UPDATE creator_integration_events SET processing_status = 'PROCESSED',
+          processed_at = NOW() WHERE event_key = $1`,
+        [eventKey],
+      );
+      await client.query("COMMIT");
+      return {
+        accepted: true, attributed: true, originalPurchaseEventId: purchase.id,
+        reversalEventId: reversal.rows[0].id, reversedEligibleSpendNpr: refundable.toFixed(2),
+        reversedRewardNpr: rewardReversal.toFixed(2), remainingRewardNpr: remainingReward.toFixed(2),
+        reversedCogsNpr: hasReversedCostEvidence ? reversedCogs.toFixed(2) : null,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+}

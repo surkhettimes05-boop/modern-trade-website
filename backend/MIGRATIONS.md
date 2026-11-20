@@ -12,4 +12,15 @@ For Supabase, copy `backend/.env.supabase.example` to your local environment, re
 
 The numbered identifiers form the supported clean-install baseline. Historical SQL files are retained because their deployment history is unknown; they must not be executed independently or alphabetically. Existing deployments that predate `schema_migrations` require a reviewed baseline-marking procedure before using this runner. The runner intentionally does not guess which legacy files were previously applied.
 
+Migration `047_unique_member_pricing_quote_sale_reference` restores a unique
+constraint on non-null quote sale references. If existing rows contain
+duplicate claims, the migration fails rather than silently selecting one.
+
+Migration `048_cod_member_pricing_channel` adds an explicit COD promotion
+channel. COD pricing does not inherit Web or POS eligibility.
+
+Migration `049_web_order_loyalty_return_reversal` ensures a refund reached
+after the normal return-request/return lifecycle reverses the order's earned
+loyalty exactly once.
+
 Test resets are separate from production migration behavior. Jest uses only the repository-owned PostgreSQL cluster on `127.0.0.1:55432`, database `storesync_jest_test`, and its harness-owned schema. Production migration code never drops databases or schemas.

@@ -10,10 +10,15 @@ import { addressRoutes } from "../../routes/addresses.js";
 import { OTPService } from "../otpService.js";
 import { errorHandler } from "../../middleware/errorHandler.js";
 import { publicRoutes } from "../../routes/public.js";
+import { creatorAttributionRoutes } from "../../routes/creatorAttribution.js";
+import { createMemberPricingQuote } from "../memberPricingQuoteService.js";
+import { WebOrderService } from "../webOrderService.js";
 
 // Real PostgreSQL, services, routes, transactions and migrations. Only SMS is
 // replaced with the existing test transport. Executed by test:ci.
 test("customer → address → serviceability → assigned cart → COD recovery", async () => {
+  process.env.MEMBER_PRICING_QUOTE_SECRET ||=
+    "test-only-member-pricing-quote-secret-at-least-32-bytes";
   const seed = await readFile("../database/development_seed.sql", "utf8");
   await query(seed);
   const organizationCountBefore = await query(
@@ -112,7 +117,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     migration_037_count: "1",
     fingerprint_nullable: "YES",
   });
-  expect(Number(migrationState.rows[0].migration_count)).toBe(41); // 019 is intentionally absent from this project's manifest.
+  expect(Number(migrationState.rows[0].migration_count)).toBe(54); // 019 is intentionally absent; preserve deployed payment migration.
   const migrationIds = await query(
     "SELECT migration_id FROM schema_migrations ORDER BY migration_id",
   );
@@ -122,7 +127,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       (_, index) => `${String(index + 1).padStart(3, "0")}_`,
     ),
     ...Array.from(
-      { length: 23 },
+      { length: 25 },
       (_, index) => `${String(index + 20).padStart(3, "0")}_`,
     ),
   ];
@@ -130,6 +135,26 @@ test("customer → address → serviceability → assigned cart → COD recovery
     expect(
       migrationIds.rows.some((row) => row.migration_id.startsWith(prefix)),
     ).toBe(true);
+  }
+  for (const migration of [
+    "042_payment_intent_runtime_contract",
+    "042_membership_foundation",
+    "043_membership_integrity",
+    "044_member_pricing_engine",
+    "045_member_pricing_quotes",
+    "046_web_order_member_pricing_snapshots",
+    "047_unique_member_pricing_quote_sale_reference",
+    "048_cod_member_pricing_channel",
+    "049_web_order_loyalty_return_reversal",
+    "050_cod_launch_lifecycle",
+    "042_creator_attribution_rewards",
+    "043_creator_portal_otp_sessions",
+    "044_creator_purchase_cost_evidence",
+    "045_creator_manual_payouts",
+  ]) {
+    expect(migrationIds.rows.some((row) => row.migration_id === migration)).toBe(
+      true,
+    );
   }
   expect(migrationState.rows[0].idempotency_index).toMatch(
     /CREATE UNIQUE INDEX/,
@@ -146,6 +171,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
   await app.register(checkoutRoutes, { prefix: "/api" });
   await app.register(addressRoutes, { prefix: "/api" });
   await app.register(publicRoutes, { prefix: "/api/public" });
+  await app.register(creatorAttributionRoutes, { prefix: "/api" });
   const original = OTPService.prototype.createOTP;
   let code = "";
   const capture = jest
@@ -155,7 +181,30 @@ test("customer → address → serviceability → assigned cart → COD recovery
       return code;
     });
   try {
-    const phone = "9812345678";
+    // The development seed already contains 9812345678; referral attribution
+    // requires a genuinely new, OTP-verified customer.
+    const phone = `98${String(Math.floor(Math.random() * 100_000_000)).padStart(8, "0")}`;
+    const slug = `qa-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const creator = await query(
+      `INSERT INTO creators (creator_code, display_name, contact_phone, referral_slug, created_by)
+       VALUES ($1, 'CI Creator', '9800000012', $2, 'integration-test') RETURNING id`,
+      [`PAS-QA-${slug}`, slug],
+    );
+    const referral = await app.inject({
+      method: "GET",
+      url: `/api/public/creators/${slug}/visit`,
+    });
+    expect(referral.statusCode).toBe(302);
+    const referralCookie = referral.cookies.find(
+      (item) => item.name === "pasalho_creator_referral",
+    );
+    expect(referralCookie?.value).toMatch(/^[a-f0-9]{64}$/);
+    const visit = await query(
+      "SELECT id, creator_id FROM creator_referral_visits WHERE creator_id = $1",
+      [creator.rows[0].id],
+    );
+    expect(visit.rows).toHaveLength(1);
+
     await query("DELETE FROM customer_otp WHERE phone_normalized = $1", [
       phone,
     ]);
@@ -169,6 +218,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/otp/verify",
+      headers: { cookie: `pasalho_creator_referral=${referralCookie!.value}` },
       payload: { phone, otp_code: code, purpose: "LOGIN" },
     });
     expect(login.statusCode).toBe(200);
@@ -184,6 +234,16 @@ test("customer → address → serviceability → assigned cart → COD recovery
       "SELECT id FROM customers WHERE phone_normalized = $1",
       [phone],
     );
+    const attribution = await query(
+      `SELECT a.creator_id, a.referral_visit_id
+         FROM creator_customer_attributions a WHERE a.customer_id = $1`,
+      [customer.rows[0].id],
+    );
+    expect(attribution.rows).toHaveLength(1);
+    expect(attribution.rows[0]).toMatchObject({
+      creator_id: creator.rows[0].id,
+      referral_visit_id: visit.rows[0].id,
+    });
     const birendranagar = await query(
       `SELECT m.id AS municipality_id, w.id AS ward_id
          FROM nepal_municipalities m JOIN nepal_wards w ON w.municipality_id = m.id
@@ -428,26 +488,49 @@ test("customer → address → serviceability → assigned cart → COD recovery
       return cartId;
     };
 
-    const makeCheckout = (cartId: string, key: string) => ({
-      method: "POST" as const,
-      url: "/api/checkout/cod",
-      headers,
-      payload: {
-        cart_id: cartId,
-        // Deliberately untrusted: delivery assignment must override this.
-        store_id: randomUUID(),
-        idempotency_key: key,
-        delivery_type: "DELIVERY" as const,
-        address_id: address.id,
-        shipping_name: "QA Customer",
-        shipping_phone: phone,
-        shipping_address: "1 QA Street, QA Tole",
-        shipping_municipality_id: address.municipality_id,
-        shipping_ward_id: address.ward_id,
-        shipping_postal_code: "44000",
-        shipping_country: "NP",
-      },
-    });
+    const makeCheckout = async (cartId: string, key: string) => {
+      const customerIdentity = await query(
+        "SELECT phone_normalized FROM customers WHERE id = $1",
+        [customer.rows[0].id],
+      );
+      const cartItems = await query(
+        `SELECT p.sku, ci.quantity
+           FROM cart_items ci JOIN products p ON p.id = ci.product_id
+          WHERE ci.cart_id = $1 ORDER BY p.sku`,
+        [cartId],
+      );
+      const quote = await createMemberPricingQuote({
+        channel: "WEB",
+        storeReference: firstAssignment.fulfillment_store_id,
+        customerReference: customer.rows[0].id,
+        customerPhoneReference: customerIdentity.rows[0].phone_normalized,
+        items: cartItems.rows.map((item) => ({
+          sku: String(item.sku),
+          quantity: String(item.quantity),
+        })),
+      });
+      return {
+        method: "POST" as const,
+        url: "/api/checkout/cod",
+        headers,
+        payload: {
+          cart_id: cartId,
+          // Deliberately untrusted: delivery assignment must override this.
+          store_id: randomUUID(),
+          idempotency_key: key,
+          delivery_type: "DELIVERY" as const,
+          address_id: address.id,
+          shipping_name: "QA Customer",
+          shipping_phone: phone,
+          shipping_address: "1 QA Street, QA Tole",
+          shipping_municipality_id: address.municipality_id,
+          shipping_ward_id: address.ward_id,
+          shipping_postal_code: "44000",
+          shipping_country: "NP",
+          signed_quote_token: quote.signedQuoteToken,
+        },
+      };
+    };
 
     // Recheck availability under the final transaction after advisory
     // validation. The temporarily reduced stock is restored before submission.
@@ -464,7 +547,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       [firstAssignment.fulfillment_store_id, product.rows[0].product_id],
     );
     const preflightKey = randomUUID();
-    const preflight = await app.inject(makeCheckout(cartId, preflightKey));
+    const preflight = await app.inject(await makeCheckout(cartId, preflightKey));
     expect(preflight.statusCode).toBe(409);
     expect(
       (
@@ -495,7 +578,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
 
     // A: first request creates exactly one order. B: exact replay returns it.
     const primaryKey = randomUUID();
-    const checkout = makeCheckout(cartId, primaryKey);
+    const checkout = await makeCheckout(cartId, primaryKey);
     const first = await app.inject(checkout);
     expect(first.statusCode).toBe(201);
     const orderId = first.json().id as string;
@@ -503,7 +586,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     expect(replay.statusCode).toBe(201);
     expect(replay.json().id).toBe(orderId);
     const order = await query(
-      "SELECT store_id, fulfillment_store_id, shipping_amount, subtotal, total_amount FROM web_orders WHERE id = $1",
+      "SELECT store_id, fulfillment_store_id, shipping_amount, subtotal, total_amount, status, payment_status, payment_method FROM web_orders WHERE id = $1",
       [orderId],
     );
     expect(order.rows[0].store_id).toBe(firstAssignment.fulfillment_store_id);
@@ -513,6 +596,11 @@ test("customer → address → serviceability → assigned cart → COD recovery
     expect(Number(order.rows[0].shipping_amount)).toBe(validCart.delivery_fee);
     expect(Number(order.rows[0].subtotal)).toBe(validCart.subtotal);
     expect(Number(order.rows[0].total_amount)).toBe(validCart.total);
+    expect(order.rows[0]).toMatchObject({
+      status: "RECEIVED",
+      payment_status: "PENDING",
+      payment_method: "COD",
+    });
 
     // D: the same key cannot alias a changed logical request.
     const changedPayload = await app.inject({
@@ -526,7 +614,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
     // key. F: an unknown key remains NOT_FOUND.
     const lostKey = randomUUID();
     const lostResponse = await app.inject(
-      makeCheckout(await createCart(), lostKey),
+      await makeCheckout(await createCart(), lostKey),
     );
     expect(lostResponse.statusCode).toBe(201);
     const recovered = await app.inject({
@@ -535,7 +623,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       headers,
     });
     expect(recovered.json()).toMatchObject({
-      status: "CONFIRMED",
+      status: "RECEIVED",
       order: { id: lostResponse.json().id },
     });
     const unknownAttempt = await app.inject({
@@ -548,7 +636,10 @@ test("customer → address → serviceability → assigned cart → COD recovery
     // C and G: concurrent duplicate submissions commit one order, one item,
     // one reservation and one creation event.
     const concurrentKey = randomUUID();
-    const concurrentCheckout = makeCheckout(await createCart(), concurrentKey);
+    const concurrentCheckout = await makeCheckout(
+      await createCart(),
+      concurrentKey,
+    );
     const concurrent = await Promise.all([
       app.inject(concurrentCheckout),
       app.inject(concurrentCheckout),
@@ -628,7 +719,7 @@ test("customer → address → serviceability → assigned cart → COD recovery
       headers,
     });
     expect(legacyStatus.json()).toMatchObject({
-      status: "CONFIRMED",
+      status: "RECEIVED",
       order: { id: orderId },
     });
     const legacyReplay = await app.inject(checkout);
@@ -639,6 +730,62 @@ test("customer → address → serviceability → assigned cart → COD recovery
       url: `/api/customer/orders/${orderId}`,
     });
     expect(unauthenticatedDetail.statusCode).toBe(401);
+
+    // Creator reward is created exactly once only after actual COD collection
+    // and delivery, not on checkout placement or a duplicated checkout retry.
+    const noPrematureReward = await query(
+      "SELECT id FROM creator_purchase_events WHERE source_system = 'COMMERCE' AND source_transaction_id = $1",
+      [orderId],
+    );
+    expect(noPrematureReward.rowCount).toBe(0);
+    await query(
+      `INSERT INTO order_fulfillment (order_id, fulfillment_type, status, assigned_to)
+       VALUES ($1, 'DELIVERY', 'ASSIGNED', 'ci-delivery')`,
+      [orderId],
+    );
+    const fulfilment = new WebOrderService();
+    const actor = randomUUID();
+    for (const status of ["CONFIRMED", "PROCESSING", "READY", "OUT_FOR_DELIVERY"]) {
+      await fulfilment.updateWebOrderStatus(orderId, status, actor);
+    }
+    await expect(
+      fulfilment.updateWebOrderStatus(orderId, "DELIVERED", actor),
+    ).rejects.toThrow("COD cash receipt must be confirmed");
+    await fulfilment.updateWebOrderStatus(orderId, "DELIVERED", actor, undefined, true);
+    const purchase = await query(
+      `SELECT creator_id, customer_id, source_system, event_status,
+              eligible_spend_npr::text, reward_rate_percent::text,
+              reward_amount_npr::text
+         FROM creator_purchase_events
+        WHERE source_system = 'COMMERCE' AND source_transaction_id = $1`,
+      [orderId],
+    );
+    expect(purchase.rows).toHaveLength(1);
+    expect(purchase.rows[0]).toMatchObject({
+      creator_id: creator.rows[0].id,
+      customer_id: customer.rows[0].id,
+      source_system: "COMMERCE",
+      event_status: "PENDING",
+      reward_rate_percent: "1.00",
+    });
+    const expectedReward = Math.round(Number(purchase.rows[0].eligible_spend_npr) * 0.01 * 100) / 100;
+    expect(Number(purchase.rows[0].reward_amount_npr)).toBe(expectedReward);
+    const ledger = await query(
+      `SELECT COUNT(*)::int AS entries, COALESCE(SUM(amount_npr), 0)::text AS earned
+         FROM creator_reward_ledger WHERE purchase_event_id = (
+           SELECT id FROM creator_purchase_events
+            WHERE source_system = 'COMMERCE' AND source_transaction_id = $1
+         )`,
+      [orderId],
+    );
+    expect(ledger.rows[0]).toMatchObject({ entries: 1 });
+    expect(Number(ledger.rows[0].earned)).toBe(expectedReward);
+    const cash = await query(
+      "SELECT amount::text FROM cod_cash_collections WHERE order_id = $1",
+      [orderId],
+    );
+    expect(cash.rows).toHaveLength(1);
+    expect(Number(cash.rows[0].amount)).toBe(Number(order.rows[0].total_amount));
   } finally {
     capture.mockRestore();
     await app.close();
