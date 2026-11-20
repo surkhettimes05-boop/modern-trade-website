@@ -56,10 +56,8 @@ export function CommerceProvider({ children, initialProducts = [], initialCatego
       setDisplayPrices(Object.fromEntries(
         (Array.isArray(priceBody.prices) ? priceBody.prices : []).map((price: DisplayPrice) => [price.sku, price]),
       ));
-      setPricingError('');
-    } catch (error) {
+    } catch {
       setDisplayPrices({});
-      setPricingError(error instanceof Error ? error.message : 'Member pricing is temporarily unavailable.');
     }
   }, [authenticated, products, selectedStore]);
   const requestPricingQuote = useCallback(async (signal?: AbortSignal) => {
@@ -81,6 +79,9 @@ export function CommerceProvider({ children, initialProducts = [], initialCatego
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || !body.quote) {
+      if (response.status === 404 && typeof body.error !== 'string') {
+        throw new Error('Checkout pricing is unavailable on this backend. Orders are paused until the pricing API is updated.');
+      }
       throw new Error(typeof body.error === 'string' ? body.error : 'Could not get an authoritative price quote.');
     }
     if (requestId === quoteRequestId.current) setPricingQuote(body.quote as PricingQuote);
@@ -140,10 +141,9 @@ export function CommerceProvider({ children, initialProducts = [], initialCatego
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
-      reloadMemberPricing().catch((error) => {
+      reloadMemberPricing().catch(() => {
         if (active) {
           setDisplayPrices({});
-          setPricingError(error instanceof Error ? error.message : 'Member pricing is temporarily unavailable.');
         }
       });
     }, 0);
