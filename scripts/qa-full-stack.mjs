@@ -20,10 +20,10 @@ const qaEnv = {
     process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:53000",
 };
 
-function run(command, args) {
+function run(command, args, env = qaEnv) {
   const result = spawnSync(command, args, {
     stdio: "inherit",
-    env: qaEnv,
+    env,
     // Only npm.cmd needs the Windows command shell. Invoking node.exe through
     // cmd.exe breaks when Node is installed beneath "C:\\Program Files".
     shell: process.platform === "win32" && command === npm,
@@ -33,11 +33,50 @@ function run(command, args) {
   }
 }
 
+async function waitFor(url, label, attempts = 30) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      if (response.ok) return;
+      lastError = new Error(`${label} returned HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`${label} did not become ready`, { cause: lastError });
+}
+
 try {
   run(process.execPath, ["scripts/qa-compose.mjs", "down", "--volumes", "--remove-orphans"]);
   run(process.execPath, ["scripts/qa-compose.mjs", "up", "-d", "--build"]);
   run(process.execPath, ["scripts/qa-verify.mjs"]);
   run(npm, ["run", "test:e2e:chromium", "--prefix", "frontend"]);
+
+  const browseOnlyEnv = { ...qaEnv, PASALHO_BROWSE_ONLY: "true" };
+  run(
+    process.execPath,
+    ["scripts/qa-compose.mjs", "up", "-d", "--force-recreate", "frontend"],
+    browseOnlyEnv,
+  );
+  await waitFor("http://127.0.0.1:53000/", "Browse-only frontend");
+  run(
+    npm,
+    [
+      "run",
+      "test:e2e",
+      "--prefix",
+      "frontend",
+      "--",
+      "tests/catalog-preview.spec.ts",
+      "--project=chromium-desktop",
+      "--project=chromium-mobile",
+      "--workers=1",
+      "--reporter=line",
+    ],
+    browseOnlyEnv,
+  );
 } catch (error) {
   spawnSync(
     process.execPath,
