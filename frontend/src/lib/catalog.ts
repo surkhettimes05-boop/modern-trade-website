@@ -149,7 +149,12 @@ export const openingProducts: Product[] = [
 export function mapProduct(row: Record<string, unknown>): Product {
   const name = String(row.name || 'Product');
   const image = String(row.image_url || (Array.isArray(row.images) ? row.images[0] : '') || '/placeholder-product.svg');
-  return { id: String(row.id), slug: slugify(name), sku: row.sku ? String(row.sku) : undefined, name, brand: String(row.brand || 'Unbranded'), category: String(row.category_name || 'Everyday essentials'), categoryId: row.category_id ? String(row.category_id) : undefined, description: String(row.description || ''), image, price: Number(row.price || 0), originalPrice: row.original_price ? Number(row.original_price) : undefined, rating: Number(row.rating || 0), reviews: Number(row.review_count || 0), availability: String(row.availability_status || 'OUT_OF_STOCK').replaceAll('_', ' '), tags: row.is_featured ? ['Featured'] : [], unit: row.unit ? String(row.unit) : undefined, specifications: { SKU: String(row.sku || '—'), Pack: String(row.pack_size || '—'), Department: String(row.category_name || 'Everyday essentials') }, createdAt: row.created_at ? String(row.created_at) : undefined, featured: row.is_featured === true };
+  // Importer notes are not customer-facing descriptions. Preserve the source record in the API/database.
+  const rawDescription = String(row.description || '').trim();
+  const description = /^(?:test catalog\s*\/\s*stock import|test catalog|stock import)$/i.test(rawDescription)
+    ? 'Detailed product information is being verified by PASALHO.'
+    : rawDescription;
+  return { id: String(row.id), slug: slugify(name), sku: row.sku ? String(row.sku) : undefined, name, brand: String(row.brand || 'Brand not specified'), category: String(row.category_name || 'Everyday essentials'), categoryId: row.category_id ? String(row.category_id) : undefined, description, image, price: Number(row.price || 0), originalPrice: row.original_price ? Number(row.original_price) : undefined, rating: Number(row.rating || 0), reviews: Number(row.review_count || 0), availability: String(row.availability_status || 'OUT_OF_STOCK').replaceAll('_', ' '), tags: row.is_featured ? ['Featured'] : [], unit: row.unit ? String(row.unit) : undefined, specifications: { SKU: String(row.sku || '—'), Pack: String(row.pack_size || '—'), Department: String(row.category_name || 'Everyday essentials') }, createdAt: row.created_at ? String(row.created_at) : undefined, featured: row.is_featured === true };
 }
 
 

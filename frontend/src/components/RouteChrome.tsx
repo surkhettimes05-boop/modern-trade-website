@@ -30,7 +30,7 @@ export default function RouteChrome({
       <main id="main-content" className="flex-1">
         {children}
       </main>
-      <Footer />
+      <Footer browseOnly={browseOnly} />
       {!browseOnly && <WhatsAppOrderShortcut />}
       <MobileNav />
     </>

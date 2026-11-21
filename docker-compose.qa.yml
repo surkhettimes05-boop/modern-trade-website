@@ -169,6 +169,7 @@ services:
     environment:
       NODE_ENV: production
       ALLOW_INSECURE_INTERNAL_API: "1"
+      PASALHO_BROWSE_ONLY: ${PASALHO_BROWSE_ONLY:-false}
     read_only: true
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
