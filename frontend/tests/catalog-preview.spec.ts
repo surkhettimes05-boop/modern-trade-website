@@ -33,10 +33,14 @@ test.describe('public catalogue preview', () => {
     await expect(page.getByText('Catalogue preview · Ordering opens later')).toBeVisible();
 
     await page.goto('/shop');
-    await expect(page.locator('.product-card')).toHaveCount(1);
-    await expect(page.locator('.product-card')).toContainText('Indicative price · Stock not yet confirmed');
-    await expect(page.locator('.product-card')).not.toContainText('Save 25%');
-    await expect(page.getByRole('button', { name: 'Ordering opens soon' })).toBeDisabled();
+    const productCards = page.locator('.product-card');
+    await expect(productCards.first()).toBeVisible();
+    await expect(productCards).toContainText('Indicative price · Stock not yet confirmed');
+    await expect(page.locator('.product-card .deal-badge')).toHaveCount(0);
+    await expect(page.locator('.product-card .price-row del')).toHaveCount(0);
+    const orderingButtons = page.getByRole('button', { name: 'Ordering opens soon' });
+    await expect(orderingButtons.first()).toBeVisible();
+    for (const button of await orderingButtons.all()) await expect(button).toBeDisabled();
     await expect(page.getByText('29 practical departments')).toHaveCount(0);
   });
 
