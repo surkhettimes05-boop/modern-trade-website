@@ -44,6 +44,6 @@ test.describe('public catalogue preview', () => {
     await page.goto('/offers');
     await expect(page.getByRole('heading', { name: 'Offers are opening later' })).toBeVisible();
     await expect(page.getByText('preety swestka offer')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Browse published products' })).toBeVisible();
+    await expect(page.locator('main').getByRole('link', { name: 'Browse published products' })).toBeVisible();
   });
 });
