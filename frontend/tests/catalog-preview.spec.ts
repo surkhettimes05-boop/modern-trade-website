@@ -42,9 +42,17 @@ test.describe('public catalogue preview', () => {
     }
     await expect(page.locator('.product-card .deal-badge')).toHaveCount(0);
     await expect(page.locator('.product-card .price-row del')).toHaveCount(0);
-    const orderingButtons = page.getByRole('button', { name: 'Ordering opens soon' });
-    await expect(orderingButtons.first()).toBeVisible();
-    for (const button of await orderingButtons.all()) await expect(button).toBeDisabled();
+    const orderingButton = page.getByRole('button', { name: 'Add to WhatsApp request' }).first();
+    await expect(orderingButton).toBeVisible();
+    await expect(orderingButton).toBeEnabled();
+    await orderingButton.click();
+    await expect(page.getByRole('dialog', { name: /Cart/ })).toBeVisible();
+    await page.getByRole('link', { name: 'Prepare WhatsApp request' }).click();
+    await expect(page).toHaveURL(/\/whatsapp-order$/);
+    await expect(page.getByRole('heading', { name: 'Order through WhatsApp' })).toBeVisible();
+
+    await page.goto('/checkout');
+    await expect(page).toHaveURL(/\/launch-info/);
     await expect(page.getByText('29 practical departments')).toHaveCount(0);
   });
 
