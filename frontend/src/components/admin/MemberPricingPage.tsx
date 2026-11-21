@@ -119,6 +119,7 @@ export function MemberPricingPage() {
     ? selectedOrganizationId
     : scopedOrganizationId;
   const [form, setForm] = useState<PromotionForm>(defaultForm);
+  const [editingPromotionId, setEditingPromotionId] = useState<string | null>(null);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [previews, setPreviews] = useState<Record<string, PromotionPreview>>({});
   const [loading, setLoading] = useState(true);
@@ -169,11 +170,34 @@ export function MemberPricingPage() {
     }));
   }
 
+  function editPromotion(promotion: Promotion) {
+    const localValue = (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+    };
+    setEditingPromotionId(promotion.id);
+    setForm({
+      name: promotion.name,
+      startsAt: localValue(promotion.starts_at),
+      endsAt: localValue(promotion.ends_at),
+      reason: promotion.reason,
+      products: promotion.products.map(({ sku, member_price }) => ({ sku, member_price })),
+      tiers: [...promotion.tiers],
+      channels: [...promotion.channels],
+    });
+    setError("");
+    setNotice("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setNotice("");
-    if (!organizationId.trim()) {
+    if (!editingPromotionId && !organizationId.trim()) {
       setError("An organization ID is required.");
       return;
     }
@@ -206,16 +230,18 @@ export function MemberPricingPage() {
     setSaving(true);
     try {
       const response = await resilientFetch(
-        "/api/admin/member-pricing/promotions",
+        editingPromotionId
+          ? `/api/admin/member-pricing/promotions/${editingPromotionId}`
+          : "/api/admin/member-pricing/promotions",
         {
-          method: "POST",
+          method: editingPromotionId ? "PUT" : "POST",
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
             "x-csrf-token": csrfToken(),
           },
           body: JSON.stringify({
-            organization_id: organizationId.trim(),
+            ...(!editingPromotionId ? { organization_id: organizationId.trim() } : {}),
             name: form.name.trim(),
             starts_at: startsAt.toISOString(),
             ends_at: endsAt.toISOString(),
@@ -238,8 +264,16 @@ export function MemberPricingPage() {
       if (!body.promotion?.id) {
         throw new Error("The pricing service returned an invalid promotion");
       }
-      setNotice("Draft created. Preview it before activating.");
+      if (editingPromotionId) {
+        setPreviews((current) => {
+          const next = { ...current };
+          delete next[editingPromotionId];
+          return next;
+        });
+      }
+      setNotice(editingPromotionId ? "Promotion draft updated. Preview it again before activating." : "Draft created. Preview it before activating.");
       setForm(defaultForm());
+      setEditingPromotionId(null);
       await load();
     } catch (saveError) {
       setError(
@@ -363,7 +397,7 @@ export function MemberPricingPage() {
         rollout flag. Activating a promotion does not enable member pricing.
       </p>
       {notice && (
-        <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+        <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
           {notice}
         </p>
       )}
@@ -379,7 +413,9 @@ export function MemberPricingPage() {
           className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
         >
           <div>
-            <h2 className="font-semibold text-slate-950">Create a draft</h2>
+            <h2 className="font-semibold text-slate-950">
+              {editingPromotionId ? "Edit a draft" : "Create a draft"}
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
               New promotions are drafts. A separately authorized approver must
               preview and activate them.
@@ -583,9 +619,25 @@ export function MemberPricingPage() {
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             />
           </label>
-          <Button type="submit" busy={saving}>
-            Create draft
-          </Button>
+          <div className="flex gap-2">
+            <Button type="submit" busy={saving}>
+              {editingPromotionId ? "Save draft" : "Create draft"}
+            </Button>
+            {editingPromotionId && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={saving}
+                onClick={() => {
+                  setEditingPromotionId(null);
+                  setForm(defaultForm());
+                  setError("");
+                }}
+              >
+                Cancel edit
+              </Button>
+            )}
+          </div>
         </form>
       )}
 
@@ -642,6 +694,16 @@ export function MemberPricingPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      {["DRAFT", "PAUSED"].includes(promotion.status) && canWrite && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={busyPromotionId === promotion.id || saving}
+                          onClick={() => editPromotion(promotion)}
+                        >
+                          Edit
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="secondary"

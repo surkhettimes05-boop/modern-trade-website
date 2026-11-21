@@ -631,10 +631,31 @@ export function ProductEditButton({
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    setBusy(true);
     setError("");
     const form = new FormData(event.currentTarget);
     const priceText = String(form.get("price") || "").trim();
+    const originalPriceText = String(form.get("original_price") || "").trim();
+    const validFromText = String(form.get("valid_from") || "").trim();
+    const validToText = String(form.get("valid_to") || "").trim();
+    const validFrom = validFromText ? new Date(validFromText) : null;
+    const validTo = validToText ? new Date(validToText) : null;
+    if (priceText && validFrom && Number.isNaN(validFrom.getTime())) {
+      setError("Enter a valid price start date and time.");
+      return;
+    }
+    if (priceText && validTo && Number.isNaN(validTo.getTime())) {
+      setError("Enter a valid price end date and time.");
+      return;
+    }
+    if (priceText && validTo && validFrom && validTo <= validFrom) {
+      setError("The price end date must be later than its start date.");
+      return;
+    }
+    if (priceText && originalPriceText && Number(originalPriceText) < Number(priceText)) {
+      setError("MRP / original price cannot be lower than the selling price.");
+      return;
+    }
+    setBusy(true);
     const payload: Record<string, unknown> = {
       sku: String(form.get("sku") || "").trim(),
       name_en: String(form.get("name_en") || "").trim(),
@@ -648,9 +669,11 @@ export function ProductEditButton({
       ...(priceText
         ? {
             price: Number(priceText),
-            original_price: String(form.get("original_price") || "").trim()
-              ? Number(form.get("original_price"))
+            original_price: originalPriceText
+              ? Number(originalPriceText)
               : null,
+            ...(validFrom ? { valid_from: validFrom.toISOString() } : {}),
+            ...(validTo ? { valid_to: validTo.toISOString() } : {}),
           }
         : {}),
       ...(selectedStoreId !== "all" ? { store_id: selectedStoreId } : {}),
@@ -864,6 +887,27 @@ export function ProductEditButton({
                   />
                 </label>
               </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-medium text-slate-800">
+                  Effective from
+                  <input
+                    name="valid_from"
+                    type="datetime-local"
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-slate-800">
+                  Effective until
+                  <input
+                    name="valid_to"
+                    type="datetime-local"
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              </div>
+              <p className="-mt-2 text-xs leading-5 text-slate-500">
+                Leave both dates blank to apply the price now with no end date. A scheduled price takes effect at its start time; an end time lets the prior applicable price resume.
+              </p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm font-medium text-slate-800">
                   Status

@@ -44,3 +44,12 @@ Record decisions that materially affect implementation. Do not rewrite past entr
 - Context: Loyalty, returns, advanced analytics, external tax/fiscal integrations, offline/device modules, electronic providers and related navigation are not certified.
 - Decision: The Nepal pilot is limited to the public website, catalog/store selection, customer account/cart/COD checkout/pickup-delivery/order history, staff login, basic cash POS/shifts, inventory, procurement, staff, content/catalog, audit and required operations. All other modules are retained but fail closed behind production feature controls.
 - Consequences: Deferred flags cannot be enabled in production without code/certification change. India remains a future registry entry and cannot become the active pilot market.
+
+## ADR-006 - Catalog price windows preserve the existing resolver
+
+- Date: 2026-11-21
+- Status: Provisional implementation; product confirmation needed before treating bounded overrides as final policy
+- Context: `product_prices` stores `valid_from`/`valid_to`, while admin price edits only supported immediate changes. Storefront and checkout resolution prefer a store-specific effective price, then the latest effective row.
+- Decision: Admin price edits accept effective timestamps. Immediate open-ended edits retain the existing replacement behavior; scheduled and bounded edits leave the prior eligible price row available, so it is selected again after the newer row expires under the existing resolver.
+- Product decision needed: Confirm whether ending a bounded price should restore the prior eligible price or leave the product without a price. No schema constraint or launch document states this explicitly.
+- Consequences: Published products must have a price effective now. Production still rejects `ENABLE_MEMBER_PRICING=true`, and the promotion engine remains behind its existing production startup guard.
