@@ -310,6 +310,34 @@ describe("authenticated member pricing quote API", () => {
     });
   });
 
+  it("rejects an unknown store reference from Lite before issuing a quote", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal/member-pricing/quotes",
+      headers: { authorization: `Bearer ${serviceToken}` },
+      payload: quoteRequest({ storeReference: randomUUID() }),
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: "STORE_NOT_FOUND" });
+  });
+
+  it("rejects a customer reference when Lite supplies a different phone", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal/member-pricing/customers/verify",
+      headers: { authorization: `Bearer ${serviceToken}` },
+      payload: {
+        customerReference: ids.customer,
+        customerPhoneReference: "9811111111",
+        storeReference: ids.store,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: "CUSTOMER_MISMATCH" });
+  });
+
   it("rejects altered signatures and expired quotes", async () => {
     const { quote } = await issueQuote();
     const tokenParts = quote.signedQuoteToken.split(".");
