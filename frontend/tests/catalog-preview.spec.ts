@@ -35,7 +35,11 @@ test.describe('public catalogue preview', () => {
     await page.goto('/shop');
     const productCards = page.locator('.product-card');
     await expect(productCards.first()).toBeVisible();
-    await expect(productCards).toContainText('Indicative price · Stock not yet confirmed');
+    const stockLabels = page.locator('.product-card .stock');
+    await expect(stockLabels.first()).toHaveText('Indicative price · Stock not yet confirmed');
+    for (const stockLabel of await stockLabels.all()) {
+      await expect(stockLabel).toHaveText('Indicative price · Stock not yet confirmed');
+    }
     await expect(page.locator('.product-card .deal-badge')).toHaveCount(0);
     await expect(page.locator('.product-card .price-row del')).toHaveCount(0);
     const orderingButtons = page.getByRole('button', { name: 'Ordering opens soon' });
