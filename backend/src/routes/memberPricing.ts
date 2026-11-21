@@ -345,4 +345,3 @@ export async function memberPricingRoutes(fastify: FastifyInstance) {
     );
   }
 }
-

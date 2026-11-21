@@ -62,3 +62,20 @@ export function memberPricingEnabled(
 ): boolean {
   return env.ENABLE_MEMBER_PRICING === "true";
 }
+
+// A deliberate read-only public launch. No customer OTP, checkout, creator
+// enrolment, membership writes, POS sales, or other HTTP mutations are accepted.
+// Keeping this opt-in separate from SMS_PROVIDER prevents demo OTP in production.
+export function publicCatalogOnly(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.PUBLIC_CATALOG_ONLY === "true";
+}
+
+// Production is deployed for live verification with real customer orders
+// unapproved. A later, separately reviewed release must remove this gate
+// before accepting COD orders. Staging can also explicitly lock checkout.
+// ENABLE_ELECTRONIC_PAYMENTS does not control cash-on-delivery orders.
+export function stagingCustomerOrdersBlocked(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return publicCatalogOnly(env) || env.NODE_ENV === "production" || env.STAGING_DISABLE_CUSTOMER_ORDERS === "true";
+}

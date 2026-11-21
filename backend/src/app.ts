@@ -16,6 +16,8 @@ import { webOrderRoutes } from "./routes/webOrders.js";
 import { operationsAuthRoutes } from "./routes/operationsAuth.js";
 import { checkoutRoutes } from "./routes/checkout.js";
 import { addressRoutes } from "./routes/addresses.js";
+import { customerFavoritesRoutes } from "./routes/customerFavorites.js";
+import { customerOrderNotificationRoutes } from "./routes/customerOrderNotifications.js";
 import { protectedOperations } from "./plugins/protectedOperations.js";
 import { privilegedAdministration } from "./plugins/privilegedAdministration.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -29,6 +31,7 @@ import { paymentWebhookRoutes } from "./routes/payments.js";
 import { creatorAttributionRoutes } from "./routes/creatorAttribution.js";
 import { creatorPortalRoutes } from "./routes/creatorPortal.js";
 import { deferredFeatureEnabled } from "./config/releaseFeatures.js";
+import { catalogOnlyGuard } from "./middleware/catalogOnlyGuard.js";
 import { verifyDatabaseSecurityPosture } from "./database/databaseSecurity.js";
 import { getResilienceConfig } from "./config/resilience.js";
 import { closePool } from "./database/connection.js";
@@ -98,6 +101,9 @@ export async function buildApp(
       runWithRequestContext(request.id, done);
     });
   }
+
+  // Protect direct Render requests as well as Vercel traffic.
+  fastify.addHook("onRequest", catalogOnlyGuard);
 
   if (workerRuntime) {
     fastify.addHook("onResponse", async () => {
@@ -206,6 +212,8 @@ export async function buildApp(
   await fastify.register(shoppingCartRoutes, { prefix: "/api" });
   await fastify.register(checkoutRoutes, { prefix: "/api" });
   await fastify.register(addressRoutes, { prefix: "/api" });
+  await fastify.register(customerFavoritesRoutes, { prefix: "/api" });
+  await fastify.register(customerOrderNotificationRoutes, { prefix: "/api" });
   await fastify.register(loyaltyMvpRoutes, { prefix: "/api" });
   await fastify.register(creatorAttributionRoutes, { prefix: "/api" });
   await fastify.register(creatorPortalRoutes, { prefix: "/api/creator-portal" });

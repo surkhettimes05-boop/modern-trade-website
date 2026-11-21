@@ -13,6 +13,7 @@ import { DeliveryZoneService } from "../services/deliveryZoneService.js";
 import { AddressService } from "../services/addressService.js";
 import { CartValidationService } from "../services/cartValidationService.js";
 import { MemberPricingQuoteError } from "../services/memberPricingQuoteService.js";
+import { stagingCustomerOrdersBlocked } from "../config/releaseFeatures.js";
 
 const checkout = new CheckoutService();
 const deliveryZones = new DeliveryZoneService();
@@ -241,6 +242,12 @@ export async function checkoutRoutes(fastify: FastifyInstance) {
 
   const createCodCheckout = (channel: "WEB" | "APP") =>
     async (request: FastifyRequest, reply: FastifyReply) => {
+    if (stagingCustomerOrdersBlocked()) {
+      return reply.status(503).send({
+        error: "Customer orders are temporarily disabled until launch verification is complete",
+        code: "STAGING_ORDERS_DISABLED",
+      });
+    }
     const body = CodCheckoutBodySchema.parse(request.body);
     try {
       return reply.status(201).send(

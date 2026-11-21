@@ -92,7 +92,9 @@ services:
     command: ["node", "dist/database/deployMigrate.js"]
     environment:
       NODE_ENV: qa
+      DATABASE_URL: postgresql://storesync_app:${QA_APP_DB_PASSWORD:?Set QA_APP_DB_PASSWORD}@postgres:5432/storesync_qa
       MIGRATION_DATABASE_URL: postgresql://storesync_migrator:${QA_MIGRATION_DB_PASSWORD:?Set QA_MIGRATION_DB_PASSWORD}@postgres:5432/storesync_qa
+      DATABASE_BACKUP_URL: postgresql://storesync_migrator:${QA_MIGRATION_DB_PASSWORD:?Set QA_MIGRATION_DB_PASSWORD}@postgres:5432/storesync_qa
       DATABASE_MIGRATION_ROLE: storesync_migrator
       DATABASE_SSL: "false"
       DATABASE_BACKUP_DIR: /tmp/storesync-backups

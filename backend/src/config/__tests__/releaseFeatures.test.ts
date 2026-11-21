@@ -1,6 +1,8 @@
 import {
   PILOT_FEATURES,
   memberPricingEnabled,
+  publicCatalogOnly,
+  stagingCustomerOrdersBlocked,
   validatePilotFeatureEnvironment,
 } from "../releaseFeatures.js";
 
@@ -32,5 +34,27 @@ describe("pilot feature controls", () => {
     expect(memberPricingEnabled({})).toBe(false);
     expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "false" })).toBe(false);
     expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "true" })).toBe(true);
+  });
+
+  it("locks staging COD only on an explicit server-side setting", () => {
+    expect(stagingCustomerOrdersBlocked({})).toBe(false);
+    expect(stagingCustomerOrdersBlocked({ STAGING_DISABLE_CUSTOMER_ORDERS: "false" })).toBe(false);
+    expect(stagingCustomerOrdersBlocked({ STAGING_DISABLE_CUSTOMER_ORDERS: "true" })).toBe(true);
+  });
+
+  it("blocks production COD regardless of staging flag or a stray enable override", () => {
+    expect(stagingCustomerOrdersBlocked({ NODE_ENV: "production" })).toBe(true);
+    expect(stagingCustomerOrdersBlocked({
+      NODE_ENV: "production",
+      STAGING_DISABLE_CUSTOMER_ORDERS: "false",
+      ENABLE_LIVE_CUSTOMER_ORDERS: "true",
+    })).toBe(true);
+  });
+
+  it("requires an explicit read-only launch flag", () => {
+    expect(publicCatalogOnly({})).toBe(false);
+    expect(publicCatalogOnly({ PUBLIC_CATALOG_ONLY: "false" })).toBe(false);
+    expect(publicCatalogOnly({ PUBLIC_CATALOG_ONLY: "true" })).toBe(true);
+    expect(stagingCustomerOrdersBlocked({ PUBLIC_CATALOG_ONLY: "true" })).toBe(true);
   });
 });

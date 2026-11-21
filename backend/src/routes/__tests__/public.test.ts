@@ -48,7 +48,7 @@ describe("Public API Endpoints", () => {
   });
 
   describe("GET /api/public/products", () => {
-    it("should return a product array when the joined pricing tables are present", async () => {
+    it("keeps the legacy unscoped public catalog response for existing web callers", async () => {
       const response = await app.inject({
         method: "GET",
         url: "/api/public/products",
@@ -62,6 +62,49 @@ describe("Public API Endpoints", () => {
       const response = await app.inject({
         method: "GET",
         url: "/api/public/products?limit=1000000",
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("keeps legacy public search compatible when no store is requested", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/public/products?search=rice&limit=20",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(Array.isArray(JSON.parse(response.payload))).toBe(true);
+    });
+
+    it("keeps legacy public product detail compatible without a store hint", async () => {
+      const detailResponse = await app.inject({
+        method: "GET",
+        url: "/api/public/products/00000000-0000-4000-8000-000000000001",
+      });
+      expect(detailResponse.statusCode).toBe(404);
+    });
+
+    it("rejects a caller-supplied store without an address assignment", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/public/products?store_id=00000000-0000-4000-8000-000000000001",
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("requires customer authentication when an address is used for scope", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/public/products?address_id=00000000-0000-4000-8000-000000000001",
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("rejects empty catalog search terms", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/public/products?search=%20%20",
       });
 
       expect(response.statusCode).toBe(400);

@@ -4,12 +4,18 @@ import { z } from "zod";
 import { query } from "../database/connection.js";
 import { OTPService } from "../services/otpService.js";
 import { normalizePhone, validatePhone } from "../utils/phoneNormalization.js";
+import { creatorReferralLink } from "../utils/creatorReferralLink.js";
 
 const otp = new OTPService();
 const SESSION_COOKIE = "pasalho_creator_session";
 const CSRF_COOKIE = "pasalho_creator_csrf";
 const SESSION_DAYS = 7;
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+
+export const creatorOtpVerifySchema = z.object({
+  phone: z.string().min(10).max(20),
+  otp_code: z.string().regex(/^\d{6}$/),
+});
 
 function csrfMatches(request: FastifyRequest) {
   const cookie = (request as any).cookies?.[CSRF_COOKIE];
@@ -55,7 +61,7 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/otp/verify", { config: { rateLimit: { max: 8, timeWindow: "15 minutes" } } }, async (request, reply) => {
-    const parsed = z.object({ phone: z.string().min(10).max(20), otp_code: z.string().regex(/^\\d{6}$/) }).safeParse(request.body);
+    const parsed = creatorOtpVerifySchema.safeParse(request.body);
     if (!parsed.success || !validatePhone(parsed.data.phone)) return reply.status(400).send({ error: "Invalid phone number or code." });
     const phone = normalizePhone(parsed.data.phone);
     const creator = await query(
@@ -83,13 +89,12 @@ export async function creatorPortalRoutes(fastify: FastifyInstance) {
   fastify.get("/me", async (request, reply) => {
     const creator = await currentCreator(request);
     if (!creator) return reply.status(401).send({ error: "Creator login required." });
-    const referralPath = "/api/public/creators/" + encodeURIComponent(creator.referral_slug) + "/visit";
-    const apiBase = process.env.PUBLIC_API_BASE_URL || "";
+    const referral = creatorReferralLink(creator.referral_slug);
     return { creator: {
       id: creator.id, code: creator.creator_code, name: creator.display_name,
       phone_masked: String(creator.contact_phone ?? "").replace(/.(?=.{4})/g, "•"),
       referral_slug: creator.referral_slug,
-      referral_url: apiBase ? new URL(referralPath, apiBase).toString() : referralPath,
+      referral_url: referral.url || referral.path,
     } };
   });
 

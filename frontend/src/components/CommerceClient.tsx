@@ -56,10 +56,8 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
       setDisplayPrices(Object.fromEntries(
         (Array.isArray(priceBody.prices) ? priceBody.prices : []).map((price: DisplayPrice) => [price.sku, price]),
       ));
-      setPricingError('');
-    } catch (error) {
+    } catch {
       setDisplayPrices({});
-      setPricingError(error instanceof Error ? error.message : 'Member pricing is temporarily unavailable.');
     }
   }, [authenticated, products, selectedStore]);
   const requestPricingQuote = useCallback(async (signal?: AbortSignal) => {
@@ -81,6 +79,9 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || !body.quote) {
+      if (response.status === 404 && typeof body.error !== 'string') {
+        throw new Error('Checkout pricing is unavailable on this backend. Orders are paused until the pricing API is updated.');
+      }
       throw new Error(typeof body.error === 'string' ? body.error : 'Could not get an authoritative price quote.');
     }
     if (requestId === quoteRequestId.current) setPricingQuote(body.quote as PricingQuote);
@@ -140,10 +141,9 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
-      reloadMemberPricing().catch((error) => {
+      reloadMemberPricing().catch(() => {
         if (active) {
           setDisplayPrices({});
-          setPricingError(error instanceof Error ? error.message : 'Member pricing is temporarily unavailable.');
         }
       });
     }, 0);
@@ -158,7 +158,11 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
     }, Math.max(0, delay));
     return () => window.clearTimeout(timer);
   }, [pricingQuote, refreshPricingQuote]);
-  useEffect(() => { const timer = window.setTimeout(() => { try { const saved = localStorage.getItem('pasalho-cart-v1'); if (saved) setItems(JSON.parse(saved)); const storeId = localStorage.getItem('pasalho-store'); if (storeId) setSelectedStoreState({ id: storeId, name: 'Selected store' }); } catch { /* ignore malformed browser state */ } finally { setHydrated(true); } }, 0); return () => window.clearTimeout(timer); }, []);
+  useEffect(() => { const timer = window.setTimeout(() => { try { const saved = localStorage.getItem('pasalho-cart-v1'); if (saved) setItems(JSON.parse(saved)); const storeId = localStorage.getItem('pasalho-store'); if (storeId) {
+    const validStore = initialStores.find((store) => store.id === storeId && !store.is_temporarily_closed);
+    if (validStore) setSelectedStoreState(validStore);
+    else if (!initialStores.length) setSelectedStoreState({ id: storeId, name: 'Selected store' });
+  } } catch { /* ignore malformed browser state */ } finally { setHydrated(true); } }, 0); return () => window.clearTimeout(timer); }, [initialStores]);
   useEffect(() => { if (hydrated) localStorage.setItem('pasalho-cart-v1', JSON.stringify(items)); }, [hydrated, items]);
   useEffect(() => { if (!hydrated || !products.length) return; const timer = window.setTimeout(() => { const productsBySku = new Map(products.map((product) => [product.sku || product.id, product])); setItems((current) => current.flatMap((item) => { const product = productsBySku.get(item.product.sku || item.product.id); return product ? [{ ...item, product }] : []; })); }, 0); return () => window.clearTimeout(timer); }, [hydrated, products]);
   useEffect(() => { if (initialProducts.length && initialCategories.length && initialStores.length) return; const controller = new AbortController(); const fetchArray = async (url: string) => { const response = await resilientFetch(url, { signal: controller.signal, timeoutMs: 5000, retries: 1 }); if (!response.ok) throw new Error(`Catalog request failed (${response.status})`); const body: unknown = await response.json(); if (!Array.isArray(body)) throw new Error('Catalog response is invalid'); return body; }; Promise.all([fetchArray('/api/public/products?limit=2500'), fetchArray('/api/public/categories'), fetchArray('/api/public/stores'), fetchArray('/api/public/offers')]).then(([productRows, categoryRows, storeRows, offerRows]) => { const nextStores = storeRows as Store[]; const apiProducts = (productRows as Record<string, unknown>[]).map(mapProduct).filter((p) => p.price > 0); const apiCategories = (categoryRows as Record<string, unknown>[]).map(mapCategory); setProducts(apiProducts); setCategories(apiCategories); setStores(nextStores); setOffers(offerRows as Offer[]); void fetchArray('/api/public/campaigns?channel=WEB').then((campaignRows) => setCampaigns(campaignRows as Campaign[])).catch(() => setCampaigns([])); setCatalogAvailable(true); setSelectedStoreState((current) => current?.id && nextStores.find((s) => s.id === current.id && !s.is_temporarily_closed) || nextStores.find((s) => !s.is_temporarily_closed) || null); }).catch(() => { if (!controller.signal.aborted) { setProducts([]); setCategories([]); setStores([]); setOffers([]); setCampaigns([]); setCatalogAvailable(false); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [initialCategories.length, initialProducts.length, initialStores.length]);
