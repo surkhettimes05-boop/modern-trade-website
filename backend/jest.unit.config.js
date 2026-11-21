@@ -11,6 +11,7 @@ export default {
     "<rootDir>/src/database/**/__tests__/**/*.test.ts",
     "<rootDir>/src/utils/**/__tests__/**/*.test.ts",
     "<rootDir>/src/routes/**/__tests__/authSecurity.test.ts",
+    "<rootDir>/src/routes/**/__tests__/creatorPortal.otpSchema.test.ts",
     "<rootDir>/src/routes/**/__tests__/operationsAuth.security.test.ts",
     "<rootDir>/src/middleware/**/__tests__/**/*.test.ts",
     "<rootDir>/src/plugins/**/__tests__/**/*.security.test.ts",
