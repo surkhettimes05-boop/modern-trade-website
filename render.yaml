@@ -90,6 +90,9 @@ services:
         value: "true"
       - key: CORS_ORIGIN
         sync: false
+      # Canonical customer website origin used in creator referral links.
+      - key: CUSTOMER_WEB_URL
+        sync: false
       - key: APP_URL
         sync: false
       - key: JWT_SECRET

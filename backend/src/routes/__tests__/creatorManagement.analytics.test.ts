@@ -14,7 +14,9 @@ describe("creator analytics reporting", () => {
     const slug = `qa-${randomBytes(8).toString("hex")}`;
     const code = `QA-${randomBytes(6).toString("hex").toUpperCase()}`;
     const eventIds = [randomUUID(), randomUUID(), randomUUID()];
-    const today = new Date().toISOString().slice(0, 10);
+    // This test verifies global date-window totals. Use a fixed historic date
+    // so unrelated integration tests cannot affect its expected counts.
+    const today = "2020-01-02";
     const app = Fastify();
 
     try {
@@ -29,15 +31,15 @@ describe("creator analytics reporting", () => {
         [customerId, phone, phoneHash],
       );
       await query(
-        `INSERT INTO creator_referral_visits (id, creator_id, visit_token_hash, expires_at)
-         VALUES ($1, $2, $3, NOW() + INTERVAL '1 day')`,
-        [visitId, creatorId, randomBytes(32).toString("hex")],
+        `INSERT INTO creator_referral_visits (id, creator_id, visit_token_hash, expires_at, created_at)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '1 day', $4::date)`,
+        [visitId, creatorId, randomBytes(32).toString("hex"), today],
       );
       await query(
         `INSERT INTO creator_customer_attributions
-           (customer_id, creator_id, referral_visit_id, attribution_method)
-         VALUES ($1, $2, $3, 'LINK')`,
-        [customerId, creatorId, visitId],
+           (customer_id, creator_id, referral_visit_id, attribution_method, attributed_at)
+         VALUES ($1, $2, $3, 'LINK', $4::date)`,
+        [customerId, creatorId, visitId, today],
       );
 
       const purchases = [
@@ -51,8 +53,8 @@ describe("creator analytics reporting", () => {
              creator_id, customer_id, source_system, source_transaction_id,
              source_transaction_number, currency, eligible_spend_npr,
              reward_rate_percent, reward_amount_npr, event_status,
-             eligible_at, available_at, payload_hash
-           ) VALUES ($1, $2, $3, $4, $5, 'NPR', $6, 1.00, $7, $8, NOW(), NOW(), $9)`,
+             eligible_at, available_at, payload_hash, created_at
+           ) VALUES ($1, $2, $3, $4, $5, 'NPR', $6, 1.00, $7, $8, NOW(), NOW(), $9, $10::date)`,
           [
             creatorId,
             customerId,
@@ -63,6 +65,7 @@ describe("creator analytics reporting", () => {
             purchase.reward,
             purchase.status,
             createHash("sha256").update(purchase.id).digest("hex"),
+            today,
           ],
         );
       }
