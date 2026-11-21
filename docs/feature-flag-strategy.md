@@ -11,6 +11,7 @@ The following environment flags default to false and cause production startup to
 - `ENABLE_EXTERNAL_TAX_INTEGRATION`
 - `ENABLE_RETURNS`
 - `ENABLE_PROMOTION_ENGINE`
+- `ENABLE_MEMBER_PRICING`
 - `ENABLE_CUSTOMER_SEGMENTS`
 - `ENABLE_OFFLINE_SYNC`
 - `ENABLE_HARDWARE_DEVICES`
@@ -18,3 +19,5 @@ The following environment flags default to false and cause production startup to
 - `ENABLE_FISCAL_COMPLIANCE_INTEGRATION`
 
 In non-production a deferred module may be registered only by deliberately setting its flag to `true`. UI hiding is presentation only; the production server does not register deferred routes. Promotion requires threat modeling, authorization and failure tests, operational runbooks, external contract verification where applicable, and a new full certification.
+
+The member-pricing administration API remains available to authorized staff for draft review, but production startup rejects `ENABLE_MEMBER_PRICING=true`. Creating or activating a draft does not turn on the checkout/POS price override. Production promotion and member pricing remain disabled until a separate certification changes this gate.
