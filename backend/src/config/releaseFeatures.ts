@@ -63,3 +63,12 @@ export function memberPricingEnabled(
 ): boolean {
   return env.ENABLE_MEMBER_PRICING === "true";
 }
+
+export function realCustomerOrdersEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (
+    env.NODE_ENV !== "production" ||
+    env.ENABLE_REAL_CUSTOMER_ORDERS === "true"
+  );
+}
