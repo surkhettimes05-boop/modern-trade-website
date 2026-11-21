@@ -34,17 +34,17 @@ export default function Home() {
     campaigns.find((campaign) => campaign.placements?.includes('OFFERS_PAGE')) ||
     featuredCampaign;
   const promotion = offers.find((offer) => offer.is_featured) || offers[0];
-  const heroImage = featuredCampaign?.banner_image_url || featuredCampaign?.image_url || hero;
-  const heroTitle = featuredCampaign?.title_en || 'Everyday shopping, closer to home.';
+  const heroImage = browseOnly ? hero : featuredCampaign?.banner_image_url || featuredCampaign?.image_url || hero;
+  const heroTitle = browseOnly ? 'Discover PASALHO, closer to home.' : featuredCampaign?.title_en || 'Everyday shopping, closer to home.';
   const heroDescription = browseOnly
     ? 'Explore PASALHO products and stores. This is a catalogue preview: registration, checkout and ordering are not available yet.'
     : featuredCampaign?.description_en ||
       'Groceries and household essentials in Birendranagar. Live NPR prices, delivery and pickup confirmed at checkout.';
-  const heroEyebrow =
+  const heroEyebrow = browseOnly ? 'CATALOGUE PREVIEW · BIRENDRANAGAR, SURKHET' :
     featuredCampaign?.subtitle_en || 'PASALHO · BIRENDRANAGAR, SURKHET';
   const heroCta = browseOnly ? 'Browse products' : featuredCampaign?.cta_text_en || 'Shop now';
   const heroHref = browseOnly ? '/shop' : featuredCampaign?.cta_url || '/shop';
-  const promotionImage =
+  const promotionImage = browseOnly ? hero :
     offerCampaign?.banner_image_url ||
     offerCampaign?.mobile_banner_image_url ||
     offerCampaign?.image_url ||
@@ -60,7 +60,7 @@ export default function Home() {
   const promotionHref = browseOnly ? '/shop' : offerCampaign?.cta_url || '/offers';
 
   return <>
-    <section className="hero shell"><div className="hero-main"><Image src={heroImage} alt={featuredCampaign?.title_en || "Fresh groceries arranged for a weekly shop"} fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">{heroEyebrow}</span><h1>{heroTitle}</h1><p>{heroDescription}</p><div><Link className="primary-btn" href={heroHref}>{heroCta} <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href="/offers" className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>LIVE OFFERS</span><h2>Smart shopping.<br />Better value.</h2><b>See today&apos;s offers -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>Shop what&apos;s<br />near you.</h2><b>Find a store -&gt;</b></Link></div></section>
+    <section className="hero shell"><div className="hero-main"><Image src={heroImage} alt={browseOnly ? 'Grocery produce arranged in a market' : featuredCampaign?.title_en || 'Fresh groceries arranged for a weekly shop'} fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">{heroEyebrow}</span><h1>{heroTitle}</h1><p>{heroDescription}</p><div><Link className="primary-btn" href={heroHref}>{heroCta} <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href={browseOnly ? '/shop' : '/offers'} className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>{browseOnly ? 'BROWSE THE CATALOGUE' : 'LIVE OFFERS'}</span><h2>Smart shopping.<br />Better value.</h2><b>{browseOnly ? 'See listed products' : "See today's offers"} -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>{browseOnly ? <>Find PASALHO<br />near you.</> : <>Shop what&apos;s<br />near you.</>}</h2><b>Find a store -&gt;</b></Link></div></section>
 
     <div className="service-strip shell">{browseOnly ? <><span><Tags />Browse product prices</span><span><Store />Explore local stores</span><span><ShieldCheck />No payments or orders are being accepted</span></> : <><span><Truck />Delivery fee based on your service area</span><span><PackageCheck />Store pickup available</span><span><ShieldCheck />Cash on delivery</span><span><Tags />Live store pricing and availability</span></>}</div>
 
@@ -69,7 +69,7 @@ export default function Home() {
         <Image src={promotionImage} alt="" fill unoptimized sizes="100vw" className="home-promotion-image object-cover" />
         <div className="home-promotion-content relative z-10 max-w-2xl p-7 sm:p-10">
           <p className="home-promotion-eyebrow text-xs font-black uppercase tracking-[0.18em]">
-            {offerCampaign ? 'Pasalho campaign' : promotion ? 'Pasalho promotion' : 'Pasalho launch'}
+            {browseOnly ? 'PASALHO catalogue preview' : offerCampaign ? 'Pasalho campaign' : promotion ? 'Pasalho promotion' : 'Pasalho launch'}
           </p>
           <h2 className="home-promotion-title mt-3 text-3xl font-black tracking-tight sm:text-4xl">
             {promotionTitle}
@@ -84,16 +84,16 @@ export default function Home() {
       </Link>
     </section>
 
-    <section className="section shell" id="categories"><SectionTitle eyebrow="Shop faster" title="Shop by category" /><p className="catalog-note">Browse the live Pasalho assortment by department. Prices and availability come from the selected store.</p><div className="category-grid">{categories.map((category) => <Link href={`/category/${category.slug}`} className="category-card" key={category.id}><div>{category.image && <Image src={category.image} fill sizes="220px" alt="" />}</div><h3>{category.name}</h3><span>{category.skuCount ? `${category.skuCount} products` : 'Shop now'} <ArrowRight /></span></Link>)}</div></section>
+    <section className="section shell" id="categories"><SectionTitle eyebrow="Explore the range" title="Browse by category" /><p className="catalog-note">{browseOnly ? 'Browse published listings. Prices are indicative and stock must be reconfirmed before ordering opens.' : 'Browse the live Pasalho assortment by department. Prices and availability come from the selected store.'}</p><div className="category-grid">{categories.map((category) => <Link href={`/category/${category.slug}`} className="category-card" key={category.id}><div>{category.image && <Image src={category.image} fill sizes="220px" alt="" />}</div><h3>{category.name}</h3><span>{category.skuCount ? `${category.skuCount} products` : 'View products'} <ArrowRight /></span></Link>)}</div></section>
 
-    {deals.length > 0 && <section className="section warm"><div className="shell"><SectionTitle eyebrow="Save on your regulars" title="Deals" link="See all deals" />{loading ? <p>Loading catalog...</p> : <div className="product-scroll">{deals.map((product) => <ProductCard product={product} key={product.id} />)}</div>}</div></section>}
+    {!browseOnly && deals.length > 0 && <section className="section warm"><div className="shell"><SectionTitle eyebrow="Save on your regulars" title="Deals" link="See all deals" />{loading ? <p>Loading catalog...</p> : <div className="product-scroll">{deals.map((product) => <ProductCard product={product} key={product.id} />)}</div>}</div></section>}
 
-    {newArrivals.length > 0 && <section className="section shell"><SectionTitle eyebrow="Freshly added" title="New arrivals" /><div className="product-scroll">{newArrivals.map((product) => <ProductCard product={product} key={product.id} />)}</div></section>}
+    {!browseOnly && newArrivals.length > 0 && <section className="section shell"><SectionTitle eyebrow="Freshly added" title="New arrivals" /><div className="product-scroll">{newArrivals.map((product) => <ProductCard product={product} key={product.id} />)}</div></section>}
 
-    {popular.length > 0 && <section className="section near"><div className="shell"><div className="near-head"><SectionTitle eyebrow="Popular picks" title="Popular right now" /><LocationPicker /></div><p className="subtle">Featured products first, with availability based on the selected store.</p><div className="product-scroll">{popular.map((product) => <ProductCard product={product} key={product.id} />)}</div></div></section>}
+    {popular.length > 0 && <section className="section near"><div className="shell"><div className="near-head"><SectionTitle eyebrow={browseOnly ? 'Published listings' : 'Popular picks'} title={browseOnly ? 'Explore PASALHO products' : 'Popular right now'} /><LocationPicker /></div><p className="subtle">{browseOnly ? 'Product prices and store stock are subject to confirmation before launch.' : 'Featured products first, with availability based on the selected store.'}</p><div className="product-scroll">{popular.map((product) => <ProductCard product={product} key={product.id} />)}</div></div></section>}
 
-    <section className="section shell"><SectionTitle eyebrow="Your regulars, ready" title="Everyday essentials" link="Shop all essentials" /><div className="essentials-grid">{products.slice(0, 8).map((product) => <ProductCard compact product={product} key={product.id} />)}</div></section>
+    {!browseOnly && <section className="section shell"><SectionTitle eyebrow="Your regulars, ready" title="Everyday essentials" link="Shop all essentials" /><div className="essentials-grid">{products.slice(0, 8).map((product) => <ProductCard compact product={product} key={product.id} />)}</div></section>}
 
-    <section className="section shell"><SectionTitle eyebrow="The Pasalho promise" title="More value in every visit" link="Our quality promise" /><div className="benefits"><div><Tags /><h3>Clear NPR prices</h3><p>{browseOnly ? 'Preview published prices before ordering opens.' : 'Know the current selling price before you add to cart.'}</p></div><div><ShieldCheck /><h3>Real product photos</h3><p>Recognize the exact brand and pack.</p></div><div><PackageCheck /><h3>Live availability</h3><p>{browseOnly ? 'Availability is informational until launch.' : 'Store stock determines whether an item can be ordered.'}</p></div><div><Store /><h3>Local fulfilment</h3><p>{browseOnly ? 'Explore PASALHO stores near you.' : 'Delivery and pickup are handled from your Pasalho store.'}</p></div></div></section>
+    <section className="section shell"><SectionTitle eyebrow="The Pasalho promise" title="More value in every visit" link="Our quality promise" /><div className="benefits"><div><Tags /><h3>Clear NPR prices</h3><p>{browseOnly ? 'Preview indicative prices before ordering opens.' : 'Know the current selling price before you add to cart.'}</p></div><div><ShieldCheck /><h3>{browseOnly ? 'Product details in progress' : 'Real product photos'}</h3><p>{browseOnly ? 'Accurate photos, brands and packs are being checked.' : 'Recognize the exact brand and pack.'}</p></div><div><PackageCheck /><h3>{browseOnly ? 'Stock checks ahead' : 'Live availability'}</h3><p>{browseOnly ? 'Store stock will be reconfirmed before launch.' : 'Store stock determines whether an item can be ordered.'}</p></div><div><Store /><h3>Local fulfilment</h3><p>{browseOnly ? 'Explore PASALHO stores near you.' : 'Delivery and pickup are handled from your Pasalho store.'}</p></div></div></section>
   </>;
 }
