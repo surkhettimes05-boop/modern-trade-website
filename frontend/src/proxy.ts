@@ -1,22 +1,24 @@
-import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { isBrowseOnly, isClosedCustomerRoute, shouldBlockBrowseOnlyMutation } from './lib/publicLaunch';
 
-/**
- * Optimistic defense-in-depth check for staff UI routes. Cookie presence is
- * not proof of authentication: backend endpoints still verify the signed JWT,
- * capabilities, store scope, CSRF token, and MFA state on every request.
- */
 export function proxy(request: NextRequest) {
-  if (request.cookies.has("ops_session")) return NextResponse.next();
+  if (!isBrowseOnly()) return NextResponse.next();
 
-  const login = new URL("/staff-login", request.url);
-  login.searchParams.set(
-    "next",
-    `${request.nextUrl.pathname}${request.nextUrl.search}`,
-  );
-  return NextResponse.redirect(login);
+  if (shouldBlockBrowseOnlyMutation(request.nextUrl.pathname, request.method)) {
+    return NextResponse.json({
+      code: 'CATALOG_ONLY',
+      error: 'PASALHO is currently browse-only; orders and registration are closed',
+    }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  if (isClosedCustomerRoute(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL('/launch-info', request.url), 307);
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/operations/:path*"],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|webp|svg|ico|woff2)$).*)'],
 };
