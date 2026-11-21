@@ -100,6 +100,7 @@ Render requires the operator to supply these deployment-specific values:
 ```text
 DATABASE_URL=<storesync_app managed PostgreSQL connection URL>
 CORS_ORIGIN=https://<your-vercel-domain>
+CUSTOMER_WEB_URL=https://<your-vercel-domain>
 APP_URL=https://<your-vercel-domain>
 PAYMENT_ENCRYPTION_KEY=<exactly 64 hexadecimal characters>
 ```
@@ -107,7 +108,7 @@ PAYMENT_ENCRYPTION_KEY=<exactly 64 hexadecimal characters>
 The separate migration job uses `.env.migration.example` and receives
 `MIGRATION_DATABASE_URL`; the Web Service must not receive that variable.
 
-`DATABASE_URL`, `CORS_ORIGIN`, and `APP_URL` are deployment-specific
+`DATABASE_URL`, `CORS_ORIGIN`, `CUSTOMER_WEB_URL`, and `APP_URL` are deployment-specific
 configuration. `PAYMENT_ENCRYPTION_KEY` is a secret; generate it with a
 cryptographically secure generator (for example, `openssl rand -hex 32`) and
 enter it only in Render. Render generates `JWT_SECRET`, `COOKIE_SECRET`,
