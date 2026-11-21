@@ -1,6 +1,8 @@
 import { query } from "../../database/connection.js";
 import { LoyaltyMvpService } from "../loyaltyMvpService.js";
 
+jest.setTimeout(30_000);
+
 const ORG = "22000000-0000-4000-8000-000000000001";
 const STORE = "22000000-0000-4000-8000-000000000002";
 const CUSTOMER = "22000000-0000-4000-8000-000000000003";

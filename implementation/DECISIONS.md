@@ -44,3 +44,11 @@ Record decisions that materially affect implementation. Do not rewrite past entr
 - Context: Loyalty, returns, advanced analytics, external tax/fiscal integrations, offline/device modules, electronic providers and related navigation are not certified.
 - Decision: The Nepal pilot is limited to the public website, catalog/store selection, customer account/cart/COD checkout/pickup-delivery/order history, staff login, basic cash POS/shifts, inventory, procurement, staff, content/catalog, audit and required operations. All other modules are retained but fail closed behind production feature controls.
 - Consequences: Deferred flags cannot be enabled in production without code/certification change. India remains a future registry entry and cannot become the active pilot market.
+
+## ADR-006 - Bounded catalog price expiry restores the prior eligible price
+
+- Date: 2026-11-21
+- Status: Accepted
+- Context: `product_prices` stores `valid_from`/`valid_to`, while storefront and checkout resolution select the most specific eligible effective price. The product owner confirmed on 2026-11-21 that a bounded price ending should restore the prior eligible price.
+- Decision: When a bounded price expires, the resolver selects the prior eligible price for the same store scope; if no store-specific row is eligible, the existing global fallback rules apply. Immediate open-ended edits retain the current replacement behavior. Scheduled and bounded edits leave prior eligible rows available.
+- Consequences: Add a regression test proving that an expired bounded row does not hide the prior eligible price. Published products still require a currently effective price. Production continues to reject `ENABLE_MEMBER_PRICING=true`, and the promotion engine remains behind its existing production startup guard.

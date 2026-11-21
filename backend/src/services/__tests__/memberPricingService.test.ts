@@ -136,6 +136,25 @@ async function quote(
 }
 
 describe("authoritative member pricing", () => {
+  it("restores the prior eligible price after a bounded price expires", async () => {
+    const ids = await createFixture();
+    await query(
+      `INSERT INTO product_prices (
+         product_id, store_id, price, currency_code, active, valid_from, valid_to
+       ) VALUES ($1, $2, 850.00, 'NPR', TRUE,
+                 NOW() - INTERVAL '2 hours', NOW() - INTERVAL '1 hour')`,
+      [ids.product, ids.store],
+    );
+
+    await expect(quote(ids)).resolves.toMatchObject([
+      {
+        regular_price: "1000.00",
+        final_price: "1000.00",
+        discount_per_unit: "0.00",
+      },
+    ]);
+  });
+
   it("returns regular prices while member pricing is disabled", async () => {
     const originalFlag = process.env.ENABLE_MEMBER_PRICING;
     process.env.ENABLE_MEMBER_PRICING = "false";

@@ -304,8 +304,8 @@ export function AdminTopbar() {
     setActiveIndex(0);
   }
   function openCommand(item: CommandItem) {
-    closePalette();
     router.push(item.href);
+    closePalette();
   }
   function onPaletteKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {

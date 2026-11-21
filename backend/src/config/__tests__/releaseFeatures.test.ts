@@ -1,6 +1,7 @@
 import {
   PILOT_FEATURES,
   memberPricingEnabled,
+  realCustomerOrdersEnabled,
   validatePilotFeatureEnvironment,
 } from "../releaseFeatures.js";
 
@@ -28,9 +29,37 @@ describe("pilot feature controls", () => {
     ).toThrow("Deferred pilot features cannot be enabled");
   });
 
+  it("keeps member pricing disabled in production", () => {
+    expect(() =>
+      validatePilotFeatureEnvironment({
+        NODE_ENV: "production",
+        ENABLE_MEMBER_PRICING: "true",
+      }),
+    ).toThrow("ENABLE_MEMBER_PRICING");
+  });
+
   it("keeps member pricing off unless explicitly enabled", () => {
     expect(memberPricingEnabled({})).toBe(false);
-    expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "false" })).toBe(false);
+    expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "false" })).toBe(
+      false,
+    );
     expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "true" })).toBe(true);
+  });
+
+  it("fails closed for production customer orders until explicitly enabled", () => {
+    expect(realCustomerOrdersEnabled({ NODE_ENV: "production" })).toBe(false);
+    expect(
+      realCustomerOrdersEnabled({
+        NODE_ENV: "production",
+        ENABLE_REAL_CUSTOMER_ORDERS: "false",
+      }),
+    ).toBe(false);
+    expect(
+      realCustomerOrdersEnabled({
+        NODE_ENV: "production",
+        ENABLE_REAL_CUSTOMER_ORDERS: "true",
+      }),
+    ).toBe(true);
+    expect(realCustomerOrdersEnabled({ NODE_ENV: "test" })).toBe(true);
   });
 });

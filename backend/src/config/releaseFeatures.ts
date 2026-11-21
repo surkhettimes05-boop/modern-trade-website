@@ -31,6 +31,7 @@ const DEFERRED_ENV_FLAGS = [
   "ENABLE_EXTERNAL_TAX_INTEGRATION",
   "ENABLE_RETURNS",
   "ENABLE_PROMOTION_ENGINE",
+  "ENABLE_MEMBER_PRICING",
   "ENABLE_CUSTOMER_SEGMENTS",
   "ENABLE_OFFLINE_SYNC",
   "ENABLE_HARDWARE_DEVICES",
@@ -61,4 +62,13 @@ export function memberPricingEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   return env.ENABLE_MEMBER_PRICING === "true";
+}
+
+export function realCustomerOrdersEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (
+    env.NODE_ENV !== "production" ||
+    env.ENABLE_REAL_CUSTOMER_ORDERS === "true"
+  );
 }

@@ -116,6 +116,8 @@ services:
         value: "100"
       - key: ENABLE_ELECTRONIC_PAYMENTS
         value: "false"
+      - key: ENABLE_REAL_CUSTOMER_ORDERS
+        value: "false"
       - key: SMS_PROVIDER
         value: twilio_verify
       - key: TWILIO_ACCOUNT_SID

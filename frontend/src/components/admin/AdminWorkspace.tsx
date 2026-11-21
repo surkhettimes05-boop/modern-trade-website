@@ -51,7 +51,15 @@ import { OpeningStockButton } from "@/components/admin/OpeningStockTools";
 type FormField = {
   name: string;
   label: string;
-  type?: "text" | "email" | "url" | "textarea" | "select" | "datetime-local" | "checkbox";
+  type?:
+    | "text"
+    | "email"
+    | "url"
+    | "number"
+    | "textarea"
+    | "select"
+    | "datetime-local"
+    | "checkbox";
   required?: boolean;
   options?: Array<{ label: string; value: string }>;
 };
@@ -171,7 +179,11 @@ const resources: Record<string, ResourceConfig> = {
         type: "select",
         options: statusOptions,
       },
-      { name: "is_featured", label: "Use as homepage banner", type: "checkbox" },
+      {
+        name: "is_featured",
+        label: "Use as homepage banner",
+        type: "checkbox",
+      },
     ],
     columns: [
       { key: "title_en", label: "Promotion" },
@@ -214,6 +226,22 @@ const resources: Record<string, ResourceConfig> = {
       { name: "name_en", label: "Product name", required: true },
       { name: "description_en", label: "Description", type: "textarea" },
       { name: "image_url", label: "Image URL", type: "url" },
+      { name: "price", label: "Selling price (NPR)", type: "number" },
+      {
+        name: "original_price",
+        label: "MRP / original price (NPR)",
+        type: "number",
+      },
+      {
+        name: "valid_from",
+        label: "Price effective from",
+        type: "datetime-local",
+      },
+      {
+        name: "valid_to",
+        label: "Price effective until",
+        type: "datetime-local",
+      },
       {
         name: "status",
         label: "Status",
@@ -252,7 +280,27 @@ const resources: Record<string, ResourceConfig> = {
       {
         key: "price",
         label: "Price",
-        render: (row) => money(row.price, asText(row.currency_code, "NPR")),
+        render: (row) => (
+          <div>
+            <p>{money(row.price, asText(row.currency_code, "NPR"))}</p>
+            {(typeof row.price_valid_from === "string" ||
+              typeof row.price_valid_from === "number") && (
+              <p className="text-xs text-slate-500">
+                Effective {dateTime(row.price_valid_from)}
+                {asText(row.price_valid_to)
+                  ? ` – ${dateTime(asText(row.price_valid_to))}`
+                  : ""}
+              </p>
+            )}
+            {(typeof row.next_price === "string" ||
+              typeof row.next_price === "number") && (
+              <p className="text-xs font-medium text-amber-800">
+                Next {money(row.next_price, asText(row.currency_code, "NPR"))} ·{" "}
+                {dateTime(row.next_price_valid_from)}
+              </p>
+            )}
+          </div>
+        ),
       },
       { key: "stock", label: "Stock" },
       { key: "status", label: "Status" },
@@ -828,6 +876,7 @@ function OrderActions({
 
 function ResourcePage({ config }: { config: ResourceConfig }) {
   const { hasCapability } = useStaffSession();
+  const { selectedStoreId } = useAdminShell();
   const searchParams = useSearchParams();
   const [formOpen, setFormOpen] = useState(searchParams.get("create") === "1");
   const [submitting, setSubmitting] = useState(false);
@@ -868,6 +917,13 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
         })
         .filter(([, value]) => value !== ""),
     );
+    if (
+      config.title === "Products" &&
+      selectedStoreId !== "all" &&
+      payload.price !== undefined
+    ) {
+      Object.assign(payload, { store_id: selectedStoreId });
+    }
     try {
       const response = await resilientFetch(config.endpoint, {
         method: "POST",
@@ -890,7 +946,8 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
             if (!(typeof issue === "object" && issue && "message" in issue))
               return "";
             const path =
-              "path" in issue && Array.isArray((issue as { path?: unknown }).path)
+              "path" in issue &&
+              Array.isArray((issue as { path?: unknown }).path)
                 ? (issue as { path: unknown[] }).path.join(".")
                 : "";
             const message = String((issue as { message: unknown }).message);
@@ -1048,6 +1105,8 @@ function ResourcePage({ config }: { config: ResourceConfig }) {
                     <input
                       name={field.name}
                       type={field.type || "text"}
+                      min={field.type === "number" ? "0.01" : undefined}
+                      step={field.type === "number" ? "0.01" : undefined}
                       required={field.required}
                       className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
                     />
@@ -1622,7 +1681,11 @@ export function AdminWorkspace() {
   if (key === "content/campaigns")
     return hasCapability("content.read") ? <CampaignsPage /> : <Forbidden />;
   if (key === "member-pricing")
-    return hasCapability("pricing.read") ? <MemberPricingPage /> : <Forbidden />;
+    return hasCapability("pricing.read") ? (
+      <MemberPricingPage />
+    ) : (
+      <Forbidden />
+    );
   const direct = resources[key];
   if (direct)
     return hasCapability(direct.capability) ? (

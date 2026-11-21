@@ -3,6 +3,10 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { preHandler } from "../middleware/authentication.js";
 import { MARKET } from "../config/market.js";
+import {
+  validateEffectivePriceWindow,
+  validatePublishedProductPrice,
+} from "../contracts/catalogPricing.js";
 import { getPool, query } from "../database/connection.js";
 import {
   commitProductImport,
@@ -67,6 +71,14 @@ const httpsUrlSchema = z
   .url()
   .refine((value) => new URL(value).protocol === "https:", {
     message: "URL must use HTTPS",
+  });
+const priceAmountSchema = z.coerce
+  .number()
+  .finite()
+  .positive()
+  .max(99_999_999.99)
+  .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8, {
+    message: "Price must have no more than two decimal places",
   });
 
 export async function adminRoutes(fastify: FastifyInstance) {
@@ -811,16 +823,20 @@ export async function adminRoutes(fastify: FastifyInstance) {
             imageBytes[2] === 0xff
           : body.mime_type === "image/png"
             ? imageBytes.length >= 8 &&
-              imageBytes.subarray(0, 8).equals(
-                Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-              )
+              imageBytes
+                .subarray(0, 8)
+                .equals(
+                  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+                )
             : imageBytes.length >= 12 &&
               imageBytes.toString("ascii", 0, 4) === "RIFF" &&
               imageBytes.toString("ascii", 8, 12) === "WEBP";
       if (!validMagic) {
         return reply
           .status(400)
-          .send({ error: "Image file contents do not match the selected file type" });
+          .send({
+            error: "Image file contents do not match the selected file type",
+          });
       }
 
       const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
@@ -843,10 +859,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         .digest("hex");
 
       const upload = new FormData();
-      upload.set(
-        "file",
-        `data:${body.mime_type};base64,${body.data_base64}`,
-      );
+      upload.set("file", `data:${body.mime_type};base64,${body.data_base64}`);
       upload.set("api_key", apiKey);
       upload.set("timestamp", String(timestamp));
       upload.set("folder", folder);
@@ -914,21 +927,35 @@ export async function adminRoutes(fastify: FastifyInstance) {
           SELECT product_id, SUM(quantity)::numeric AS quantity FROM batch_inventory
           WHERE ($1::uuid[] IS NULL OR store_id = ANY($1::uuid[])) GROUP BY product_id
         ), prices AS (
-          SELECT DISTINCT ON (product_id) product_id, price, currency_code FROM product_prices
+          SELECT DISTINCT ON (product_id) product_id, price, original_price, currency_code, valid_from, valid_to FROM product_prices
           WHERE active = TRUE AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
-            AND ($1::uuid[] IS NULL OR store_id = ANY($1::uuid[]) OR store_id IS NULL)
-          ORDER BY product_id, store_id NULLS LAST, valid_from DESC
+            AND (($2::uuid IS NULL AND store_id IS NULL)
+              OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL)))
+          ORDER BY product_id, (store_id = $2) DESC NULLS LAST, valid_from DESC, created_at DESC, id DESC
+        ), next_prices AS (
+          SELECT DISTINCT ON (product_id) product_id, price, valid_from
+          FROM product_prices
+          WHERE active = TRUE AND valid_from > NOW()
+            AND (valid_to IS NULL OR valid_to > valid_from)
+            AND (($2::uuid IS NULL AND store_id IS NULL)
+              OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL)))
+          ORDER BY product_id, (store_id = $2) DESC NULLS LAST, valid_from ASC, created_at DESC, id DESC
         )
         SELECT p.*, c.name_en AS category_name, COALESCE(stock.quantity, 0) AS stock,
-          prices.price, prices.currency_code, COUNT(*) OVER()::int AS total_count
+          prices.price, prices.original_price, prices.currency_code,
+          prices.valid_from AS price_valid_from, prices.valid_to AS price_valid_to,
+          next_prices.price AS next_price, next_prices.valid_from AS next_price_valid_from,
+          COUNT(*) OVER()::int AS total_count
         FROM products p LEFT JOIN categories c ON c.id = p.category_id
         LEFT JOIN stock ON stock.product_id = p.id LEFT JOIN prices ON prices.product_id = p.id
-        WHERE ($2::text IS NULL OR p.name_en ILIKE '%' || $2 || '%' OR p.sku ILIKE '%' || $2 || '%')
-          AND ($3::text IS NULL OR p.status::text = $3) AND ($4::uuid IS NULL OR p.category_id = $4)
-          AND ($5::text IS NULL OR ($5 = 'out' AND COALESCE(stock.quantity, 0) <= 0) OR ($5 = 'low' AND COALESCE(stock.quantity, 0) > 0 AND COALESCE(stock.quantity, 0) <= 5) OR ($5 = 'in' AND COALESCE(stock.quantity, 0) > 5))
-        ORDER BY p.updated_at DESC LIMIT $6 OFFSET $7`,
+        LEFT JOIN next_prices ON next_prices.product_id = p.id
+        WHERE ($3::text IS NULL OR p.name_en ILIKE '%' || $3 || '%' OR p.sku ILIKE '%' || $3 || '%')
+          AND ($4::text IS NULL OR p.status::text = $4) AND ($5::uuid IS NULL OR p.category_id = $5)
+          AND ($6::text IS NULL OR ($6 = 'out' AND COALESCE(stock.quantity, 0) <= 0) OR ($6 = 'low' AND COALESCE(stock.quantity, 0) > 0 AND COALESCE(stock.quantity, 0) <= 5) OR ($6 = 'in' AND COALESCE(stock.quantity, 0) > 5))
+        ORDER BY p.updated_at DESC LIMIT $7 OFFSET $8`,
         [
           storeIds,
+          input.store_id || null,
           input.search || null,
           input.status || null,
           input.category_id || null,
@@ -951,8 +978,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   fastify.post("/products", async (request, reply) => {
     const productSchema = z.object({
-      sku: z.string().min(1).max(100),
-      name_en: z.string().min(1).max(255),
+      sku: z.string().trim().min(1).max(100),
+      name_en: z.string().trim().min(1).max(255),
       name_ne: z.string().max(255).optional(),
       description_en: z.string().optional(),
       description_ne: z.string().optional(),
@@ -967,6 +994,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
       scheduled_for: z.string().datetime().optional(),
       expires_at: z.string().datetime().optional(),
       is_featured: z.boolean().default(false),
+      price: priceAmountSchema.optional(),
+      original_price: priceAmountSchema.nullable().optional(),
+      valid_from: z.coerce.date().optional(),
+      valid_to: z.coerce.date().nullable().optional(),
+      store_id: z.string().uuid().optional(),
       meta_title_en: z.string().max(255).optional(),
       meta_title_ne: z.string().max(255).optional(),
       meta_description_en: z.string().optional(),
@@ -975,44 +1007,124 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     try {
       const body = productSchema.parse(request.body);
-      const result = await query(
-        `INSERT INTO products (sku, name_en, name_ne, description_en, description_ne, category_id, pack_size_en, pack_size_ne, unit_en, unit_ne, image_url, images, status, published_at, scheduled_for, expires_at, is_featured, meta_title_en, meta_title_ne, meta_description_en, meta_description_ne, created_by)
+      if (
+        body.original_price != null &&
+        (body.price === undefined || body.original_price < body.price)
+      ) {
+        return reply
+          .status(400)
+          .send({
+            error:
+              "Original price requires a selling price and cannot be lower than it",
+          });
+      }
+      const validFrom = body.valid_from || new Date();
+      const validTo = body.valid_to || null;
+      const windowError = validateEffectivePriceWindow({ validFrom, validTo });
+      if (windowError) return reply.status(400).send({ error: windowError });
+      if (
+        body.price === undefined &&
+        (body.valid_from ||
+          body.valid_to ||
+          body.original_price != null ||
+          body.store_id)
+      ) {
+        return reply
+          .status(400)
+          .send({
+            error:
+              "Price dates, scope, and original price require a selling price",
+          });
+      }
+      const publicationError = validatePublishedProductPrice({
+        status: body.status,
+        price: body.price,
+        validFrom,
+        validTo,
+      });
+      if (publicationError) return reply.status(400).send({ error: publicationError });
+      const storeIds = body.store_id
+        ? await allowedStoreIds(actor(request), body.store_id)
+        : null;
+      if (body.store_id && storeIds?.length === 0) {
+        return reply
+          .status(403)
+          .send({ error: "Store is outside your authorized scope" });
+      }
+      const client = await getPool().connect();
+      let product;
+      try {
+        await client.query("BEGIN");
+        const result = await client.query(
+          `INSERT INTO products (sku, name_en, name_ne, description_en, description_ne, category_id, pack_size_en, pack_size_ne, unit_en, unit_ne, image_url, images, status, published_at, scheduled_for, expires_at, is_featured, meta_title_en, meta_title_ne, meta_description_en, meta_description_ne, created_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
          RETURNING *`,
-        [
-          body.sku,
-          body.name_en,
-          body.name_ne || null,
-          body.description_en || null,
-          body.description_ne || null,
-          body.category_id || null,
-          body.pack_size_en || null,
-          body.pack_size_ne || null,
-          body.unit_en || null,
-          body.unit_ne || null,
-          body.image_url || null,
-          body.images ? JSON.stringify(body.images) : null,
-          body.status,
-          body.status === "PUBLISHED" ? new Date() : null,
-          body.scheduled_for ? new Date(body.scheduled_for) : null,
-          body.expires_at ? new Date(body.expires_at) : null,
-          body.is_featured,
-          body.meta_title_en || null,
-          body.meta_title_ne || null,
-          body.meta_description_en || null,
-          body.meta_description_ne || null,
-          actor(request).id,
-        ],
-      );
-
-      return result.rows[0];
+          [
+            body.sku,
+            body.name_en,
+            body.name_ne || null,
+            body.description_en || null,
+            body.description_ne || null,
+            body.category_id || null,
+            body.pack_size_en || null,
+            body.pack_size_ne || null,
+            body.unit_en || null,
+            body.unit_ne || null,
+            body.image_url || null,
+            body.images ? JSON.stringify(body.images) : null,
+            body.status,
+            body.status === "PUBLISHED" ? new Date() : null,
+            body.scheduled_for ? new Date(body.scheduled_for) : null,
+            body.expires_at ? new Date(body.expires_at) : null,
+            body.is_featured,
+            body.meta_title_en || null,
+            body.meta_title_ne || null,
+            body.meta_description_en || null,
+            body.meta_description_ne || null,
+            actor(request).id,
+          ],
+        );
+        product = result.rows[0];
+        if (body.price !== undefined) {
+          await client.query(
+            `INSERT INTO product_prices
+              (product_id, store_id, price, original_price, currency_code, active, valid_from, valid_to)
+             VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7)`,
+            [
+              product.id,
+              body.store_id || null,
+              body.price,
+              body.original_price ?? null,
+              MARKET.currencyCode,
+              validFrom,
+              validTo,
+            ],
+          );
+        }
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+      return reply.status(201).send(product);
     } catch (error) {
       if (error instanceof z.ZodError) {
         reply.status(400);
         return { error: "Validation failed", details: error.issues };
       }
-      reply.status(500);
-      return { error: "Failed to create product" };
+      const databaseCode = (error as { code?: string }).code;
+      if (databaseCode === "23505")
+        return reply
+          .status(409)
+          .send({ error: "A product with this SKU already exists" });
+      if (databaseCode === "23503")
+        return reply
+          .status(400)
+          .send({ error: "The selected category or store is unavailable" });
+      request.log.error({ error }, "Product creation failed");
+      return reply.status(500).send({ error: "Failed to create product" });
     }
   });
 
@@ -1028,9 +1140,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const body = productImportBodySchema.parse(request.body);
       const storeIds = await allowedStoreIds(actor(request), body.store_id);
-      const includesOpeningStock = body.rows.some((row) => Number(row.opening_quantity || 0) > 0);
-      if (includesOpeningStock && !isPrivileged(actor(request)) && !actor(request).capabilities?.includes("inventory.adjust")) {
-        return reply.status(403).send({ error: "Opening stock import requires inventory.adjust capability" });
+      const includesOpeningStock = body.rows.some(
+        (row) => Number(row.opening_quantity || 0) > 0,
+      );
+      if (
+        includesOpeningStock &&
+        !isPrivileged(actor(request)) &&
+        !actor(request).capabilities?.includes("inventory.adjust")
+      ) {
+        return reply
+          .status(403)
+          .send({
+            error: "Opening stock import requires inventory.adjust capability",
+          });
       }
       if (body.store_id && storeIds?.length === 0)
         return reply
@@ -1047,9 +1169,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const body = productImportBodySchema.parse(request.body);
       const storeIds = await allowedStoreIds(actor(request), body.store_id);
-      const includesOpeningStock = body.rows.some((row) => Number(row.opening_quantity || 0) > 0);
-      if (includesOpeningStock && !isPrivileged(actor(request)) && !actor(request).capabilities?.includes("inventory.adjust")) {
-        return reply.status(403).send({ error: "Opening stock import requires inventory.adjust capability" });
+      const includesOpeningStock = body.rows.some(
+        (row) => Number(row.opening_quantity || 0) > 0,
+      );
+      if (
+        includesOpeningStock &&
+        !isPrivileged(actor(request)) &&
+        !actor(request).capabilities?.includes("inventory.adjust")
+      ) {
+        return reply
+          .status(403)
+          .send({
+            error: "Opening stock import requires inventory.adjust capability",
+          });
       }
       if (body.store_id && storeIds?.length === 0)
         return reply
@@ -1139,8 +1271,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
         image_url: httpsUrlSchema.nullable().optional(),
         status: publicationStatusSchema.optional(),
         is_featured: z.boolean().optional(),
-        price: z.coerce.number().positive().max(99_999_999.99).optional(),
-        original_price: z.coerce.number().positive().max(99_999_999.99).nullable().optional(),
+        price: priceAmountSchema.optional(),
+        original_price: priceAmountSchema.nullable().optional(),
+        valid_from: z.coerce.date().optional(),
+        valid_to: z.coerce.date().nullable().optional(),
         store_id: z.string().uuid().optional(),
       })
       .strict()
@@ -1149,7 +1283,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
     if (body.original_price !== undefined && body.price === undefined)
       return reply
         .status(400)
-        .send({ error: "Original price requires the selling price in the same update" });
+        .send({
+          error: "Original price requires the selling price in the same update",
+        });
     if (
       body.original_price != null &&
       body.price !== undefined &&
@@ -1157,11 +1293,38 @@ export async function adminRoutes(fastify: FastifyInstance) {
     )
       return reply
         .status(400)
-        .send({ error: "Original price cannot be lower than the selling price" });
+        .send({
+          error: "Original price cannot be lower than the selling price",
+        });
+
+    const validFrom = body.valid_from || new Date();
+    const validTo = body.valid_to || null;
+    if (body.price !== undefined) {
+      const windowError = validateEffectivePriceWindow({ validFrom, validTo });
+      if (windowError) return reply.status(400).send({ error: windowError });
+      const publicationError = validatePublishedProductPrice({
+        status: body.status || "DRAFT",
+        price: body.price,
+        validFrom,
+        validTo,
+      });
+      if (publicationError) return reply.status(400).send({ error: publicationError });
+    } else if (body.valid_from !== undefined || body.valid_to !== undefined) {
+      return reply
+        .status(400)
+        .send({ error: "Price dates require a selling price" });
+    }
 
     const productFields = Object.fromEntries(
       Object.entries(body).filter(
-        ([key]) => !["price", "original_price", "store_id"].includes(key),
+        ([key]) =>
+          ![
+            "price",
+            "original_price",
+            "store_id",
+            "valid_from",
+            "valid_to",
+          ].includes(key),
       ),
     );
     if (!Object.keys(productFields).length && body.price === undefined)
@@ -1175,7 +1338,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
         .status(403)
         .send({ error: "Store is outside your authorized scope" });
 
-    const productExists = await query("SELECT id FROM products WHERE id = $1", [id]);
+    const productExists = await query("SELECT id FROM products WHERE id = $1", [
+      id,
+    ]);
     if (!productExists.rowCount)
       return reply.status(404).send({ error: "Product not found" });
 
@@ -1196,7 +1361,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
       if (!activePrice.rowCount)
         return reply
           .status(400)
-          .send({ error: "Published products require an active selling price" });
+          .send({
+            error: "Published products require an active selling price",
+          });
     }
 
     const client = await getPool().connect();
@@ -1226,27 +1393,30 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
 
       if (body.price !== undefined) {
-        await client.query(
-          `UPDATE product_prices
-           SET active = FALSE, valid_to = NOW()
-           WHERE product_id = $1
-             AND active = TRUE
-             AND (
-               ($2::uuid IS NULL AND store_id IS NULL)
-               OR ($2::uuid IS NOT NULL AND store_id = $2)
-             )`,
-          [id, body.store_id || null],
-        );
+        if (validFrom <= new Date() && validTo === null) {
+          await client.query(
+            `UPDATE product_prices
+             SET active = FALSE, valid_to = $3
+             WHERE product_id = $1
+               AND active = TRUE
+               AND valid_from <= $3
+               AND (valid_to IS NULL OR valid_to > $3)
+               AND (($2::uuid IS NULL AND store_id IS NULL) OR ($2::uuid IS NOT NULL AND store_id = $2))`,
+            [id, body.store_id || null, validFrom],
+          );
+        }
         await client.query(
           `INSERT INTO product_prices
-            (product_id, store_id, price, original_price, currency_code, active, valid_from)
-           VALUES ($1, $2, $3, $4, $5, TRUE, NOW())`,
+            (product_id, store_id, price, original_price, currency_code, active, valid_from, valid_to)
+           VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7)`,
           [
             id,
             body.store_id || null,
             body.price,
             body.original_price ?? null,
             MARKET.currencyCode,
+            validFrom,
+            validTo,
           ],
         );
       }
@@ -1270,6 +1440,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
           )
         ORDER BY CASE WHEN $2::uuid IS NOT NULL AND store_id = $2 THEN 0 ELSE 1 END, valid_from DESC
         LIMIT 1) AS price,
+      (SELECT original_price FROM product_prices
+        WHERE product_id = p.id AND active = TRUE
+          AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
+          AND (($2::uuid IS NULL AND store_id IS NULL) OR ($2::uuid IS NOT NULL AND (store_id = $2 OR store_id IS NULL)))
+        ORDER BY CASE WHEN $2::uuid IS NOT NULL AND store_id = $2 THEN 0 ELSE 1 END, valid_from DESC, created_at DESC, id DESC
+        LIMIT 1) AS original_price,
       (SELECT currency_code FROM product_prices
         WHERE product_id = p.id AND active = TRUE
           AND valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())
@@ -1313,16 +1489,20 @@ export async function adminRoutes(fastify: FastifyInstance) {
             imageBytes[2] === 0xff
           : body.mime_type === "image/png"
             ? imageBytes.length >= 8 &&
-              imageBytes.subarray(0, 8).equals(
-                Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-              )
+              imageBytes
+                .subarray(0, 8)
+                .equals(
+                  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+                )
             : imageBytes.length >= 12 &&
               imageBytes.toString("ascii", 0, 4) === "RIFF" &&
               imageBytes.toString("ascii", 8, 12) === "WEBP";
       if (!validMagic) {
         return reply
           .status(400)
-          .send({ error: "Image file contents do not match the selected file type" });
+          .send({
+            error: "Image file contents do not match the selected file type",
+          });
       }
 
       const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
@@ -1345,10 +1525,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         .digest("hex");
 
       const upload = new FormData();
-      upload.set(
-        "file",
-        `data:${body.mime_type};base64,${body.data_base64}`,
-      );
+      upload.set("file", `data:${body.mime_type};base64,${body.data_base64}`);
       upload.set("api_key", apiKey);
       upload.set("timestamp", String(timestamp));
       upload.set("folder", folder);
@@ -1427,7 +1604,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
           .trim()
           .toLowerCase()
           .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-            message: "Slug may contain lowercase letters, numbers, and hyphens only",
+            message:
+              "Slug may contain lowercase letters, numbers, and hyphens only",
           })
           .max(255),
         description_en: z.string().optional(),
@@ -1479,7 +1657,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
           .trim()
           .toLowerCase()
           .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-            message: "Slug may contain lowercase letters, numbers, and hyphens only",
+            message:
+              "Slug may contain lowercase letters, numbers, and hyphens only",
           })
           .max(255)
           .optional(),
@@ -1582,7 +1761,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
     };
   });
 
-
   fastify.post("/inventory/opening-stock", async (request, reply) => {
     const body = z
       .object({
@@ -1624,10 +1802,14 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const today = new Date().toISOString().slice(0, 10);
     const stockDate = body.stock_date || today;
     if (stockDate > today) {
-      return reply.status(400).send({ error: "Stock date cannot be in the future" });
+      return reply
+        .status(400)
+        .send({ error: "Stock date cannot be in the future" });
     }
     if (body.expiry_date && body.expiry_date < today) {
-      return reply.status(400).send({ error: "Expiry date cannot be in the past" });
+      return reply
+        .status(400)
+        .send({ error: "Expiry date cannot be in the past" });
     }
 
     const client = await getPool().connect();
@@ -1649,7 +1831,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
            JOIN stores s ON s.id = bi.store_id
            WHERE bi.store_id = $1 AND bi.product_id = $2 AND bi.batch_id = $3
            LIMIT 1`,
-          [prior.rows[0].store_id, prior.rows[0].product_id, prior.rows[0].batch_id],
+          [
+            prior.rows[0].store_id,
+            prior.rows[0].product_id,
+            prior.rows[0].batch_id,
+          ],
         );
         await client.query("COMMIT");
         return reply.send({
@@ -1797,10 +1983,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
       await client.query("ROLLBACK");
       if (
         error instanceof Error &&
-        error.message.includes("uq_inventory_transactions_opening_stock_reference")
+        error.message.includes(
+          "uq_inventory_transactions_opening_stock_reference",
+        )
       ) {
         return reply.status(409).send({
-          error: "Opening-stock operation was already recorded. Refresh inventory before retrying.",
+          error:
+            "Opening-stock operation was already recorded. Refresh inventory before retrying.",
         });
       }
       request.log.error({ error }, "Failed to add opening stock");
