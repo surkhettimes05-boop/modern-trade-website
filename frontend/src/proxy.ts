@@ -1,12 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { isBrowseOnly, isClosedCustomerRoute } from './lib/publicLaunch';
+import { isBrowseOnly, isClosedCustomerRoute, shouldBlockBrowseOnlyMutation } from './lib/publicLaunch';
 
 export function proxy(request: NextRequest) {
   if (!isBrowseOnly()) return NextResponse.next();
 
-  if (request.nextUrl.pathname.startsWith('/api/') &&
-      !['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+  if (shouldBlockBrowseOnlyMutation(request.nextUrl.pathname, request.method)) {
     return NextResponse.json({
       code: 'CATALOG_ONLY',
       error: 'PASALHO is currently browse-only; orders and registration are closed',
