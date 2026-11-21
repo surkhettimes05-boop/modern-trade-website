@@ -45,11 +45,10 @@ Record decisions that materially affect implementation. Do not rewrite past entr
 - Decision: The Nepal pilot is limited to the public website, catalog/store selection, customer account/cart/COD checkout/pickup-delivery/order history, staff login, basic cash POS/shifts, inventory, procurement, staff, content/catalog, audit and required operations. All other modules are retained but fail closed behind production feature controls.
 - Consequences: Deferred flags cannot be enabled in production without code/certification change. India remains a future registry entry and cannot become the active pilot market.
 
-## ADR-006 - Catalog price windows preserve the existing resolver
+## ADR-006 - Bounded catalog price expiry restores the prior eligible price
 
 - Date: 2026-11-21
-- Status: Provisional implementation; product confirmation needed before treating bounded overrides as final policy
-- Context: `product_prices` stores `valid_from`/`valid_to`, while admin price edits only supported immediate changes. Storefront and checkout resolution prefer a store-specific effective price, then the latest effective row.
-- Decision: Admin price edits accept effective timestamps. Immediate open-ended edits retain the existing replacement behavior; scheduled and bounded edits leave the prior eligible price row available, so it is selected again after the newer row expires under the existing resolver.
-- Product decision needed: Confirm whether ending a bounded price should restore the prior eligible price or leave the product without a price. No schema constraint or launch document states this explicitly.
-- Consequences: Published products must have a price effective now. Production still rejects `ENABLE_MEMBER_PRICING=true`, and the promotion engine remains behind its existing production startup guard.
+- Status: Accepted
+- Context: `product_prices` stores `valid_from`/`valid_to`, while storefront and checkout resolution select the most specific eligible effective price. The product owner confirmed on 2026-11-21 that a bounded price ending should restore the prior eligible price.
+- Decision: When a bounded price expires, the resolver selects the prior eligible price for the same store scope; if no store-specific row is eligible, the existing global fallback rules apply. Immediate open-ended edits retain the current replacement behavior. Scheduled and bounded edits leave prior eligible rows available.
+- Consequences: Add a regression test proving that an expired bounded row does not hide the prior eligible price. Published products still require a currently effective price. Production continues to reject `ENABLE_MEMBER_PRICING=true`, and the promotion engine remains behind its existing production startup guard.
