@@ -5,7 +5,9 @@ export function isBrowseOnly(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 export function isClosedCustomerRoute(pathname: string): boolean {
-  return /^\/(?:checkout|cart|whatsapp-order|account|membership|creator|founders|loyalty|r)(?:\/|$)/.test(pathname);
+  // The local cart only prepares a manual WhatsApp request. Online checkout,
+  // accounts, and customer enrollment remain closed until separately approved.
+  return /^\/(?:checkout|account|membership|creator|founders|loyalty|r)(?:\/|$)/.test(pathname);
 }
 
 // Staff pages must remain reachable in production preview mode. They redirect
@@ -15,8 +17,8 @@ export function isStaffManagementRoute(pathname: string): boolean {
   return /^\/(?:admin|operations|staff-login)(?:\/|$)/.test(pathname);
 }
 
-// Do not lift the browse-only restriction for customer checkout or registration.
-// This is an explicit allowlist of staff-authenticated API namespaces.
+// Manual WhatsApp requests are prepared entirely in the browser. Keep every
+// customer API mutation blocked; only staff-authenticated API namespaces pass.
 export function isStaffManagementApi(pathname: string): boolean {
   return /^\/api\/(?:admin|operations-auth)(?:\/|$)/.test(pathname);
 }

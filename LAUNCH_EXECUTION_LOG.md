@@ -1,0 +1,29 @@
+# PASALHO Launch Execution Log
+
+Scope confirmed by Pramod: manual phone/WhatsApp order requests; no new staging setup; Pramod verifies and fulfills requests. No purchase, production setting change, production migration, merge, or order enablement is authorized by this log.
+
+Review branch: `codex/pasalho-launch-audit-20261122`  
+Baseline `main`: `90d62725ab6d1205bf170ab71edde9481faa6f55`  
+Started: 2026-11-22 (Nepal time)
+
+## Current status
+
+| Task | Status | Evidence | Next action |
+|---|---|---|---|
+| Repository baseline | VERIFIED PASS | `git ls-remote origin refs/heads/main` and fresh `origin/main` both returned `90d62725ab6d1205bf170ab71edde9481faa6f55`; review worktree created from that SHA. | Continue against review branch. |
+| Modern Trade CI / local checks | VERIFIED PASS (local only) | On Node 22.23.5, `npm run type-check`, `npm run lint`, and `npm run build` in `frontend/` pass. Lint reports two existing warnings in `AdminWorkbench.tsx` and `LiveOrderConsole.tsx`. `npx playwright test tests/preview-staff-access.spec.ts --project=chromium-desktop` passes 2/2 tests. `git -c core.whitespace=cr-at-eol diff --check` passes. Remote CI for this candidate is not yet run. | Open review PR and await its required CI; do not merge/deploy. |
+| Render readiness, direct | VERIFIED PASS | `curl --max-time 35 -sS -w '\nHTTP %{http_code} in %{time_total}s\n' https://storesync-backend-dg8z.onrender.com/api/health/ready` twice returned `{"status":"ready","checks":{"database":"ok","migrations":"current","redis":"ok"}}`; HTTP 200 in 0.867s and 0.773s. | Keep as direct-backend control. |
+| Modern Trade site API proxy | FAILED | Vercel fetch of `https://storesync-modern-trade.vercel.app/api/health/ready` returned HTTP 504 `{"error":"Backend service timed out"}` with Vercel ID `fra1:iad1::iad1::pfmg7-1795291317738-bc1736e3b2d9`. `GET /api/catalog` also returned 504, Vercel ID `fra1:iad1::iad1::cw28c-1795291334449-4b0c737d4e5b`. A later readiness retry returned 504, ID `fra1:iad1::iad1::hwqhf-1795291508007-3a8b538d871e`. | Establish the configured upstream target without exposing its secret; compare against intended Render URL. |
+| Hosting identity | VERIFIED PASS | Vercel project `storesync-modern-trade`, ID `prj_IguhOSaJF8XyttAJYEh8Yc17jhDR`, serves `storesync-modern-trade.vercel.app`. Render service `storesync-backend`, ID `srv-da1e0eflk1mc739qquk0`, URL `https://storesync-backend-dg8z.onrender.com`, branch `fix/nepal-cod-readiness`, live deploy commit `5147085b5cd79576602390f15f6d3c2a5af0ed43`, free plan in Singapore. | Compare deployed frontend/backend revisions and runtime config. |
+| Vercel production revision | FAILED | Ready production deployment `dpl_2fMBJN7F5rYKJon4jxVVoRjr5BwL` serves SHA `2d367471293e00b97299ef87b7e6ada50b4689ec`, older than current `main`. Latest Vercel project deployment is an ERROR on `fix/nepal-cod-readiness`, SHA `3af0763e689c6de111b25c13f5f0e15bcb70dcad`, error code `lint_or_type_error` (`npm run build` exited 1). | Inspect failed build logs and reconcile a deployable candidate on review branch. |
+| Render proxy request evidence | BLOCKED | Render app logs at 2026-11-21 20:05:10–20:05:25 UTC show only internal `/api/health/ready` checks returning 200 from `10.237.24.20`; no correlated request from Vercel is present. Vercel's sensitive `API_URL` is configured for Production but its value is not readable through the connected integration. | Pramod/authorized Vercel maintainer must verify `API_URL` equals `https://storesync-backend-dg8z.onrender.com` (no `/api` suffix) and tell me the hostname result, without sharing the secret itself. Do not change production config from this branch. |
+| Manual WhatsApp path under production browse-only mode | CODE FIX VERIFIED LOCALLY | Review branch opens only the browser-local cart and WhatsApp request pages, restores add-to-request/cart controls, labels totals as estimates, and states that stock, price, payment, and delivery require owner confirmation. `/checkout` and customer account routes stay closed; browse-only customer API mutations remain blocked. Targeted route/API tests pass; production browser flow is not yet verified. Existing recipient in code is `+977 9822403262`; Pramod must verify it before sharing the site. | Review PR; verify the number and run a browser smoke after an approved deployment. |
+| Online customer-order status | BLOCKED / OUT OF SCOPE | User selected phone/WhatsApp requests and no staging. This branch keeps online checkout and account creation closed, and does not enable backend order creation. Live Render feature-flag values are not exposed through the connected integration. | Keep customer requests manual; owner confirms and fulfills each request. |
+| PASALHO Lite dependency | VERIFIED PASS (not a customer-order dependency for this scope) | Lite PR #29 is open and its documented latest CI run passed; the selected manual website requests do not create transactions in Lite or Modern Trade. | Keep Lite outside the website request path; review its operational readiness separately. |
+| Real customer order launch | BLOCKED | Manual WhatsApp request is not an order until Pramod confirms stock, final price, delivery, and payment directly. Production orders remain gated by plan. | Owner verifies contact number, product prices/stock, delivery coverage, staff coverage, and accepts requests manually. |
+
+## Change log
+
+| Commit / PR | Change | Verification | Status |
+|---|---|---|---|
+| Pending | Restore the explicitly selected manual WhatsApp request flow in production browse-only mode without enabling online checkout. | Node 22 frontend type-check, lint, and production build passed; preview access test passed 2/2; diff check passed. | Review PR pending; no production deployment. |

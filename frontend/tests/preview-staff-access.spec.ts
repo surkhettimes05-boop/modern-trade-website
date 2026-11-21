@@ -15,8 +15,13 @@ test('production preview keeps staff pages reachable without opening customer ro
     expect(isClosedCustomerRoute(path)).toBe(false);
   }
 
-  for (const path of ['/checkout', '/cart', '/account', '/membership', '/creator', '/r/example']) {
+  for (const path of ['/checkout', '/account', '/membership', '/creator', '/r/example']) {
     expect(isClosedCustomerRoute(path)).toBe(true);
+    expect(isStaffManagementRoute(path)).toBe(false);
+  }
+
+  for (const path of ['/cart', '/whatsapp-order']) {
+    expect(isClosedCustomerRoute(path)).toBe(false);
     expect(isStaffManagementRoute(path)).toBe(false);
   }
 });
