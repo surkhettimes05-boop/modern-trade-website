@@ -62,3 +62,11 @@ export function memberPricingEnabled(
 ): boolean {
   return env.ENABLE_MEMBER_PRICING === "true";
 }
+
+// A public preview must not create real COD orders. This is separate from
+// ENABLE_ELECTRONIC_PAYMENTS, which does not control cash orders.
+export function stagingCustomerOrdersBlocked(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.STAGING_DISABLE_CUSTOMER_ORDERS === "true";
+}

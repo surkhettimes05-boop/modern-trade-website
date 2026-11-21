@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getPool, query } from "../database/connection.js";
 import { validatePhone } from "../utils/phoneNormalization.js";
+import { creatorReferralLink } from "../utils/creatorReferralLink.js";
 
 const createSchema = z.object({
   display_name: z.string().trim().min(2).max(120),
@@ -22,7 +23,7 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
     return { settings: result.rows[0] ?? null };
   });
 
-  fastify.patch("/creator-reward-settings", async (request, reply) => {
+  fastify.patch("/creator-reward-settings", async (request) => {
     const input = z.object({
       default_rate_percent: z.number().min(0).max(10),
       attribution_window_days: z.number().int().min(1).max(90),
@@ -203,10 +204,9 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
          FROM creators c
         ORDER BY purchasing_customers DESC, attributed_spend_npr::numeric DESC, c.created_at DESC`,
     );
-    const apiBase = process.env.PUBLIC_API_BASE_URL || "";
     return {
       items: result.rows.map((row, index) => {
-        const referralPath = "/api/public/creators/" + row.referral_slug + "/visit";
+        const referral = creatorReferralLink(row.referral_slug);
         const purchasingCustomers = Number(row.purchasing_customers ?? 0);
         const creatorLevel =
           purchasingCustomers >= 150 ? "ELITE" :
@@ -216,8 +216,8 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
           ...row,
           rank: index + 1,
           creator_level: creatorLevel,
-          referral_path: referralPath,
-          referral_url: apiBase ? new URL(referralPath, apiBase).toString() : null,
+          referral_path: referral.path,
+          referral_url: referral.url,
         };
       }),
     };
@@ -239,14 +239,12 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
                  status, referral_slug, created_at`,
       [creatorCode, input.display_name, input.contact_phone ?? null, input.contact_email ?? null, referralSlug, actor],
     );
-    const apiBase = process.env.PUBLIC_API_BASE_URL || "";
-    const referralPath = `/api/public/creators/${referralSlug}/visit`;
-    const referralUrl = apiBase ? new URL(referralPath, apiBase).toString() : null;
+    const referral = creatorReferralLink(referralSlug);
     return reply.status(201).send({
       creator: created.rows[0],
-      referral_url: referralUrl,
-      referral_path: referralPath,
-      qr_code_ready: Boolean(referralUrl),
+      referral_url: referral.url,
+      referral_path: referral.path,
+      qr_code_ready: Boolean(referral.url),
     });
   });
 

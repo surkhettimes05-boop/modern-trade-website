@@ -90,6 +90,9 @@ services:
         value: "true"
       - key: CORS_ORIGIN
         sync: false
+      # Canonical customer website origin used in creator referral links.
+      - key: CUSTOMER_WEB_URL
+        sync: false
       - key: APP_URL
         sync: false
       - key: JWT_SECRET
@@ -103,6 +106,12 @@ services:
       - key: ENCRYPTION_KEY
         generateValue: true
       - key: SIGNATURE_SECRET
+        generateValue: true
+      # Required at production startup. The service token must be supplied to
+      # Pasalho Lite separately; do not commit either secret to this repo.
+      - key: MEMBER_PRICING_SERVICE_TOKEN
+        sync: false
+      - key: MEMBER_PRICING_QUOTE_SECRET
         generateValue: true
       - key: PROXY_AUTH_SECRET
         sync: false
