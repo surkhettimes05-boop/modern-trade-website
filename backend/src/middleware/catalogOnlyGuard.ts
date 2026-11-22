@@ -20,7 +20,7 @@ function isWebCheckoutMutation(method: string, url: string): boolean {
   const pathname = url.split("?", 1)[0];
   const write = method.toUpperCase();
   return (
-    ((write === "POST" || write === "PUT") &&
+    (write === "POST" &&
       /^\/api\/auth\/(?:otp\/(?:request|verify)|google(?:\/link)?)$/.test(pathname)) ||
     (write === "POST" &&
       /^\/api\/customer-pricing\/web\/quotes$/.test(pathname)) ||
