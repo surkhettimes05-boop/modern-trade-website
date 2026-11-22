@@ -2,11 +2,16 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { publicCatalogOnly } from "../config/releaseFeatures.js";
 
 // During catalogue-only release, customer and commerce writes stay closed.
-// Staff sign-in and /api/admin are routed through their existing session,
-// CSRF, capability, and resource-scope checks, so keep those staff APIs usable.
+// Staff sign-in, admin APIs, and the staff order-fulfilment APIs are routed
+// through their existing session, CSRF, capability, and resource-scope checks.
 function isStaffManagementMutationPath(url: string): boolean {
   const pathname = url.split("?", 1)[0];
-  return /^\/api\/(?:admin|operations-auth)(?:\/|$)/.test(pathname);
+  return (
+    /^\/api\/(?:admin|operations-auth)(?:\/|$)/.test(pathname) ||
+    /^\/api\/web-orders\/[^/]+\/(?:status|payment-status|cancel|cod-settlement|fulfillment\/assign)$/.test(
+      pathname,
+    )
+  );
 }
 
 export async function catalogOnlyGuard(request: FastifyRequest, reply: FastifyReply) {
