@@ -67,8 +67,7 @@ export function memberPricingEnabled(
 export function realCustomerOrdersEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return (
-    env.NODE_ENV !== "production" ||
-    env.ENABLE_REAL_CUSTOMER_ORDERS === "true"
-  );
+  // Tests use disposable fixtures. All deployed and developer environments
+  // must explicitly opt in before an order can be persisted.
+  return env.NODE_ENV === "test" || env.ENABLE_REAL_CUSTOMER_ORDERS === "true";
 }
