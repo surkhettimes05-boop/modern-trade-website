@@ -77,7 +77,7 @@ export default function Home() {
       <Image className="quick-hero-image" src={heroImage} alt="Fresh vegetables and groceries at a local market" fill priority unoptimized sizes="100vw" />
       <div className="quick-hero-copy">
         <span className="quick-hero-kicker"><MapPin size={14} /> BIRENDRANAGAR · SURKHET</span>
-        {heroOffer && <span className="quick-hero-offer">{heroOffer} · {heroCampaign.title_en}</span>}
+        {heroOffer && heroCampaign && <span className="quick-hero-offer">{heroOffer} · {heroCampaign.title_en}</span>}
         <h1>{heroTitle}</h1>
         <p>{heroDescription}</p>
         <div className="quick-hero-actions">
