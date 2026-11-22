@@ -46,20 +46,20 @@ export default function Home() {
     featuredCampaign?.subtitle_en || 'PASALHO · BIRENDRANAGAR, SURKHET';
   const heroCta = browseOnly ? 'Browse products' : featuredCampaign?.cta_text_en || 'Shop now';
   const heroHref = browseOnly ? '/shop' : featuredCampaign?.cta_url || '/shop';
-  const promotionImage = browseOnly ? hero :
-    offerCampaign?.banner_image_url ||
+  const promotionImage = offerCampaign?.banner_image_url ||
     offerCampaign?.mobile_banner_image_url ||
     offerCampaign?.image_url ||
     promotion?.banner_image_url ||
     promotion?.image_url ||
     hero;
-  const promotionTitle = browseOnly ? webCheckoutEnabled ? 'Shop online and pay cash on delivery.' : 'Get to know PASALHO before opening day.' :
-    offerCampaign?.title_en || promotion?.title || 'Shop local. Pay cash on delivery.';
-  const promotionDescription = browseOnly ? webCheckoutEnabled ? 'Choose an open store, review the live checkout quote, and place a COD order. Membership and creator registration are not open.' : 'Browse our current catalogue. Orders, checkout, membership and creator registration will open after launch checks.' :
-    offerCampaign?.description_en || promotion?.description ||
-    'Real store pricing, confirmed stock, and convenient delivery or pickup in Birendranagar.';
-  const promotionCta = browseOnly ? 'Explore products' : offerCampaign?.cta_text_en || 'Shop promotion';
-  const promotionHref = browseOnly ? '/shop' : offerCampaign?.cta_url || '/offers';
+  const promotionTitle = offerCampaign?.title_en || promotion?.title || (browseOnly
+    ? webCheckoutEnabled ? 'Shop online and pay cash on delivery.' : 'Get to know PASALHO before opening day.'
+    : 'Shop local. Pay cash on delivery.');
+  const promotionDescription = offerCampaign?.description_en || promotion?.description || (browseOnly
+    ? webCheckoutEnabled ? 'Choose an open store, review the live checkout quote, and place a COD order. Membership and creator registration are not open.' : 'Browse our current catalogue. Orders, checkout, membership and creator registration will open after launch checks.'
+    : 'Real store pricing, confirmed stock, and convenient delivery or pickup in Birendranagar.');
+  const promotionCta = offerCampaign?.cta_text_en || (browseOnly ? 'View all offers' : 'Shop promotion');
+  const promotionHref = offerCampaign?.cta_url || '/offers';
 
   return <>
     <section className="hero shell"><div className="hero-main"><Image src={heroImage} alt={browseOnly ? 'Grocery produce arranged in a market' : featuredCampaign?.title_en || 'Fresh groceries arranged for a weekly shop'} fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">{heroEyebrow}</span><h1>{heroTitle}</h1><p>{heroDescription}</p><div><Link className="primary-btn" href={heroHref}>{heroCta} <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href={browseOnly ? '/shop' : '/offers'} className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>{browseOnly ? 'BROWSE THE CATALOGUE' : 'LIVE OFFERS'}</span><h2>Smart shopping.<br />Better value.</h2><b>{browseOnly ? 'See listed products' : "See today's offers"} -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>{browseOnly ? <>Find PASALHO<br />near you.</> : <>Shop what&apos;s<br />near you.</>}</h2><b>Find a store -&gt;</b></Link></div></section>
@@ -71,7 +71,7 @@ export default function Home() {
         <Image src={promotionImage} alt="" fill unoptimized sizes="100vw" className="home-promotion-image object-cover" />
         <div className="home-promotion-content relative z-10 max-w-2xl p-7 sm:p-10">
           <p className="home-promotion-eyebrow text-xs font-black uppercase tracking-[0.18em]">
-            {browseOnly ? 'PASALHO catalogue preview' : offerCampaign ? 'Pasalho campaign' : promotion ? 'Pasalho promotion' : 'Pasalho launch'}
+            {offerCampaign ? 'Pasalho campaign' : promotion ? 'Pasalho promotion' : browseOnly ? 'PASALHO catalogue preview' : 'Pasalho launch'}
           </p>
           <h2 className="home-promotion-title mt-3 text-3xl font-black tracking-tight sm:text-4xl">
             {promotionTitle}
