@@ -16,6 +16,12 @@ const criticalRoutes = [
 ];
 
 test.describe("release browser gate", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("pasalho-location-dismissed", "1");
+    });
+  });
+
   test("critical routes load without browser errors or failed requests", async ({ page }) => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
