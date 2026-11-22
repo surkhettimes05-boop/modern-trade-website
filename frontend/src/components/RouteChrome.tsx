@@ -26,7 +26,7 @@ export default function RouteChrome({
     <>
       <SkipLink />
       <Header browseOnly={browseOnly} webCheckoutEnabled={webCheckoutEnabled} />
-      {browseOnly && <div role="status" className="border-b border-amber-300 bg-amber-100 px-4 py-3 text-center text-sm font-semibold text-amber-950">
+      {browseOnly && pathname !== "/" && <div role="status" className="border-b border-amber-300 bg-amber-100 px-4 py-3 text-center text-sm font-semibold text-amber-950">
         {webCheckoutEnabled
           ? 'PASALHO catalogue preview — website COD checkout is open. Listed prices and stock are confirmed during checkout; the store will review each order.'
           : 'PASALHO catalogue preview — browse products and stores, or send a manual order request through WhatsApp. Online checkout and accounts are not open; the store must confirm stock, price, delivery, and your order.'}
