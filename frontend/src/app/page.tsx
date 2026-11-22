@@ -13,7 +13,7 @@ function SectionTitle({ eyebrow, title, link = 'View all' }: { eyebrow?: string;
 }
 
 export default function Home() {
-  const { products, categories, offers, campaigns, loading, browseOnly } = useShop();
+  const { products, categories, offers, campaigns, loading, browseOnly, webCheckoutEnabled } = useShop();
   const deals = useMemo(
     () => products.filter((product) => product.originalPrice && product.originalPrice > product.price).slice(0, 8),
     [products],
@@ -37,7 +37,9 @@ export default function Home() {
   const heroImage = browseOnly ? hero : featuredCampaign?.banner_image_url || featuredCampaign?.image_url || hero;
   const heroTitle = browseOnly ? 'Discover PASALHO, closer to home.' : featuredCampaign?.title_en || 'Everyday shopping, closer to home.';
   const heroDescription = browseOnly
-    ? 'Explore PASALHO products and stores. This is a catalogue preview: registration, checkout and ordering are not available yet.'
+    ? webCheckoutEnabled
+      ? 'Browse PASALHO products and stores, then place a cash-on-delivery order online. Stock, final price, and delivery are checked before the order is placed.'
+      : 'Explore PASALHO products and stores. This is a catalogue preview: registration, checkout and ordering are not available yet.'
     : featuredCampaign?.description_en ||
       'Groceries and household essentials in Birendranagar. Live NPR prices, delivery and pickup confirmed at checkout.';
   const heroEyebrow = browseOnly ? 'CATALOGUE PREVIEW · BIRENDRANAGAR, SURKHET' :
@@ -51,9 +53,9 @@ export default function Home() {
     promotion?.banner_image_url ||
     promotion?.image_url ||
     hero;
-  const promotionTitle = browseOnly ? 'Get to know PASALHO before opening day.' :
+  const promotionTitle = browseOnly ? webCheckoutEnabled ? 'Shop online and pay cash on delivery.' : 'Get to know PASALHO before opening day.' :
     offerCampaign?.title_en || promotion?.title || 'Shop local. Pay cash on delivery.';
-  const promotionDescription = browseOnly ? 'Browse our current catalogue. Orders, checkout, membership and creator registration will open after launch checks.' :
+  const promotionDescription = browseOnly ? webCheckoutEnabled ? 'Choose an open store, review the live checkout quote, and place a COD order. Membership and creator registration are not open.' : 'Browse our current catalogue. Orders, checkout, membership and creator registration will open after launch checks.' :
     offerCampaign?.description_en || promotion?.description ||
     'Real store pricing, confirmed stock, and convenient delivery or pickup in Birendranagar.';
   const promotionCta = browseOnly ? 'Explore products' : offerCampaign?.cta_text_en || 'Shop promotion';
@@ -62,7 +64,7 @@ export default function Home() {
   return <>
     <section className="hero shell"><div className="hero-main"><Image src={heroImage} alt={browseOnly ? 'Grocery produce arranged in a market' : featuredCampaign?.title_en || 'Fresh groceries arranged for a weekly shop'} fill priority unoptimized sizes="(max-width: 900px) 100vw, 70vw" /><div className="hero-copy"><span className="pill">{heroEyebrow}</span><h1>{heroTitle}</h1><p>{heroDescription}</p><div><Link className="primary-btn" href={heroHref}>{heroCta} <ArrowRight /></Link><Link className="secondary-btn" href="#categories">Explore categories</Link></div></div></div><div className="hero-side"><Link href={browseOnly ? '/shop' : '/offers'} className="side-offer tech-offer"><Image src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=900&q=85" alt="Colourful grocery products on store shelves" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>{browseOnly ? 'BROWSE THE CATALOGUE' : 'LIVE OFFERS'}</span><h2>Smart shopping.<br />Better value.</h2><b>{browseOnly ? 'See listed products' : "See today's offers"} -&gt;</b></Link><Link href="/stores" className="side-offer home-offer"><Image src="https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=900&q=85" alt="A bright modern supermarket aisle" fill unoptimized sizes="(max-width: 800px) 50vw, 28vw" /><span>CHOOSE YOUR STORE</span><h2>{browseOnly ? <>Find PASALHO<br />near you.</> : <>Shop what&apos;s<br />near you.</>}</h2><b>Find a store -&gt;</b></Link></div></section>
 
-    <div className="service-strip shell">{browseOnly ? <><span><Tags />Browse product prices</span><span><Store />Explore local stores</span><span><ShieldCheck />No payments or orders are being accepted</span></> : <><span><Truck />Delivery fee based on your service area</span><span><PackageCheck />Store pickup available</span><span><ShieldCheck />Cash on delivery</span><span><Tags />Live store pricing and availability</span></>}</div>
+    <div className="service-strip shell">{browseOnly ? <><span><Tags />Browse product prices</span><span><Store />Explore local stores</span><span><ShieldCheck />{webCheckoutEnabled ? 'Cash on delivery orders are open' : 'No payments or orders are being accepted'}</span></> : <><span><Truck />Delivery fee based on your service area</span><span><PackageCheck />Store pickup available</span><span><ShieldCheck />Cash on delivery</span><span><Tags />Live store pricing and availability</span></>}</div>
 
     <section className="shell mt-6">
       <Link href={promotionHref} className="home-promotion relative block min-h-[220px] overflow-hidden rounded-3xl bg-slate-950 shadow-sm">

@@ -57,7 +57,7 @@ const previewCols: Record<string, FooterLink[]> = {
   ],
 };
 
-export default function Footer({ browseOnly = false }: { browseOnly?: boolean }) {
+export default function Footer({ browseOnly = false, webCheckoutEnabled = false }: { browseOnly?: boolean; webCheckoutEnabled?: boolean }) {
   const links = browseOnly ? previewCols : cols;
   const socials = browseOnly ? socialLinks.filter((link) => link.href !== '/account') : socialLinks;
   return <footer>
@@ -69,6 +69,6 @@ export default function Footer({ browseOnly = false }: { browseOnly?: boolean })
       </nav>
     </div>
     <div className="footer-grid shell">{Object.entries(links).map(([heading, columnLinks]) => <div key={heading}><h3>{heading}</h3>{columnLinks.map(({ label, href }) => <Link href={href} key={label}>{label}</Link>)}</div>)}</div>
-    <div className="footer-bottom shell"><span>© 2026 Pasalho</span><span>Birendranagar, Surkhet · Nepal</span><span>{browseOnly ? 'Catalogue preview · WhatsApp requests only' : 'Cash on delivery · Store pickup'}</span></div>
+    <div className="footer-bottom shell"><span>© 2026 Pasalho</span><span>Birendranagar, Surkhet · Nepal</span><span>{browseOnly ? webCheckoutEnabled ? 'Catalogue preview · Website COD checkout' : 'Catalogue preview · WhatsApp requests only' : 'Cash on delivery · Store pickup'}</span></div>
   </footer>;
 }

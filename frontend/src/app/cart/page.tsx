@@ -6,7 +6,7 @@ import { Quantity, useShop } from '@/components/CommerceClient';
 import { formatPrice } from '@/lib/catalog';
 
 export default function CartPage() {
-  const { items, authenticated, pricingQuote, pricingBusy, pricingError, browseOnly } = useShop();
+  const { items, authenticated, pricingQuote, pricingBusy, pricingError, browseOnly, webCheckoutEnabled } = useShop();
   const subtotal = pricingQuote
     ? Number(pricingQuote.finalTotal)
     : authenticated === false
@@ -21,7 +21,7 @@ export default function CartPage() {
       {items.length ? (
         <div className="cart-layout">
           <div>
-            <div className="delivery-note">{browseOnly ? 'This is a request only. The store will confirm stock, final price, delivery availability, and any delivery fee.' : 'Delivery availability and fee are calculated from your Pasalho store and service area at checkout.'}</div>
+            <div className="delivery-note">{browseOnly && !webCheckoutEnabled ? 'This is a request only. The store will confirm stock, final price, delivery availability, and any delivery fee.' : 'Delivery availability and fee are calculated from your Pasalho store and service area at checkout.'}</div>
             {items.map((item) => {
               const line = item.product.sku ? quotedLines.get(item.product.sku) : undefined;
               return (
@@ -55,24 +55,24 @@ export default function CartPage() {
               </>
             ) : (
               <p>
-                <span>{browseOnly ? 'Estimated subtotal' : 'Subtotal'}</span>
+                <span>{browseOnly && !webCheckoutEnabled ? 'Estimated subtotal' : 'Subtotal'}</span>
                 <b>{subtotal === null ? pricingBusy ? 'Updating price…' : 'Price unavailable' : formatPrice(subtotal)}</b>
               </p>
             )}
             {pricingBusy && <p role="status">Requesting current price…</p>}
             {pricingError && <p role="alert" className="text-red-700">{pricingError}</p>}
-            {!browseOnly && <p><span>Delivery</span><b>Confirmed at checkout</b></p>}
+            {(!browseOnly || webCheckoutEnabled) && <p><span>Delivery</span><b>Confirmed at checkout</b></p>}
             <div className="total">
-              <span>{browseOnly ? 'Estimated subtotal' : 'Payable'}</span>
+              <span>{browseOnly && !webCheckoutEnabled ? 'Estimated subtotal' : 'Payable'}</span>
               <strong>{subtotal === null ? 'Price unavailable' : formatPrice(subtotal)}</strong>
             </div>
-            {browseOnly ? <p className="mt-4 rounded-lg bg-slate-100 px-5 py-3 text-center text-sm font-semibold text-slate-700">Online COD checkout is not open yet.</p> : <Link className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white" href="/checkout">
+            {browseOnly && !webCheckoutEnabled ? <p className="mt-4 rounded-lg bg-slate-100 px-5 py-3 text-center text-sm font-semibold text-slate-700">Online COD checkout is not open yet.</p> : <Link className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white" href="/checkout">
               <Lock size={18} /> Continue to COD checkout <ArrowRight />
             </Link>}
             <Link className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-800 px-5 py-3 font-bold text-emerald-800" href="/whatsapp-order">
               <MessageCircle /> Order through WhatsApp
             </Link>
-            <small>{browseOnly ? 'This is only a request. The store confirms stock, final price, delivery fee, and acceptance by phone or WhatsApp.' : 'Checkout requires a fresh server-issued price quote. Website checkout reserves stock. WhatsApp requests are confirmed manually.'}</small>
+            <small>{browseOnly && !webCheckoutEnabled ? 'This is only a request. The store confirms stock, final price, delivery fee, and acceptance by phone or WhatsApp.' : 'Checkout requires a fresh server-issued price quote. Stock and delivery are checked before the order is placed. WhatsApp requests remain manual.'}</small>
           </aside>
         </div>
       ) : (

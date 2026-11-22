@@ -11,12 +11,12 @@ type DisplayPrice = { sku: string; regularUnitPrice: string; appliedUnitPrice: s
 type Membership = { id: string; membership_number: number; founding_number: number | null; tier_key: 'REGISTERED_MEMBER' | 'FOUNDING_1000'; status: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' };
 type PricingQuoteItem = Omit<DisplayPrice, 'savingPerUnit'> & { quantity: string; lineDiscount: string; lineTotal: string };
 type PricingQuote = { quoteId: string; channel: 'WEB'; items: PricingQuoteItem[]; subtotal: string; discountTotal: string; finalTotal: string; currency: 'NPR'; membershipNumber: number | null; membershipTier: 'REGISTERED_MEMBER' | 'FOUNDING_1000' | null; membershipStatus: 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' | 'NOT_MEMBER'; issuedAt: string; expiresAt: string; signedQuoteToken: string };
-type ShopContext = { browseOnly: boolean; items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[]; campaigns: Campaign[]; selectedStore: Store | null; setSelectedStore: (store: Store) => void; add: (product: Product) => void; change: (id: string, delta: number) => void; clear: () => void; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean; catalogAvailable: boolean; authenticated: boolean | null; membership: Membership | null; displayPrices: Record<string, DisplayPrice>; pricingQuote: PricingQuote | null; pricingQuoteNeedsConfirmation: boolean; requirePricingQuoteConfirmation: () => void; confirmPricingQuote: () => void; pricingBusy: boolean; pricingError: string; refreshPricingQuote: () => Promise<PricingQuote>; reloadMemberPricing: () => Promise<void> };
+type ShopContext = { browseOnly: boolean; webCheckoutEnabled: boolean; items: CartItem[]; products: Product[]; categories: StorefrontCategory[]; stores: Store[]; offers: Offer[]; campaigns: Campaign[]; selectedStore: Store | null; setSelectedStore: (store: Store) => void; add: (product: Product) => void; change: (id: string, delta: number) => void; clear: () => void; drawer: boolean; setDrawer: (value: boolean) => void; loading: boolean; catalogAvailable: boolean; authenticated: boolean | null; membership: Membership | null; displayPrices: Record<string, DisplayPrice>; pricingQuote: PricingQuote | null; pricingQuoteNeedsConfirmation: boolean; requirePricingQuoteConfirmation: () => void; confirmPricingQuote: () => void; pricingBusy: boolean; pricingError: string; refreshPricingQuote: () => Promise<PricingQuote>; reloadMemberPricing: () => Promise<void> };
 const Ctx = createContext<ShopContext | null>(null);
 
-export function CommerceProvider({ children, browseOnly = false, initialProducts = [], initialCategories = [], initialStores = [], initialOffers = [], initialCampaigns = [] }: { children: React.ReactNode; browseOnly?: boolean; initialProducts?: Product[]; initialCategories?: StorefrontCategory[]; initialStores?: Store[]; initialOffers?: Offer[]; initialCampaigns?: Campaign[] }) {
+export function CommerceProvider({ children, browseOnly = false, webCheckoutEnabled = false, initialProducts = [], initialCategories = [], initialStores = [], initialOffers = [], initialCampaigns = [] }: { children: React.ReactNode; browseOnly?: boolean; webCheckoutEnabled?: boolean; initialProducts?: Product[]; initialCategories?: StorefrontCategory[]; initialStores?: Store[]; initialOffers?: Offer[]; initialCampaigns?: Campaign[] }) {
   const [products, setProducts] = useState<Product[]>(initialProducts); const [categories, setCategories] = useState<StorefrontCategory[]>(initialCategories); const [stores, setStores] = useState<Store[]>(initialStores); const [offers, setOffers] = useState<Offer[]>(initialOffers); const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns); const [loading, setLoading] = useState(!(initialProducts.length && initialCategories.length)); const [catalogAvailable, setCatalogAvailable] = useState(Boolean(initialProducts.length || initialCategories.length || initialStores.length)); const [items, setItems] = useState<CartItem[]>([]); const [drawer, setDrawer] = useState(false); const [selectedStore, setSelectedStoreState] = useState<Store | null>(initialStores.find((store) => !store.is_temporarily_closed) || null); const [hydrated, setHydrated] = useState(false);
-  const [authenticated, setAuthenticated] = useState<boolean | null>(browseOnly ? false : null);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(browseOnly && !webCheckoutEnabled ? false : null);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [displayPrices, setDisplayPrices] = useState<Record<string, DisplayPrice>>({});
   const [pricingQuote, setPricingQuote] = useState<PricingQuote | null>(null);
@@ -101,7 +101,7 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
     }
   }, [requestPricingQuote]);
   useEffect(() => {
-    if (browseOnly) return;
+    if (browseOnly && !webCheckoutEnabled) return;
     const controller = new AbortController();
     resilientFetch('/api/auth/session/validate', {
       credentials: 'include',
@@ -111,14 +111,14 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
       .then((response) => setAuthenticated(response.ok))
       .catch(() => { if (!controller.signal.aborted) setAuthenticated(false); });
     return () => controller.abort();
-  }, [browseOnly]);
+  }, [browseOnly, webCheckoutEnabled]);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
     quoteRequestId.current += 1;
     const timer = window.setTimeout(() => {
       if (!active) return;
-      if (browseOnly) {
+      if (browseOnly && !webCheckoutEnabled) {
         setPricingQuote(null);
         setPricingQuoteNeedsConfirmation(false);
         setPricingBusy(false);
@@ -144,7 +144,7 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
         .finally(() => { if (active) setPricingBusy(false); });
     }, 0);
     return () => { active = false; controller.abort(); window.clearTimeout(timer); };
-  }, [authenticated, browseOnly, items, selectedStore, requestPricingQuote]);
+  }, [authenticated, browseOnly, webCheckoutEnabled, items, selectedStore, requestPricingQuote]);
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
@@ -176,7 +176,7 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
   const clear = () => { setItems([]); setPricingQuoteNeedsConfirmation(false); setDrawer(false); };
   const requirePricingQuoteConfirmation = () => setPricingQuoteNeedsConfirmation(true);
   const confirmPricingQuote = () => setPricingQuoteNeedsConfirmation(false);
-  return <Ctx.Provider value={{ browseOnly, items, products, categories, stores, offers, campaigns, selectedStore, setSelectedStore: selected, add, change, clear, drawer, setDrawer, loading, catalogAvailable, authenticated, membership, displayPrices, pricingQuote, pricingQuoteNeedsConfirmation, requirePricingQuoteConfirmation, confirmPricingQuote, pricingBusy, pricingError, refreshPricingQuote, reloadMemberPricing }}>{children}<CartDrawer /></Ctx.Provider>;
+  return <Ctx.Provider value={{ browseOnly, webCheckoutEnabled, items, products, categories, stores, offers, campaigns, selectedStore, setSelectedStore: selected, add, change, clear, drawer, setDrawer, loading, catalogAvailable, authenticated, membership, displayPrices, pricingQuote, pricingQuoteNeedsConfirmation, requirePricingQuoteConfirmation, confirmPricingQuote, pricingBusy, pricingError, refreshPricingQuote, reloadMemberPricing }}>{children}<CartDrawer /></Ctx.Provider>;
 }
 export const useShop = () => { const value = useContext(Ctx); if (!value) throw new Error('shop provider missing'); return value; };
 
@@ -199,7 +199,7 @@ export function SearchBox() {
 export function MegaMenu({ open, onClose }: { open: boolean; onClose: () => void }) { const { categories } = useShop(); const [active, setActive] = useState<StorefrontCategory | null>(null); const current = active || categories[0]; if (!open) return null; return <div className="mega" role="dialog" aria-label="Shop categories"><div className="mega-depts">{categories.slice(0, 8).map((category) => <button className={current?.id === category.id ? 'active' : ''} onMouseEnter={() => setActive(category)} onFocus={() => setActive(category)} key={category.id}>{category.name}<span>›</span></button>)}</div><div><p className="eyebrow">Explore {current?.name}</p><div className="mega-links"><Link onClick={onClose} href={current ? `/category/${current.slug || slugify(current.name)}` : '/shop'}>Shop all</Link><Link onClick={onClose} href="/offers">Offers</Link></div></div></div>; }
 
 export function ProductCard({ product, compact = false }: { product: Product; compact?: boolean }) {
-  const { add, browseOnly, displayPrices, membership } = useShop();
+  const { add, browseOnly, webCheckoutEnabled, displayPrices, membership } = useShop();
   const price = product.sku ? displayPrices[product.sku] : undefined;
   const eligible = membership?.status === 'ACTIVE' && Boolean(membership.tier_key) && price && Number(price.appliedUnitPrice) < Number(price.regularUnitPrice);
   const save = product.originalPrice ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
@@ -208,14 +208,14 @@ export function ProductCard({ product, compact = false }: { product: Product; co
     <div className="product-copy"><span className="brand">{product.brand}</span><Link href={`/product/${product.slug}`}><h3>{product.name}</h3></Link>{!browseOnly && <div className="rating"><Star size={14} fill="currentColor" /> {product.rating || '—'} <span>({product.reviews})</span></div>}
       <div className="price-row"><div><strong>{eligible ? formatPrice(Number(price.appliedUnitPrice)) : formatPrice(product.price)}</strong>{eligible ? <><del>{formatPrice(Number(price.regularUnitPrice))}</del><small className="block text-emerald-800">{membership.tier_key === 'FOUNDING_1000' ? 'Founding 1,000 price' : 'Member price'} · Save {formatPrice(Number(price.savingPerUnit))}</small>{price.promotionSnapshot && <small className="block text-slate-500">{price.promotionSnapshot.name}</small>}</> : !browseOnly && product.originalPrice ? <del>{formatPrice(product.originalPrice)}</del> : null}</div></div>
       <p className="stock">{browseOnly ? 'Indicative price · Stock not yet confirmed' : `● ${product.availability}`}</p>
-      <button className="add-btn" onClick={() => add(product)} disabled={!browseOnly && product.availability.toLowerCase().includes('out of')}>{browseOnly ? 'Add to WhatsApp request' : <><Plus size={18} /> Add to cart</>}</button>
+      <button className="add-btn" onClick={() => add(product)} disabled={!browseOnly && product.availability.toLowerCase().includes('out of')}>{browseOnly && !webCheckoutEnabled ? 'Add to WhatsApp request' : <><Plus size={18} /> Add to cart</>}</button>
     </div>
   </article>;
 }
 export function Quantity({ id, qty }: { id: string; qty: number }) { const { change } = useShop(); return <div className="quantity"><button onClick={() => change(id, -1)} aria-label="Decrease quantity"><Minus size={16} /></button><span>{qty}</span><button onClick={() => change(id, 1)} aria-label="Increase quantity"><Plus size={16} /></button></div>; }
 export function CartButton() { const { items, setDrawer } = useShop(); const count = items.reduce((n, item) => n + item.qty, 0); return <button className="nav-action" onClick={() => setDrawer(true)} aria-label={`Cart with ${count} items`}><ShoppingCart /><span>Cart</span>{count ? <i>{count}</i> : null}</button>; }
 function CartDrawer() {
-  const { items, drawer, setDrawer, authenticated, pricingQuote, pricingBusy, pricingError, browseOnly } = useShop();
+  const { items, drawer, setDrawer, authenticated, pricingQuote, pricingBusy, pricingError, browseOnly, webCheckoutEnabled } = useShop();
   const subtotal = pricingQuote ? Number(pricingQuote.finalTotal) : authenticated === false ? items.reduce((n, item) => n + item.product.price * item.qty, 0) : 0;
   const quoteLines = new Map(pricingQuote?.items.map((line) => [line.sku, line]) || []);
   const dialogRef = useRef<HTMLElement>(null);
@@ -259,7 +259,7 @@ function CartDrawer() {
   }, [drawer, setDrawer]);
 
   if (!drawer) return null;
-  return <><button className="drawer-backdrop" onClick={() => setDrawer(false)} aria-label="Close cart" /><aside className="cart-drawer open" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title" ref={dialogRef}><header><div><p className="eyebrow">Your basket</p><h2 id="cart-drawer-title">Cart ({items.length})</h2></div><button onClick={() => setDrawer(false)} aria-label="Close" ref={closeRef}><X /></button></header>{items.length ? <><div className="drawer-items">{items.map((item) => { const line = item.product.sku ? quoteLines.get(item.product.sku) : undefined; return <div className="drawer-item" key={item.product.id}><Image src={item.product.image} width={80} height={80} alt="" /><div><b>{item.product.name}</b><strong>{line ? formatPrice(Number(line.lineTotal)) : authenticated === false ? formatPrice(item.product.price * item.qty) : pricingBusy ? 'Updating price…' : 'Price unavailable'}</strong>{line && <small className="block text-slate-500">Regular {formatPrice(Number(line.regularUnitPrice))} · Applied {formatPrice(Number(line.appliedUnitPrice))}</small>}<Quantity id={item.product.id} qty={item.qty} /></div></div>; })}</div><div className="drawer-summary"><p><span>{browseOnly ? 'Estimated subtotal' : 'Payable'}</span><strong>{pricingBusy ? 'Updating price…' : pricingQuote || authenticated === false ? formatPrice(subtotal) : 'Price unavailable'}</strong></p>{pricingQuote && <p className="text-sm text-emerald-800">Member savings {formatPrice(Number(pricingQuote.discountTotal))}</p>}{pricingError && <p role="alert" className="text-sm text-red-700">{pricingError}</p>}<Link href="/cart" onClick={() => setDrawer(false)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white"><ShoppingCart size={19} /> {browseOnly ? 'Review request' : 'Review cart & checkout'}</Link><Link href="/whatsapp-order" onClick={() => setDrawer(false)} className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-bold text-emerald-800"><MessageCircle size={17} /> {browseOnly ? 'Prepare WhatsApp request' : 'Order through WhatsApp'}</Link>{browseOnly && <small className="mt-2 block text-slate-600">The store confirms stock, price, and delivery before accepting.</small>}</div></> : <div className="empty-cart"><ShoppingCart size={48} /><h3>Your cart is ready for good things</h3><button className="primary-btn" onClick={() => setDrawer(false)}>Start shopping</button></div>}</aside></>;
+  return <><button className="drawer-backdrop" onClick={() => setDrawer(false)} aria-label="Close cart" /><aside className="cart-drawer open" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title" ref={dialogRef}><header><div><p className="eyebrow">Your basket</p><h2 id="cart-drawer-title">Cart ({items.length})</h2></div><button onClick={() => setDrawer(false)} aria-label="Close" ref={closeRef}><X /></button></header>{items.length ? <><div className="drawer-items">{items.map((item) => { const line = item.product.sku ? quoteLines.get(item.product.sku) : undefined; return <div className="drawer-item" key={item.product.id}><Image src={item.product.image} width={80} height={80} alt="" /><div><b>{item.product.name}</b><strong>{line ? formatPrice(Number(line.lineTotal)) : authenticated === false ? formatPrice(item.product.price * item.qty) : pricingBusy ? 'Updating price…' : 'Price unavailable'}</strong>{line && <small className="block text-slate-500">Regular {formatPrice(Number(line.regularUnitPrice))} · Applied {formatPrice(Number(line.appliedUnitPrice))}</small>}<Quantity id={item.product.id} qty={item.qty} /></div></div>; })}</div><div className="drawer-summary"><p><span>{browseOnly && !webCheckoutEnabled ? 'Estimated subtotal' : 'Payable'}</span><strong>{pricingBusy ? 'Updating price…' : pricingQuote || authenticated === false ? formatPrice(subtotal) : 'Price unavailable'}</strong></p>{pricingQuote && <p className="text-sm text-emerald-800">Member savings {formatPrice(Number(pricingQuote.discountTotal))}</p>}{pricingError && <p role="alert" className="text-sm text-red-700">{pricingError}</p>}<Link href="/cart" onClick={() => setDrawer(false)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white"><ShoppingCart size={19} /> {browseOnly && !webCheckoutEnabled ? 'Review request' : 'Review cart & checkout'}</Link><Link href="/whatsapp-order" onClick={() => setDrawer(false)} className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-bold text-emerald-800"><MessageCircle size={17} /> {browseOnly && !webCheckoutEnabled ? 'Prepare WhatsApp request' : 'Order through WhatsApp'}</Link>{browseOnly && !webCheckoutEnabled && <small className="mt-2 block text-slate-600">The store confirms stock, price, and delivery before accepting.</small>}</div></> : <div className="empty-cart"><ShoppingCart size={48} /><h3>Your cart is ready for good things</h3><button className="primary-btn" onClick={() => setDrawer(false)}>Start shopping</button></div>}</aside></>;
 }
 export function MobileNav() { const { items, setDrawer, browseOnly } = useShop(); return <nav className="mobile-nav"><Link href="/">⌂<span>Home</span></Link><Link href="/shop"><Menu /><span>Categories</span></Link><button onClick={() => document.querySelector<HTMLInputElement>('.search-box input')?.focus()}><Search /><span>Search</span></button>{!browseOnly && <Link href="/account"><Heart /><span>Wishlist</span></Link>}<button onClick={() => setDrawer(true)}><ShoppingCart /><span>Cart {items.length ? `(${items.length})` : ''}</span></button></nav>; }
 export function LocationPicker() { const { stores, selectedStore, setSelectedStore } = useShop(); return <label className="location-picker"><MapPin /><span><small>Showing availability near</small><select value={selectedStore?.id || ''} onChange={(e) => { const store = stores.find((s) => s.id === e.target.value); if (store) setSelectedStore(store); }} aria-label="Choose store"><option value="">Select a store</option>{stores.map((store) => <option key={store.id} value={store.id} disabled={store.is_temporarily_closed}>{store.name}{store.is_temporarily_closed ? ' — temporarily closed' : ''}</option>)}</select></span><ChevronDown /></label>; }
