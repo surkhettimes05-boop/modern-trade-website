@@ -17,11 +17,13 @@ describe("public catalogue-only request gate", () => {
     app.post("/api/checkout/cod", async () => ({ order: true }));
     app.post("/api/creator-portal/otp/request", async () => ({ accepted: true }));
     app.post("/api/creator-attribution/pos-sales", async () => ({ accepted: true }));
+    app.post("/api/operations-auth/login", async () => ({ authenticated: true }));
+    app.post("/api/admin/products", async () => ({ accepted: true }));
     await app.ready();
     return app;
   }
 
-  it("keeps catalogue reads available but closes all write paths", async () => {
+  it("keeps catalogue reads available and blocks customer writes", async () => {
     process.env.PUBLIC_CATALOG_ONLY = "true";
     const app = await testApp();
     try {
@@ -37,6 +39,15 @@ describe("public catalogue-only request gate", () => {
         expect(response.json()).toMatchObject({ code: "CATALOG_ONLY" });
         expect(response.headers["cache-control"]).toBe("no-store");
       }
+      for (const url of [
+        "/api/operations-auth/login",
+        "/api/admin/products?limit=50",
+      ]) {
+        expect((await app.inject({ method: "POST", url })).statusCode).toBe(200);
+      }
+      const lookalike = await app.inject({ method: "POST", url: "/api/admin-malicious/products" });
+      expect(lookalike.statusCode).toBe(503);
+      expect(lookalike.json()).toMatchObject({ code: "CATALOG_ONLY" });
     } finally { await app.close(); }
   });
 
