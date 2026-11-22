@@ -17,9 +17,13 @@ export default function Header({ browseOnly = false, webCheckoutEnabled = false 
   }, [locationQuery, stores]);
 
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (!localStorage.getItem("pasalho-store") && !localStorage.getItem("pasalho-location-dismissed")) setLocationOpen(true);
+      if (!localStorage.getItem("pasalho-store") && !localStorage.getItem("pasalho-location-dismissed")) {
+        timer = setTimeout(() => setLocationOpen(true), 0);
+      }
     } catch { /* storage may be unavailable */ }
+    return () => { if (timer) clearTimeout(timer); };
   }, []);
 
   const dismissLocation = () => {

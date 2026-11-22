@@ -16,6 +16,12 @@ const criticalRoutes = [
 ];
 
 test.describe("release browser gate", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("pasalho-location-dismissed", "1");
+    });
+  });
+
   test("critical routes load without browser errors or failed requests", async ({ page }) => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
@@ -174,6 +180,9 @@ test("complete Pasalho COD order flow reconciles inventory and payment", async (
   const qaPassword = process.env.QA_BOOTSTRAP_ADMIN_PASSWORD;
   if (!qaPassword) throw new Error("QA_BOOTSTRAP_ADMIN_PASSWORD is required");
 
+  await page.addInitScript(() => {
+    localStorage.setItem("pasalho-location-dismissed", "1");
+  });
   await page.context().clearCookies();
   await page.goto("/account?next=/shop");
   await page.getByLabel("Phone Number").fill(phone);

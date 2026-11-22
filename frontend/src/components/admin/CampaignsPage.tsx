@@ -686,8 +686,9 @@ export function CampaignsPage() {
               Discount rule
             </h3>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              This links the campaign to the existing promotion data model. It
-              does not turn on the deferred checkout promotion engine.
+              Percentage campaigns apply automatically to eligible web
+              checkout items. They do not stack with member pricing; other
+              rule types are not applied at website checkout.
             </p>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               <Field label="Rule type">
@@ -712,7 +713,8 @@ export function CampaignsPage() {
               <Field label="Discount value">
                 <input
                   type="number"
-                  min="0"
+                  min={form.promotion_type === "PERCENTAGE" ? 0.01 : 0}
+                  max={form.promotion_type === "PERCENTAGE" ? 100 : undefined}
                   step="0.01"
                   disabled={form.promotion_type === "NONE"}
                   value={form.discount_value}

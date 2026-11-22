@@ -10,6 +10,9 @@ test.describe('public catalogue preview', () => {
   test.skip(process.env.PASALHO_BROWSE_ONLY !== 'true', 'Requires PASALHO_BROWSE_ONLY=true on the web server');
 
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('pasalho-location-dismissed', '1');
+    });
     await page.route('**/api/public/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       const response = path.endsWith('/products') ? [{
@@ -26,7 +29,7 @@ test.describe('public catalogue preview', () => {
 
   test('hides unverified campaign, discounts and availability claims', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Discover PASALHO, closer to home.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Fresh groceries, closer to home.' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'preety swestka offer' })).toHaveCount(0);
     await expect(page.getByText('LIVE OFFERS')).toHaveCount(0);
     await expect(page.getByText('Cash on delivery · Store pickup')).toHaveCount(0);

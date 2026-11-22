@@ -119,6 +119,16 @@ const campaignSchema = z
         message: "Buy X Get Y requires buy and get quantities",
       });
     }
+    if (
+      value.promotion?.promotion_type === "PERCENTAGE" &&
+      (value.promotion.discount_value <= 0 || value.promotion.discount_value > 100)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["promotion", "discount_value"],
+        message: "Percentage discount must be greater than 0 and no more than 100%.",
+      });
+    }
   });
 
 const campaignSelect = `
