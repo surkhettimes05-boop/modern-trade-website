@@ -7,7 +7,7 @@ import { getCatalog } from "@/lib/serverCatalog";
 import { absoluteUrl, SITE } from "@/lib/seo";
 import WebVitals from "@/components/WebVitals";
 import RouteChrome from "@/components/RouteChrome";
-import { isBrowseOnly } from "@/lib/publicLaunch";
+import { isBrowseOnly, isWebsiteCheckoutEnabled } from "@/lib/publicLaunch";
 
 const inter = localFont({
   src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
@@ -49,6 +49,7 @@ export default async function RootLayout({
 }) {
   const { products, categories, stores, offers, campaigns } = await getCatalog();
   const browseOnly = isBrowseOnly();
+  const webCheckoutEnabled = isWebsiteCheckoutEnabled();
   const organization = {
     "@context": "https://schema.org",
     "@type": "Organization",
@@ -81,13 +82,14 @@ export default async function RootLayout({
         <WebVitals />
         <CommerceProvider
           browseOnly={browseOnly}
+          webCheckoutEnabled={webCheckoutEnabled}
           initialProducts={products}
           initialCategories={categories}
           initialStores={stores}
           initialOffers={offers}
           initialCampaigns={campaigns}
         >
-          <RouteChrome browseOnly={browseOnly}>{children}</RouteChrome>
+          <RouteChrome browseOnly={browseOnly} webCheckoutEnabled={webCheckoutEnabled}>{children}</RouteChrome>
         </CommerceProvider>
       </body>
     </html>

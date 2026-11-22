@@ -35,7 +35,7 @@ export function ProductGallery({ product }: { product: Product }) {
 }
 
 export function BuyBox({ product }: { product: Product }) {
-  const { add, displayPrices, membership, browseOnly } = useShop();
+  const { add, displayPrices, membership, browseOnly, webCheckoutEnabled } = useShop();
   const [quantity, setQuantity] = useState(1);
   const save = product.originalPrice ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
   const memberPrice = product.sku ? displayPrices[product.sku] : undefined;
@@ -47,7 +47,7 @@ export function BuyBox({ product }: { product: Product }) {
     <div className="pdp-price"><strong>{memberEligible ? formatPrice(Number(memberPrice.appliedUnitPrice)) : formatPrice(product.price)}</strong>{memberEligible ? <><del>{formatPrice(Number(memberPrice.regularUnitPrice))}</del><span>{membership.tier_key === 'FOUNDING_1000' ? 'Founding 1,000 price' : 'Member price'}</span><small className="block">Save {formatPrice(Number(memberPrice.savingPerUnit))} per unit</small>{memberPrice.promotionSnapshot && <small className="block text-slate-500">{memberPrice.promotionSnapshot.name}</small>}</> : !browseOnly && product.originalPrice && <><del>{formatPrice(product.originalPrice)}</del><span>Save {save}%</span></>}</div>
     <small>{browseOnly ? `Indicative price · ${product.unit || 'Pack information pending'}` : `Inclusive of all taxes · ${product.unit}`}</small>
     <div className="availability"><b>{browseOnly ? 'Stock confirmation pending' : `● ${product.availability}`}</b><span>{browseOnly ? 'Displayed store stock has not been independently reconfirmed' : 'Based on your selected store'}</span></div>
-    {browseOnly ? <>
+    {browseOnly && !webCheckoutEnabled ? <>
       <div className="buy-actions">
         <div className="quantity standalone">
           <button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus /></button>
