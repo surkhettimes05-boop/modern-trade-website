@@ -10,6 +10,9 @@ test.describe('public catalogue preview', () => {
   test.skip(process.env.PASALHO_BROWSE_ONLY !== 'true', 'Requires PASALHO_BROWSE_ONLY=true on the web server');
 
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('pasalho-location-dismissed', '1');
+    });
     await page.route('**/api/public/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       const response = path.endsWith('/products') ? [{
