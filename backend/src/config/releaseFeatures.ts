@@ -70,12 +70,22 @@ export function publicCatalogOnly(env: NodeJS.ProcessEnv = process.env): boolean
   return env.PUBLIC_CATALOG_ONLY === "true";
 }
 
-// Production is deployed for live verification with real customer orders
-// unapproved. A later, separately reviewed release must remove this gate
-// before accepting COD orders. Staging can also explicitly lock checkout.
-// ENABLE_ELECTRONIC_PAYMENTS does not control cash-on-delivery orders.
+// Keep customer orders closed in production unless the COD pilot is explicitly
+// enabled. Public catalogue mode and an explicit staging lock always win.
 export function stagingCustomerOrdersBlocked(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return publicCatalogOnly(env) || env.NODE_ENV === "production" || env.STAGING_DISABLE_CUSTOMER_ORDERS === "true";
+  return (
+    env.STAGING_DISABLE_CUSTOMER_ORDERS === "true" ||
+    ((publicCatalogOnly(env) || env.NODE_ENV === "production") &&
+      env.ENABLE_REAL_CUSTOMER_ORDERS !== "true")
+  );
+}
+
+// The web COD launch does not implicitly enable customer orders in the mobile
+// app. Keep its production switch separate until the app is reviewed too.
+export function realCustomerAppOrdersEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.NODE_ENV !== "production" || env.ENABLE_REAL_APP_ORDERS === "true";
 }
