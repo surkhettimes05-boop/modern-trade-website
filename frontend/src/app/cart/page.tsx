@@ -51,7 +51,7 @@ export default function CartPage() {
             {pricingQuote ? (
               <>
                 <p><span>Regular subtotal</span><b>{formatPrice(Number(pricingQuote.subtotal))}</b></p>
-                <p><span>Member savings</span><b>-{formatPrice(Number(pricingQuote.discountTotal))}</b></p>
+                <p><span>{pricingQuote.campaignPromotion ? `Savings · ${pricingQuote.campaignPromotion.name}` : 'Member savings'}</span><b>-{formatPrice(Number(pricingQuote.discountTotal))}</b></p>
               </>
             ) : (
               <p>

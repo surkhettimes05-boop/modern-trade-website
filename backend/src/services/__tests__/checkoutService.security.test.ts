@@ -95,6 +95,7 @@ describe("checkout query batching", () => {
       subtotal: "250.00",
       discountTotal: "20.00",
       finalTotal: "230.00",
+      campaignPromotion: null,
       currency: "NPR",
       pricingRuleVersion: 1,
       issuedAt: "2026-01-01T00:00:00.000Z",

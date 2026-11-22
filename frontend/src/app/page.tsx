@@ -30,6 +30,9 @@ export default function Home() {
   const offerCampaign = campaigns.find((campaign) => campaign.placements?.includes('OFFERS_PAGE')) || campaigns.find((campaign) => campaign.is_featured);
   const legacyOffer = offers.find((offer) => offer.is_featured) || offers[0];
   const heroImage = heroCampaign?.banner_image_url || heroCampaign?.image_url || hero;
+  const heroOffer = heroCampaign?.promotion?.promotion_type === 'PERCENTAGE'
+    ? `${Number(heroCampaign.promotion.discount_value).toLocaleString('en-NP')}% OFF eligible items${heroCampaign.promotion.minimum_order_value ? ` · min. ${heroCampaign.promotion.minimum_order_value} NPR` : ''}${heroCampaign.promotion.maximum_discount_amount ? ` · up to ${heroCampaign.promotion.maximum_discount_amount} NPR` : ''}`
+    : null;
   const heroTitle = heroCampaign?.title_en || 'Fresh groceries, closer to home.';
   const heroDescription = heroCampaign?.description_en || (selectedStore
     ? `Browse the PASALHO catalogue from ${selectedStore.name}. Choose what you need and check local availability.`
@@ -74,6 +77,7 @@ export default function Home() {
       <Image className="quick-hero-image" src={heroImage} alt="Fresh vegetables and groceries at a local market" fill priority unoptimized sizes="100vw" />
       <div className="quick-hero-copy">
         <span className="quick-hero-kicker"><MapPin size={14} /> BIRENDRANAGAR · SURKHET</span>
+        {heroOffer && <span className="quick-hero-offer">{heroOffer} · {heroCampaign.title_en}</span>}
         <h1>{heroTitle}</h1>
         <p>{heroDescription}</p>
         <div className="quick-hero-actions">

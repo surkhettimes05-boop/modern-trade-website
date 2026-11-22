@@ -47,6 +47,15 @@ const quoteItemSchema = z
   })
   .strict();
 
+const campaignPromotionSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string().max(255),
+    promotionType: z.literal("PERCENTAGE"),
+    discountValue: moneySchema,
+  })
+  .strict();
+
 export const memberPricingQuotePayloadSchema = z
   .object({
     quoteId: z.string().uuid(),
@@ -62,6 +71,7 @@ export const memberPricingQuotePayloadSchema = z
     subtotal: moneySchema,
     discountTotal: moneySchema,
     finalTotal: moneySchema,
+    campaignPromotion: campaignPromotionSchema.nullable(),
     currency: z.literal("NPR"),
     pricingRuleVersion: z.number().int().positive(),
     issuedAt: z.string().datetime(),
@@ -431,8 +441,69 @@ async function buildQuotePayload(
     ]),
   );
 
+  // Campaign discounts are sourced from the admin campaign manager, but only
+  // published, date-valid web campaigns with a percentage rule are applied.
+  // The signed quote remains the source of truth at checkout.
+  const campaignResult = input.channel === "WEB"
+    ? await client.query(
+        `SELECT o.id::text AS id, p.name,
+                p.discount_value::numeric(12,2)::text AS discount_value,
+                p.minimum_order_value::numeric(12,2)::text AS minimum_order_value,
+                p.maximum_discount_amount::numeric(12,2)::text AS maximum_discount_amount,
+                COALESCE(links.product_ids, ARRAY[]::text[]) AS product_ids,
+                COALESCE(links.category_ids, ARRAY[]::text[]) AS category_ids
+           FROM offers o
+           JOIN promotions p ON p.id = o.promotion_id
+           LEFT JOIN LATERAL (
+             SELECT array_remove(array_agg(DISTINCT op.product_id::text), NULL) AS product_ids,
+                    array_remove(array_agg(DISTINCT op.category_id::text), NULL) AS category_ids
+               FROM offer_products op
+              WHERE op.offer_id = o.id
+           ) links ON TRUE
+          WHERE o.status = 'PUBLISHED'
+            AND o.start_date <= $1 AND o.end_date >= $1
+            AND 'WEB' = ANY(o.channels)
+            AND (o.store_id IS NULL OR o.store_id = $2)
+            AND (p.store_id IS NULL OR p.store_id = $2)
+            AND p.is_active = TRUE
+            AND p.promotion_type = 'PERCENTAGE'
+            AND (p.start_date IS NULL OR p.start_date <= $1)
+            AND (p.end_date IS NULL OR p.end_date >= $1)
+          ORDER BY o.sort_order, o.start_date DESC, o.id
+          LIMIT 20`,
+        [now, store.id],
+      )
+    : { rows: [] as Array<Record<string, unknown>> };
+
+  const categoriesResult = await client.query(
+    "SELECT id::text, category_id::text FROM products WHERE id = ANY($1::uuid[])",
+    [productIds],
+  );
+  const categoryByProductId = new Map<string, string | null>(
+    categoriesResult.rows.map((row) => [String(row.id), row.category_id == null ? null : String(row.category_id)]),
+  );
+  const campaign = campaignResult.rows.find((row) => {
+    const targetProducts = Array.isArray(row.product_ids) ? row.product_ids.map(String) : [];
+    const targetCategories = Array.isArray(row.category_ids) ? row.category_ids.map(String) : [];
+    const unrestricted = targetProducts.length === 0 && targetCategories.length === 0;
+    const eligibleIndices = productIds.map((id, index) => ({ id, index })).filter(({ id }) =>
+      unrestricted || targetProducts.includes(id) || (categoryByProductId.get(id) && targetCategories.includes(categoryByProductId.get(id)!)),
+    );
+    if (!eligibleIndices.length) return false;
+    const eligibleSubtotal = eligibleIndices.reduce((sum, { id, index }) => {
+      const price = priceById.get(id);
+      return sum + (price ? roundPaisa(moneyCents(price.regular_price), input.items[index].quantity) : 0n);
+    }, 0n);
+    return eligibleSubtotal > 0n && (row.minimum_order_value == null || eligibleSubtotal >= moneyCents(String(row.minimum_order_value)));
+  });
+
+  let campaignRemainingPaisa = campaign?.maximum_discount_amount == null
+    ? null
+    : moneyCents(String(campaign.maximum_discount_amount));
+
   let subtotalPaisa = 0n;
   let finalTotalPaisa = 0n;
+  let campaignApplied = false;
   const quoteItems = input.items
     .map((item, index) => {
       const price = priceById.get(productIds[index]);
@@ -448,7 +519,37 @@ async function buildQuotePayload(
         moneyCents(line.regularUnitPrice),
         item.quantity,
       );
-      const finalLinePaisa = moneyCents(line.lineTotal);
+      let finalLinePaisa = moneyCents(line.lineTotal);
+      const campaignProductIds = campaign && Array.isArray(campaign.product_ids) ? campaign.product_ids.map(String) : [];
+      const campaignCategoryIds = campaign && Array.isArray(campaign.category_ids) ? campaign.category_ids.map(String) : [];
+      const campaignUnrestricted = campaignProductIds.length === 0 && campaignCategoryIds.length === 0;
+      const campaignEligible = Boolean(campaign && (campaignUnrestricted || campaignProductIds.includes(productIds[index]) || (categoryByProductId.get(productIds[index]) && campaignCategoryIds.includes(categoryByProductId.get(productIds[index])!))));
+      let appliedLine = line;
+      let lineCampaignApplied = false;
+      if (campaign && campaignEligible && (campaignRemainingPaisa === null || campaignRemainingPaisa > 0n)) {
+        const percentHundredths = Number(campaign.discount_value) * 100;
+        const campaignDiscount = (regularLinePaisa * BigInt(Math.round(percentHundredths)) + 5000n) / 10000n;
+        const cappedDiscount = campaignRemainingPaisa === null
+          ? campaignDiscount
+          : campaignDiscount < campaignRemainingPaisa ? campaignDiscount : campaignRemainingPaisa;
+        const campaignLineTotal = regularLinePaisa - cappedDiscount;
+        // Campaigns do not stack with member promotions: apply whichever gives
+        // the customer the lower line total.
+        if (campaignLineTotal < finalLinePaisa) {
+          finalLinePaisa = campaignLineTotal;
+          campaignApplied = true;
+          lineCampaignApplied = true;
+          campaignRemainingPaisa = campaignRemainingPaisa === null ? null : campaignRemainingPaisa - cappedDiscount;
+          const quantityMilliValue = quantityMilli(item.quantity);
+          const appliedUnitPaisa = (finalLinePaisa * 1000n + quantityMilliValue / 2n) / quantityMilliValue;
+          appliedLine = {
+            ...line,
+            appliedUnitPrice: centsMoney(appliedUnitPaisa),
+            lineDiscount: centsMoney(regularLinePaisa - finalLinePaisa),
+            lineTotal: centsMoney(finalLinePaisa),
+          };
+        }
+      }
       subtotalPaisa += regularLinePaisa;
       finalTotalPaisa += finalLinePaisa;
       const promotion = price.promotion_id
@@ -457,9 +558,9 @@ async function buildQuotePayload(
       return {
         sku: item.sku,
         quantity: canonicalQuantity(item.quantity),
-        ...line,
-        promotionReference: price.promotion_id,
-        promotionSnapshot: promotion ?? null,
+        ...appliedLine,
+        promotionReference: lineCampaignApplied ? null : price.promotion_id,
+        promotionSnapshot: lineCampaignApplied ? null : promotion ?? null,
       };
     })
     .sort((a, b) => a.sku.localeCompare(b.sku));
@@ -490,6 +591,12 @@ async function buildQuotePayload(
     subtotal: centsMoney(subtotalPaisa),
     discountTotal: centsMoney(subtotalPaisa - finalTotalPaisa),
     finalTotal: centsMoney(finalTotalPaisa),
+    campaignPromotion: campaign && campaignApplied ? {
+      id: String(campaign.id),
+      name: String(campaign.name),
+      promotionType: "PERCENTAGE" as const,
+      discountValue: moneyCents(String(campaign.discount_value)) === 0n ? "0.00" : String(campaign.discount_value),
+    } : null,
     currency: "NPR" as const,
     pricingRuleVersion: Number(policy.rows[0].pricing_rule_version),
     issuedAt: now.toISOString(),
