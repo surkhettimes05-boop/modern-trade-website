@@ -11,10 +11,14 @@ export default function RouteChrome({
   children,
   browseOnly = false,
   webCheckoutEnabled = false,
+  membershipPortalEnabled = false,
+  creatorPortalEnabled = false,
 }: {
   children: React.ReactNode;
   browseOnly?: boolean;
   webCheckoutEnabled?: boolean;
+  membershipPortalEnabled?: boolean;
+  creatorPortalEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const isStaffWorkspace =
@@ -25,7 +29,12 @@ export default function RouteChrome({
   return (
     <>
       <SkipLink />
-      <Header browseOnly={browseOnly} webCheckoutEnabled={webCheckoutEnabled} />
+      <Header
+        browseOnly={browseOnly}
+        webCheckoutEnabled={webCheckoutEnabled}
+        membershipPortalEnabled={membershipPortalEnabled}
+        creatorPortalEnabled={creatorPortalEnabled}
+      />
       {browseOnly && pathname !== "/" && <div role="status" className="border-b border-amber-300 bg-amber-100 px-4 py-3 text-center text-sm font-semibold text-amber-950">
         {webCheckoutEnabled
           ? 'PASALHO catalogue preview — website COD checkout is open. Listed prices and stock are confirmed during checkout; the store will review each order.'
@@ -34,7 +43,12 @@ export default function RouteChrome({
       <main id="main-content" className="flex-1">
         {children}
       </main>
-      <Footer browseOnly={browseOnly} webCheckoutEnabled={webCheckoutEnabled} />
+      <Footer
+        browseOnly={browseOnly}
+        webCheckoutEnabled={webCheckoutEnabled}
+        membershipPortalEnabled={membershipPortalEnabled}
+        creatorPortalEnabled={creatorPortalEnabled}
+      />
       <WhatsAppOrderShortcut />
       <MobileNav />
     </>

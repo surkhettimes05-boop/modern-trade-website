@@ -57,8 +57,16 @@ const previewCols: Record<string, FooterLink[]> = {
   ],
 };
 
-export default function Footer({ browseOnly = false, webCheckoutEnabled = false }: { browseOnly?: boolean; webCheckoutEnabled?: boolean }) {
-  const links = browseOnly ? previewCols : cols;
+export default function Footer({ browseOnly = false, webCheckoutEnabled = false, membershipPortalEnabled = false, creatorPortalEnabled = false }: { browseOnly?: boolean; webCheckoutEnabled?: boolean; membershipPortalEnabled?: boolean; creatorPortalEnabled?: boolean }) {
+  const links = browseOnly ? {
+    ...previewCols,
+    ...(membershipPortalEnabled || creatorPortalEnabled ? {
+      'PASALHO programmes': [
+        ...(membershipPortalEnabled ? [{ label: 'Membership', href: '/membership' }] : []),
+        ...(creatorPortalEnabled ? [{ label: 'Creator portal sign in', href: '/creator' }] : []),
+      ],
+    } : {}),
+  } : cols;
   const socials = browseOnly ? socialLinks.filter((link) => link.href !== '/account') : socialLinks;
   return <footer>
     <div className="footer-top shell">

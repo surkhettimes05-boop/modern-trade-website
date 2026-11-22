@@ -101,7 +101,7 @@ export default function MembershipPage() {
         <section className="rounded-3xl bg-gradient-to-br from-emerald-900 to-emerald-700 p-8 text-white">
           <p className="text-sm font-semibold uppercase tracking-widest text-emerald-100">Pasalho Membership</p>
           <h1 className="mt-3 text-3xl font-bold">Your membership card</h1>
-          <p className="mt-3 max-w-xl text-emerald-50">Free membership. Eligible member prices are verified by Pasalho at checkout and depend on current offers and your membership status.</p>
+          <p className="mt-3 max-w-xl text-emerald-50">Free membership for PASALHO customers. Member pricing is not active yet; current public offers are listed separately.</p>
         </section>
         {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">{error}</p>}
         {loading && <p role="status" className="rounded-xl bg-white p-6">Loading membership…</p>}
@@ -114,7 +114,7 @@ export default function MembershipPage() {
             <p className="mt-5"><span className="text-slate-500">Tier</span><strong className="ml-3">{membership.tier_key === 'FOUNDING_1000' ? 'Founding 1,000' : 'Registered Member'}</strong></p>
             {membership.founding_number !== null && <p className="mt-1 text-sm text-slate-600">Founding member #{membership.founding_number}</p>}
             <p className="mt-2"><span className="text-slate-500">Status</span><strong className={`ml-3 ${active ? 'text-emerald-700' : 'text-amber-700'}`}>{membership.status}</strong></p>
-            <p className="mt-5 text-sm text-slate-600">{active ? 'Show this QR membership reference in store. Pricing eligibility is rechecked by Pasalho.' : 'Your membership is not active, so member pricing is unavailable.'}</p>
+            <p className="mt-5 text-sm text-slate-600">{active ? 'Show this QR membership reference to PASALHO staff. Any active public offers are shown separately.' : 'Your membership is not active.'}</p>
           </div>
           <div className="justify-self-center rounded-xl border border-slate-200 bg-white p-4">
             <QRCodeSVG value={membership.id} size={160} level="M" aria-label="Membership QR reference" />

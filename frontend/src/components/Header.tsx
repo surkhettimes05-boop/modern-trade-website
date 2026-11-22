@@ -5,7 +5,7 @@ import { Check, ChevronDown, Heart, MapPin, Menu, Search, UserRound, X } from "l
 import { useEffect, useMemo, useState } from "react";
 import { CartButton, MegaMenu, SearchBox, useShop } from "./CommerceClient";
 
-export default function Header({ browseOnly = false, webCheckoutEnabled = false }: { browseOnly?: boolean; webCheckoutEnabled?: boolean }) {
+export default function Header({ browseOnly = false, webCheckoutEnabled = false, membershipPortalEnabled = false, creatorPortalEnabled = false }: { browseOnly?: boolean; webCheckoutEnabled?: boolean; membershipPortalEnabled?: boolean; creatorPortalEnabled?: boolean }) {
   const [mega, setMega] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -50,12 +50,12 @@ export default function Header({ browseOnly = false, webCheckoutEnabled = false 
       <Link href="/" className="logo" aria-label="Pasalho home"><i>P</i><span>PASALHO</span></Link>
       <button className="category-trigger" onClick={() => setMega(!mega)} aria-expanded={mega}><Menu size={19} /> Categories</button>
       <SearchBox />
-      <nav className="main-links"><Link href="/offers">Offers</Link><Link href="/shop?sort=new">New Arrivals</Link>{!browseOnly && <Link href="/membership">Membership</Link>}<Link href="/stores">Stores</Link></nav>
+      <nav className="main-links"><Link href="/offers">Offers</Link><Link href="/shop?sort=new">New Arrivals</Link>{(!browseOnly || membershipPortalEnabled) && <Link href="/membership">Membership</Link>}{creatorPortalEnabled && <Link href="/creator">Creator portal</Link>}<Link href="/stores">Stores</Link></nav>
       {browseOnly ? <div className="header-actions"><CartButton /></div> : <div className="header-actions"><Link className="nav-action" href="/account"><UserRound /><span>Account</span></Link><Link className="nav-action" href="/account"><Heart /><span>Wishlist</span></Link><CartButton /></div>}
       <button className="mobile-menu" onClick={() => setMobile(!mobile)} aria-label="Menu">{mobile ? <X /> : <Menu />}</button>
     </div>
       {mega && <div className="mega-wrap"><MegaMenu open={mega} onClose={() => setMega(false)} /></div>}
-      {mobile && <nav className="mobile-panel"><Link href="/shop">Browse all products</Link><Link href="/offers">Today’s offers</Link>{!browseOnly && <Link href="/membership">Membership</Link>}<Link href="/stores">Find a store</Link>{(!browseOnly || webCheckoutEnabled) && <Link href="/account">My account</Link>}</nav>}
+      {mobile && <nav className="mobile-panel"><Link href="/shop">Browse all products</Link><Link href="/offers">Today’s offers</Link>{(!browseOnly || membershipPortalEnabled) && <Link href="/membership">Membership</Link>}{creatorPortalEnabled && <Link href="/creator">Creator portal</Link>}<Link href="/stores">Find a store</Link>{(!browseOnly || webCheckoutEnabled) && <Link href="/account">My account</Link>}</nav>}
     </header>
     {locationOpen && <div className="store-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) dismissLocation(); }}>
       <section className="store-dialog" role="dialog" aria-modal="true" aria-labelledby="store-dialog-title">
