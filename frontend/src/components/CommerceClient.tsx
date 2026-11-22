@@ -208,7 +208,7 @@ export function ProductCard({ product, compact = false }: { product: Product; co
     <div className="product-copy"><span className="brand">{product.brand}</span><Link href={`/product/${product.slug}`}><h3>{product.name}</h3></Link>{!browseOnly && <div className="rating"><Star size={14} fill="currentColor" /> {product.rating || '—'} <span>({product.reviews})</span></div>}
       <div className="price-row"><div><strong>{eligible ? formatPrice(Number(price.appliedUnitPrice)) : formatPrice(product.price)}</strong>{eligible ? <><del>{formatPrice(Number(price.regularUnitPrice))}</del><small className="block text-emerald-800">{membership.tier_key === 'FOUNDING_1000' ? 'Founding 1,000 price' : 'Member price'} · Save {formatPrice(Number(price.savingPerUnit))}</small>{price.promotionSnapshot && <small className="block text-slate-500">{price.promotionSnapshot.name}</small>}</> : !browseOnly && product.originalPrice ? <del>{formatPrice(product.originalPrice)}</del> : null}</div></div>
       <p className="stock">{browseOnly ? 'Indicative price · Stock not yet confirmed' : `● ${product.availability}`}</p>
-      <button className="add-btn" onClick={() => add(product)} disabled={product.availability.toLowerCase().includes('out of')}>{browseOnly ? 'Add to WhatsApp request' : <><Plus size={18} /> Add to cart</>}</button>
+      <button className="add-btn" onClick={() => add(product)} disabled={!browseOnly && product.availability.toLowerCase().includes('out of')}>{browseOnly ? 'Add to WhatsApp request' : <><Plus size={18} /> Add to cart</>}</button>
     </div>
   </article>;
 }

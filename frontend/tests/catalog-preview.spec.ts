@@ -30,7 +30,7 @@ test.describe('public catalogue preview', () => {
     await expect(page.getByRole('heading', { name: 'preety swestka offer' })).toHaveCount(0);
     await expect(page.getByText('LIVE OFFERS')).toHaveCount(0);
     await expect(page.getByText('Cash on delivery · Store pickup')).toHaveCount(0);
-    await expect(page.getByText('Catalogue preview · Ordering opens later')).toBeVisible();
+    await expect(page.getByText('Catalogue preview · WhatsApp requests only')).toBeVisible();
 
     await page.goto('/shop');
     const productCards = page.locator('.product-card');
@@ -42,10 +42,15 @@ test.describe('public catalogue preview', () => {
     }
     await expect(page.locator('.product-card .deal-badge')).toHaveCount(0);
     await expect(page.locator('.product-card .price-row del')).toHaveCount(0);
-    const orderingButton = page.getByRole('button', { name: 'Add to WhatsApp request' }).first();
-    await expect(orderingButton).toBeVisible();
-    await expect(orderingButton).toBeEnabled();
-    await orderingButton.click();
+
+    const productHref = await productCards.first().locator('a').first().getAttribute('href');
+    expect(productHref).toMatch(/^\/product\//);
+    await page.goto(productHref!);
+    const detailRequestButton = page.locator('.buy-box').getByRole('button', { name: 'Add to WhatsApp request' });
+    await expect(detailRequestButton).toBeVisible();
+    await page.getByRole('button', { name: 'Increase quantity' }).first().click();
+    await expect(page.locator('.buy-box .quantity.standalone span')).toHaveText('2');
+    await detailRequestButton.click();
     await expect(page.getByRole('dialog', { name: /Cart/ })).toBeVisible();
     await page.getByRole('link', { name: 'Prepare WhatsApp request' }).click();
     await expect(page).toHaveURL(/\/whatsapp-order$/);
