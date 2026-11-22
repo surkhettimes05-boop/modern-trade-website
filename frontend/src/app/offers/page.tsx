@@ -3,21 +3,13 @@ import Image from 'next/image';
 import Link from 'next/link';
 import JsonLd from '@/components/JsonLd';
 import { buildMetadata, absoluteUrl } from '@/lib/seo';
-import { isBrowseOnly } from '@/lib/publicLaunch';
 import { getCatalog } from '@/lib/serverCatalog';
 
 export function generateMetadata(): Metadata {
-  return isBrowseOnly()
-    ? buildMetadata({ title: 'Offers opening later', description: 'PASALHO offers will be announced when promotions and pricing are verified. Browse our catalogue preview in the meantime.', path: '/offers' })
-    : buildMetadata({ title: 'Current offers', description: 'See current Pasalho grocery and household offers for Birendranagar, Surkhet, with applicable dates and terms.', path: '/offers' });
+  return buildMetadata({ title: 'Current offers', description: 'See published Pasalho campaigns for Birendranagar, Surkhet, with applicable dates and terms.', path: '/offers' });
 }
 
 export default async function OffersPage() {
-  if (isBrowseOnly()) return <div className="shell page">
-    <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href="/">Home</Link><span>›</span><span aria-current="page">Offers</span></nav>
-    <div className="page-head"><div><p className="eyebrow">PASALHO CATALOGUE PREVIEW</p><h1>Offers are opening later</h1><p>Promotions and discounts are not currently available. We are confirming product details, store prices and stock before announcing offers.</p></div></div>
-    <Link className="primary-btn" href="/shop">Browse published products</Link>
-  </div>;
   const { offers, campaigns, products } = await getCatalog();
   const campaignOffers = campaigns
     .filter((campaign) => campaign.placements?.includes('OFFERS_PAGE'))
