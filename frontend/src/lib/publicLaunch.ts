@@ -18,9 +18,14 @@ export function isStaffManagementRoute(pathname: string): boolean {
 }
 
 // Manual WhatsApp requests are prepared entirely in the browser. Keep every
-// customer API mutation blocked; only staff-authenticated API namespaces pass.
+// customer API mutation blocked; only staff-authenticated API routes pass.
 export function isStaffManagementApi(pathname: string): boolean {
-  return /^\/api\/(?:admin|operations-auth)(?:\/|$)/.test(pathname);
+  return (
+    /^\/api\/(?:admin|operations-auth)(?:\/|$)/.test(pathname) ||
+    /^\/api\/web-orders\/[^/]+\/(?:status|payment-status|cancel|cod-settlement|fulfillment\/assign)$/.test(
+      pathname,
+    )
+  );
 }
 
 export function shouldBlockBrowseOnlyMutation(pathname: string, method: string): boolean {
