@@ -4,6 +4,7 @@ import Link from 'next/link';
 import JsonLd from '@/components/JsonLd';
 import { buildMetadata, absoluteUrl } from '@/lib/seo';
 import { getCatalog } from '@/lib/serverCatalog';
+import { isBrowseOnly, isWebsiteCheckoutEnabled } from '@/lib/publicLaunch';
 
 export function generateMetadata(): Metadata {
   return buildMetadata({ title: 'Current offers', description: 'See published Pasalho campaigns for Birendranagar, Surkhet, with applicable dates and terms.', path: '/offers' });
@@ -11,6 +12,13 @@ export function generateMetadata(): Metadata {
 
 export default async function OffersPage() {
   const { offers, campaigns, products } = await getCatalog();
+  if (isBrowseOnly() && !isWebsiteCheckoutEnabled()) {
+    return <main className="shell page mx-auto max-w-7xl py-12">
+      <h1 className="text-4xl font-bold text-gray-900 mb-4">Offers are opening later</h1>
+      <p className="text-xl text-gray-600 mb-8">We are preparing PASALHO offers for your area. Browse published products while we get them ready.</p>
+      <Link className="primary-btn" href="/shop">Browse published products</Link>
+    </main>;
+  }
   const campaignOffers = campaigns
     .filter((campaign) => campaign.placements?.includes('OFFERS_PAGE'))
     .map((campaign) => ({
