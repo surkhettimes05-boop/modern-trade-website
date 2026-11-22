@@ -8,18 +8,21 @@ export function isWebsiteCheckoutEnabled(env: NodeJS.ProcessEnv = process.env): 
   return env.NEXT_PUBLIC_ENABLE_WEB_CHECKOUT === 'true';
 }
 
+export function isMembershipPortalEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.NEXT_PUBLIC_ENABLE_MEMBERSHIP === 'true';
+}
+
+export function isCreatorPortalEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.NEXT_PUBLIC_ENABLE_CREATOR_PORTAL === 'true';
+}
+
 export function isClosedCustomerRoute(
   pathname: string,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  // COD checkout needs customer sign-in/verified enrollment. Keep unrelated
-  // deferred customer areas closed while the website checkout pilot is open.
-  if (
-    isWebsiteCheckoutEnabled(env) &&
-    /^\/(?:checkout|account)(?:\/|$)/.test(pathname)
-  ) {
-    return false;
-  }
+  if (isWebsiteCheckoutEnabled(env) && /^\/(?:checkout|account)(?:\/|$)/.test(pathname)) return false;
+  if (isMembershipPortalEnabled(env) && /^\/membership(?:\/|$)/.test(pathname)) return false;
+  if (isCreatorPortalEnabled(env) && /^\/creator(?:\/|$)/.test(pathname)) return false;
   return /^\/(?:checkout|account|membership|creator|founders|loyalty|r)(?:\/|$)/.test(pathname);
 }
 
@@ -41,7 +44,11 @@ export function isStaffManagementApi(pathname: string): boolean {
   );
 }
 
-export function shouldBlockBrowseOnlyMutation(pathname: string, method: string): boolean {
+export function shouldBlockBrowseOnlyMutation(
+  pathname: string,
+  method: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   const webCheckoutApi =
     (method === 'POST' &&
       /^\/api\/(?:auth\/(?:otp\/(?:request|verify)|google(?:\/link)?)|customer-pricing\/web\/quotes|checkout\/(?:cart\/validate|delivery-quote|cod)|shopping-cart|addresses)$/.test(
@@ -49,8 +56,15 @@ export function shouldBlockBrowseOnlyMutation(pathname: string, method: string):
       )) ||
     (method === 'PUT' &&
       /^\/api\/shopping-cart\/[0-9a-f-]+\/items$/i.test(pathname));
+  const membershipApi = isMembershipPortalEnabled(env) &&
+    method === 'POST' && pathname === '/api/membership/enroll';
+  const creatorPortalApi = isCreatorPortalEnabled(env) &&
+    method === 'POST' &&
+    /^\/api\/creator-portal\/(?:otp\/(?:request|verify)|logout)$/.test(pathname);
   return pathname.startsWith('/api/') &&
     !['GET', 'HEAD', 'OPTIONS'].includes(method) &&
     !isStaffManagementApi(pathname) &&
-    !(isWebsiteCheckoutEnabled() && webCheckoutApi);
+    !(isWebsiteCheckoutEnabled(env) && webCheckoutApi) &&
+    !membershipApi &&
+    !creatorPortalApi;
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 
 type Creator = { id: string; code: string; name: string; phone_masked: string; referral_slug: string; referral_url: string };
 type Purchase = { source_system: string; source_transaction_number: string; eligible_spend_npr: string; reward_amount_npr: string; cogs_npr: string | null; cost_status: string; event_status: string; eligible_at: string; available_at: string };
@@ -79,8 +80,8 @@ export default function CreatorPortalPage() {
         <button onClick={logout} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Sign out</button>
       </header>
       <section className="mt-8 rounded-2xl bg-slate-900 p-6 text-white">
-        <p className="text-sm text-slate-300">Your referral link</p><p className="mt-2 break-all text-lg font-semibold">{creator.referral_url || `/r/\${creator.referral_slug}`}</p>
-        <div className="mt-4 flex flex-wrap gap-3"><button onClick={() => void navigator.clipboard.writeText(creator.referral_url)} className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900">Copy link</button><a href={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=\${encodeURIComponent(creator.referral_url)}`} target="_blank" rel="noreferrer" className="rounded-lg border border-white/40 px-4 py-2 text-sm">Open QR code</a></div>
+        <p className="text-sm text-slate-300">Your referral link</p><a className="mt-2 block break-all text-lg font-semibold underline" href={creator.referral_url} target="_blank" rel="noreferrer">{creator.referral_url}</a>
+        <div className="mt-4 flex flex-wrap items-start gap-3"><button onClick={() => void navigator.clipboard.writeText(creator.referral_url)} className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900">Copy link</button><div className="rounded-lg bg-white p-3"><QRCodeSVG value={creator.referral_url} size={176} level="M" aria-label="Creator referral QR code" /></div></div>
       </section>
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[

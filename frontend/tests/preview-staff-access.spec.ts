@@ -38,3 +38,26 @@ test('only staff API namespaces may mutate during preview', () => {
     expect(shouldBlockBrowseOnlyMutation(path, 'GET')).toBe(false);
   }
 });
+
+test('membership and approved creator portal open only with their production flags', () => {
+  const production = { ...process.env, VERCEL_ENV: 'production' };
+  expect(isClosedCustomerRoute('/membership', production)).toBe(true);
+  expect(isClosedCustomerRoute('/creator', production)).toBe(true);
+  expect(isClosedCustomerRoute('/founders', {
+    ...production,
+    NEXT_PUBLIC_ENABLE_MEMBERSHIP: 'true',
+    NEXT_PUBLIC_ENABLE_CREATOR_PORTAL: 'true',
+  })).toBe(true);
+
+  const membership = { ...production, NEXT_PUBLIC_ENABLE_MEMBERSHIP: 'true' };
+  expect(isClosedCustomerRoute('/membership', membership)).toBe(false);
+  expect(shouldBlockBrowseOnlyMutation('/api/membership/enroll', 'POST', membership)).toBe(false);
+  expect(shouldBlockBrowseOnlyMutation('/api/membership/admin', 'POST', membership)).toBe(true);
+
+  const creator = { ...production, NEXT_PUBLIC_ENABLE_CREATOR_PORTAL: 'true' };
+  expect(isClosedCustomerRoute('/creator', creator)).toBe(false);
+  expect(shouldBlockBrowseOnlyMutation('/api/creator-portal/otp/request', 'POST', creator)).toBe(false);
+  expect(shouldBlockBrowseOnlyMutation('/api/creator-portal/otp/verify', 'POST', creator)).toBe(false);
+  expect(shouldBlockBrowseOnlyMutation('/api/creator-portal/logout', 'POST', creator)).toBe(false);
+  expect(shouldBlockBrowseOnlyMutation('/api/creator-portal/overview', 'POST', creator)).toBe(true);
+});
