@@ -26,9 +26,11 @@ export default function Home() {
     const available = products.filter((product) => !product.availability.toLowerCase().includes('out of'));
     return (featured.length ? featured : available).slice(0, 8);
   }, [products]);
-  const heroCampaign = campaigns.find((campaign) => campaign.placements?.includes('HOME_HERO'));
-  const offerCampaign = campaigns.find((campaign) => campaign.placements?.includes('OFFERS_PAGE')) || campaigns.find((campaign) => campaign.is_featured);
-  const legacyOffer = offers.find((offer) => offer.is_featured) || offers[0];
+  const campaignsVisible = !browseOnly || webCheckoutEnabled;
+  const publicCampaigns = campaignsVisible ? campaigns : [];
+  const heroCampaign = publicCampaigns.find((campaign) => campaign.placements?.includes('HOME_HERO'));
+  const offerCampaign = publicCampaigns.find((campaign) => campaign.placements?.includes('OFFERS_PAGE')) || publicCampaigns.find((campaign) => campaign.is_featured);
+  const legacyOffer = campaignsVisible ? (offers.find((offer) => offer.is_featured) || offers[0]) : undefined;
   const heroImage = heroCampaign?.banner_image_url || heroCampaign?.image_url || hero;
   const heroOffer = heroCampaign?.promotion?.promotion_type === 'PERCENTAGE'
     ? `${Number(heroCampaign.promotion.discount_value).toLocaleString('en-NP')}% OFF eligible items${heroCampaign.promotion.minimum_order_value ? ` · min. ${heroCampaign.promotion.minimum_order_value} NPR` : ''}${heroCampaign.promotion.maximum_discount_amount ? ` · up to ${heroCampaign.promotion.maximum_discount_amount} NPR` : ''}`
