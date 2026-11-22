@@ -28,7 +28,7 @@ export default function Home() {
   }, [products]);
   const campaignsVisible = !browseOnly || webCheckoutEnabled;
   const publicCampaigns = campaignsVisible ? campaigns : [];
-  const heroCampaign = publicCampaigns.find((campaign) => campaign.placements?.includes('HOME_HERO'));
+  const heroCampaign = publicCampaigns.find((campaign) => campaign.placements?.includes('HOME_HERO')) || publicCampaigns.find((campaign) => campaign.is_featured);
   const offerCampaign = publicCampaigns.find((campaign) => campaign.placements?.includes('OFFERS_PAGE')) || publicCampaigns.find((campaign) => campaign.is_featured);
   const legacyOffer = campaignsVisible ? (offers.find((offer) => offer.is_featured) || offers[0]) : undefined;
   const heroImage = heroCampaign?.banner_image_url || heroCampaign?.image_url || hero;
