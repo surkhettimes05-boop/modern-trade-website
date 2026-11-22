@@ -26,7 +26,7 @@ test.describe('public catalogue preview', () => {
 
   test('hides unverified campaign, discounts and availability claims', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Discover PASALHO, closer to home.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Fresh groceries, closer to home.' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'preety swestka offer' })).toHaveCount(0);
     await expect(page.getByText('LIVE OFFERS')).toHaveCount(0);
     await expect(page.getByText('Cash on delivery · Store pickup')).toHaveCount(0);
