@@ -15,9 +15,10 @@ export default function LaunchInfo() {
       <p className="mt-5 text-lg leading-8 text-slate-700">
         We are preparing our grocery shopping service in Birendranagar, Surkhet.
         You can browse products, categories, and stores now. Customer accounts,
-        memberships, creator sign-up, and all ordering channels will open after launch checks.
+        memberships, creator sign-up, and online checkout are still closed. You can
+        prepare a manual WhatsApp request from the cart; the store must confirm it before it becomes an order.
       </p>
-      <p className="mt-4 font-semibold text-emerald-900">No payments or customer orders are being accepted at this time.</p>
+      <p className="mt-4 font-semibold text-emerald-900">No online checkout or payments are active. A WhatsApp message is only a request until the store confirms stock, price, delivery, and acceptance.</p>
       <div className="mt-8 flex flex-wrap gap-3">
         <Link className="rounded-lg bg-emerald-900 px-6 py-3 font-bold text-white" href="/shop">Browse products</Link>
         <Link className="rounded-lg border border-emerald-800 px-6 py-3 font-bold text-emerald-900" href="/stores">View stores</Link>

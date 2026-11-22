@@ -20,7 +20,7 @@ export default function Header({ browseOnly = false }: { browseOnly?: boolean })
       <button className="category-trigger" onClick={() => setMega(!mega)} aria-expanded={mega}><Menu size={19} /> Categories</button>
       <SearchBox />
       <nav className="main-links"><Link href="/offers">Offers</Link><Link href="/shop?sort=new">New Arrivals</Link>{!browseOnly && <Link href="/membership">Membership</Link>}<Link href="/stores">Stores</Link></nav>
-      {!browseOnly && <div className="header-actions"><Link className="nav-action" href="/account"><UserRound /><span>Account</span></Link><Link className="nav-action" href="/account"><Heart /><span>Wishlist</span></Link><CartButton /></div>}
+      {browseOnly ? <div className="header-actions"><CartButton /></div> : <div className="header-actions"><Link className="nav-action" href="/account"><UserRound /><span>Account</span></Link><Link className="nav-action" href="/account"><Heart /><span>Wishlist</span></Link><CartButton /></div>}
       <button className="mobile-menu" onClick={() => setMobile(!mobile)} aria-label="Menu">{mobile ? <X /> : <Menu />}</button>
     </div>
       {mega && <div className="mega-wrap"><MegaMenu open={mega} onClose={() => setMega(false)} /></div>}

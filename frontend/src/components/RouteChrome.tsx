@@ -25,13 +25,13 @@ export default function RouteChrome({
       <SkipLink />
       <Header browseOnly={browseOnly} />
       {browseOnly && <div role="status" className="border-b border-amber-300 bg-amber-100 px-4 py-3 text-center text-sm font-semibold text-amber-950">
-        PASALHO catalogue preview — browse products and stores. Registration, memberships, creator sign-up, and orders are opening later.
+        PASALHO catalogue preview — browse products and stores, or send a manual order request through WhatsApp. Online checkout and accounts are not open; the store must confirm stock, price, delivery, and your order.
       </div>}
       <main id="main-content" className="flex-1">
         {children}
       </main>
       <Footer browseOnly={browseOnly} />
-      {!browseOnly && <WhatsAppOrderShortcut />}
+      <WhatsAppOrderShortcut />
       <MobileNav />
     </>
   );

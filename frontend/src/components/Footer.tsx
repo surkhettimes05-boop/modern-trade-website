@@ -69,6 +69,6 @@ export default function Footer({ browseOnly = false }: { browseOnly?: boolean })
       </nav>
     </div>
     <div className="footer-grid shell">{Object.entries(links).map(([heading, columnLinks]) => <div key={heading}><h3>{heading}</h3>{columnLinks.map(({ label, href }) => <Link href={href} key={label}>{label}</Link>)}</div>)}</div>
-    <div className="footer-bottom shell"><span>© 2026 Pasalho</span><span>Birendranagar, Surkhet · Nepal</span><span>{browseOnly ? 'Catalogue preview · Ordering opens later' : 'Cash on delivery · Store pickup'}</span></div>
+    <div className="footer-bottom shell"><span>© 2026 Pasalho</span><span>Birendranagar, Surkhet · Nepal</span><span>{browseOnly ? 'Catalogue preview · WhatsApp requests only' : 'Cash on delivery · Store pickup'}</span></div>
   </footer>;
 }

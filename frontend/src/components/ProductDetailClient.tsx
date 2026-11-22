@@ -47,7 +47,17 @@ export function BuyBox({ product }: { product: Product }) {
     <div className="pdp-price"><strong>{memberEligible ? formatPrice(Number(memberPrice.appliedUnitPrice)) : formatPrice(product.price)}</strong>{memberEligible ? <><del>{formatPrice(Number(memberPrice.regularUnitPrice))}</del><span>{membership.tier_key === 'FOUNDING_1000' ? 'Founding 1,000 price' : 'Member price'}</span><small className="block">Save {formatPrice(Number(memberPrice.savingPerUnit))} per unit</small>{memberPrice.promotionSnapshot && <small className="block text-slate-500">{memberPrice.promotionSnapshot.name}</small>}</> : !browseOnly && product.originalPrice && <><del>{formatPrice(product.originalPrice)}</del><span>Save {save}%</span></>}</div>
     <small>{browseOnly ? `Indicative price · ${product.unit || 'Pack information pending'}` : `Inclusive of all taxes · ${product.unit}`}</small>
     <div className="availability"><b>{browseOnly ? 'Stock confirmation pending' : `● ${product.availability}`}</b><span>{browseOnly ? 'Displayed store stock has not been independently reconfirmed' : 'Based on your selected store'}</span></div>
-    {browseOnly ? <p className="safe-copy">Catalogue preview only. Orders, delivery and pickup are not available yet.</p> : <>
+    {browseOnly ? <>
+      <div className="buy-actions">
+        <div className="quantity standalone">
+          <button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus /></button>
+          <span>{quantity}</span>
+          <button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)}><Plus /></button>
+        </div>
+        <button className="primary-btn" onClick={() => Array.from({ length: quantity }).forEach(() => add(product))}>Add to WhatsApp request</button>
+      </div>
+      <p className="safe-copy">This prepares an unconfirmed WhatsApp request. The store must confirm stock, final price, and delivery or pickup before accepting it.</p>
+    </> : <>
       <div className="fulfilment"><div><Truck /><span><b>Delivery</b><small>Eligibility shown at checkout</small></span><strong>CHECK</strong></div><div><ShoppingBag /><span><b>Store pickup</b><small>Ready time depends on store stock</small></span><strong>CHECK</strong></div></div>
       <div className="buy-actions"><div className="quantity standalone"><button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus /></button><span>{quantity}</span><button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)}><Plus /></button></div><button className="primary-btn" disabled={unavailable} onClick={() => Array.from({ length: quantity }).forEach(() => add(product))}>Add to cart</button></div>
       <button className="wishlist-btn" aria-label="Save to wishlist"><Heart /> Save to wishlist</button><p className="safe-copy">COD checkout · Store-based fulfilment · Pasalho quality promise</p>

@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!product) return buildMetadata({ title: 'Product not found', description: 'The requested product could not be found.', path: `/product/${slug}`, noIndex: true });
   const description = product.description.trim();
   const metaDescription = isBrowseOnly()
-    ? `${product.name} is listed in the PASALHO catalogue preview for Birendranagar, Surkhet. Price and availability need confirmation before ordering opens.`
+    ? `${product.name} is listed in the PASALHO catalogue preview for Birendranagar, Surkhet. Send a manual WhatsApp request; price, stock, and fulfilment require store confirmation.`
     : description.length >= 70 ? description : `${description}${description ? ' ' : ''}Shop ${product.name} from ${product.brand} with Pasalho in Birendranagar, Surkhet. Check current NPR pricing and store availability.`;
   return buildMetadata({ title: product.name, description: metaDescription, path: `/product/${product.slug}`, image: product.image });
 }
@@ -47,7 +47,7 @@ export default async function ProductPage({ params }: Props) {
     <JsonLd data={[productSchema, crumbs]} />
     <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href="/">Home</Link><span>›</span><Link href="/shop">Shop</Link>{category && <><span>›</span><Link href={`/category/${category.slug}`}>{category.name}</Link></>}<span>›</span><span aria-current="page">{product.name}</span></nav>
     <div className="pdp"><ProductGallery product={product} /><BuyBox product={product} /></div>
-    <div className="pdp-info"><section><h2>Product details</h2><p>{product.description}</p><p>{product.name} is listed in PASALHO&apos;s {product.category.toLowerCase()} catalogue for Birendranagar, Surkhet.</p></section><section><h2>Specifications</h2>{Object.entries(product.specifications).map(([key, value]) => <p key={key}><span>{key}</span><b>{value}</b></p>)}</section><section><h2>Price and fulfilment</h2><p>{formatPrice(product.price)}. {browseOnly ? 'Indicative price only. Store stock, pricing and fulfilment must be confirmed before ordering opens.' : 'Store availability and fulfilment options are based on your selected store.'}</p><p><Link href="/guides/safer-grocery-storage">Safer grocery handling guide</Link></p></section></div>
+    <div className="pdp-info"><section><h2>Product details</h2><p>{product.description}</p><p>{product.name} is listed in PASALHO&apos;s {product.category.toLowerCase()} catalogue for Birendranagar, Surkhet.</p></section><section><h2>Specifications</h2>{Object.entries(product.specifications).map(([key, value]) => <p key={key}><span>{key}</span><b>{value}</b></p>)}</section><section><h2>Price and fulfilment</h2><p>{formatPrice(product.price)}. {browseOnly ? 'Indicative price only. The store confirms stock, final pricing, and delivery or pickup before accepting a request.' : 'Store availability and fulfilment options are based on your selected store.'}</p><p><Link href="/guides/safer-grocery-storage">Safer grocery handling guide</Link></p></section></div>
     {related.length > 0 && <section className="section"><div className="section-title"><h2>More from {product.category}</h2>{category && <Link href={`/category/${category.slug}`}>View category</Link>}</div><div className="product-scroll">{related.map((item) => <ProductCard product={item} key={item.id} />)}</div></section>}
   </div>;
 }

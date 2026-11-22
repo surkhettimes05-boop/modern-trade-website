@@ -16,7 +16,7 @@ const Ctx = createContext<ShopContext | null>(null);
 
 export function CommerceProvider({ children, browseOnly = false, initialProducts = [], initialCategories = [], initialStores = [], initialOffers = [], initialCampaigns = [] }: { children: React.ReactNode; browseOnly?: boolean; initialProducts?: Product[]; initialCategories?: StorefrontCategory[]; initialStores?: Store[]; initialOffers?: Offer[]; initialCampaigns?: Campaign[] }) {
   const [products, setProducts] = useState<Product[]>(initialProducts); const [categories, setCategories] = useState<StorefrontCategory[]>(initialCategories); const [stores, setStores] = useState<Store[]>(initialStores); const [offers, setOffers] = useState<Offer[]>(initialOffers); const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns); const [loading, setLoading] = useState(!(initialProducts.length && initialCategories.length)); const [catalogAvailable, setCatalogAvailable] = useState(Boolean(initialProducts.length || initialCategories.length || initialStores.length)); const [items, setItems] = useState<CartItem[]>([]); const [drawer, setDrawer] = useState(false); const [selectedStore, setSelectedStoreState] = useState<Store | null>(initialStores.find((store) => !store.is_temporarily_closed) || null); const [hydrated, setHydrated] = useState(false);
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(browseOnly ? false : null);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [displayPrices, setDisplayPrices] = useState<Record<string, DisplayPrice>>({});
   const [pricingQuote, setPricingQuote] = useState<PricingQuote | null>(null);
@@ -26,7 +26,7 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
   const quoteRequestId = useRef(0);
   const csrf = () => decodeURIComponent(document.cookie.match(/(?:^|; )customer_csrf=([^;]+)/)?.[1] || '');
   const reloadMemberPricing = useCallback(async () => {
-    if (authenticated !== true || !selectedStore || !products.length) {
+    if (browseOnly || authenticated !== true || !selectedStore || !products.length) {
       setMembership(null);
       setDisplayPrices({});
       return;
@@ -61,7 +61,7 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
       setDisplayPrices({});
       setPricingError(error instanceof Error ? error.message : 'Member pricing is temporarily unavailable.');
     }
-  }, [authenticated, products, selectedStore]);
+  }, [authenticated, browseOnly, products, selectedStore]);
   const requestPricingQuote = useCallback(async (signal?: AbortSignal) => {
     if (authenticated !== true || !selectedStore || !items.length) {
       throw new Error('Sign in, choose a store, and add products before requesting a quote.');
@@ -101,6 +101,7 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
     }
   }, [requestPricingQuote]);
   useEffect(() => {
+    if (browseOnly) return;
     const controller = new AbortController();
     resilientFetch('/api/auth/session/validate', {
       credentials: 'include',
@@ -110,13 +111,20 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
       .then((response) => setAuthenticated(response.ok))
       .catch(() => { if (!controller.signal.aborted) setAuthenticated(false); });
     return () => controller.abort();
-  }, []);
+  }, [browseOnly]);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
     quoteRequestId.current += 1;
     const timer = window.setTimeout(() => {
       if (!active) return;
+      if (browseOnly) {
+        setPricingQuote(null);
+        setPricingQuoteNeedsConfirmation(false);
+        setPricingBusy(false);
+        setPricingError('');
+        return;
+      }
       if (authenticated !== true || !selectedStore || !items.length) {
         setPricingQuote(null);
         setPricingQuoteNeedsConfirmation(false);
@@ -136,7 +144,7 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
         .finally(() => { if (active) setPricingBusy(false); });
     }, 0);
     return () => { active = false; controller.abort(); window.clearTimeout(timer); };
-  }, [authenticated, items, selectedStore, requestPricingQuote]);
+  }, [authenticated, browseOnly, items, selectedStore, requestPricingQuote]);
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
@@ -148,7 +156,7 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
       });
     }, 0);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [reloadMemberPricing]);
+  }, [browseOnly, reloadMemberPricing]);
   useEffect(() => {
     if (!pricingQuote) return;
     const delay = Date.parse(pricingQuote.expiresAt) - Date.now();
@@ -163,12 +171,12 @@ export function CommerceProvider({ children, browseOnly = false, initialProducts
   useEffect(() => { if (!hydrated || !products.length) return; const timer = window.setTimeout(() => { const productsBySku = new Map(products.map((product) => [product.sku || product.id, product])); setItems((current) => current.flatMap((item) => { const product = productsBySku.get(item.product.sku || item.product.id); return product ? [{ ...item, product }] : []; })); }, 0); return () => window.clearTimeout(timer); }, [hydrated, products]);
   useEffect(() => { if (initialProducts.length && initialCategories.length && initialStores.length) return; const controller = new AbortController(); const fetchArray = async (url: string) => { const response = await resilientFetch(url, { signal: controller.signal, timeoutMs: 5000, retries: 1 }); if (!response.ok) throw new Error(`Catalog request failed (${response.status})`); const body: unknown = await response.json(); if (!Array.isArray(body)) throw new Error('Catalog response is invalid'); return body; }; Promise.all([fetchArray('/api/public/products?limit=2500'), fetchArray('/api/public/categories'), fetchArray('/api/public/stores'), fetchArray('/api/public/offers')]).then(([productRows, categoryRows, storeRows, offerRows]) => { const nextStores = storeRows as Store[]; const apiProducts = (productRows as Record<string, unknown>[]).map(mapProduct).filter((p) => p.price > 0); const apiCategories = (categoryRows as Record<string, unknown>[]).map(mapCategory); setProducts(apiProducts); setCategories(apiCategories); setStores(nextStores); setOffers(offerRows as Offer[]); void fetchArray('/api/public/campaigns?channel=WEB').then((campaignRows) => setCampaigns(campaignRows as Campaign[])).catch(() => setCampaigns([])); setCatalogAvailable(true); setSelectedStoreState((current) => current?.id && nextStores.find((s) => s.id === current.id && !s.is_temporarily_closed) || nextStores.find((s) => !s.is_temporarily_closed) || null); }).catch(() => { if (!controller.signal.aborted) { setProducts([]); setCategories([]); setStores([]); setOffers([]); setCampaigns([]); setCatalogAvailable(false); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [initialCategories.length, initialProducts.length, initialStores.length]);
   const selected = (store: Store) => { setSelectedStoreState(store); localStorage.setItem('pasalho-store', store.id); };
-  const add = (product: Product) => { if (browseOnly) return; setItems((current) => { const found = current.find((item) => item.product.id === product.id); return found ? current.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item) : [...current, { product, qty: 1 }]; }); setDrawer(true); };
+  const add = (product: Product) => { setItems((current) => { const found = current.find((item) => item.product.id === product.id); return found ? current.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item) : [...current, { product, qty: 1 }]; }); setDrawer(true); };
   const change = (id: string, delta: number) => setItems((current) => current.map((item) => item.product.id === id ? { ...item, qty: item.qty + delta } : item).filter((item) => item.qty > 0));
   const clear = () => { setItems([]); setPricingQuoteNeedsConfirmation(false); setDrawer(false); };
   const requirePricingQuoteConfirmation = () => setPricingQuoteNeedsConfirmation(true);
   const confirmPricingQuote = () => setPricingQuoteNeedsConfirmation(false);
-  return <Ctx.Provider value={{ browseOnly, items, products, categories, stores, offers, campaigns, selectedStore, setSelectedStore: selected, add, change, clear, drawer, setDrawer, loading, catalogAvailable, authenticated, membership, displayPrices, pricingQuote, pricingQuoteNeedsConfirmation, requirePricingQuoteConfirmation, confirmPricingQuote, pricingBusy, pricingError, refreshPricingQuote, reloadMemberPricing }}>{children}{!browseOnly && <CartDrawer />}</Ctx.Provider>;
+  return <Ctx.Provider value={{ browseOnly, items, products, categories, stores, offers, campaigns, selectedStore, setSelectedStore: selected, add, change, clear, drawer, setDrawer, loading, catalogAvailable, authenticated, membership, displayPrices, pricingQuote, pricingQuoteNeedsConfirmation, requirePricingQuoteConfirmation, confirmPricingQuote, pricingBusy, pricingError, refreshPricingQuote, reloadMemberPricing }}>{children}<CartDrawer /></Ctx.Provider>;
 }
 export const useShop = () => { const value = useContext(Ctx); if (!value) throw new Error('shop provider missing'); return value; };
 
@@ -200,14 +208,14 @@ export function ProductCard({ product, compact = false }: { product: Product; co
     <div className="product-copy"><span className="brand">{product.brand}</span><Link href={`/product/${product.slug}`}><h3>{product.name}</h3></Link>{!browseOnly && <div className="rating"><Star size={14} fill="currentColor" /> {product.rating || '—'} <span>({product.reviews})</span></div>}
       <div className="price-row"><div><strong>{eligible ? formatPrice(Number(price.appliedUnitPrice)) : formatPrice(product.price)}</strong>{eligible ? <><del>{formatPrice(Number(price.regularUnitPrice))}</del><small className="block text-emerald-800">{membership.tier_key === 'FOUNDING_1000' ? 'Founding 1,000 price' : 'Member price'} · Save {formatPrice(Number(price.savingPerUnit))}</small>{price.promotionSnapshot && <small className="block text-slate-500">{price.promotionSnapshot.name}</small>}</> : !browseOnly && product.originalPrice ? <del>{formatPrice(product.originalPrice)}</del> : null}</div></div>
       <p className="stock">{browseOnly ? 'Indicative price · Stock not yet confirmed' : `● ${product.availability}`}</p>
-      <button className="add-btn" onClick={() => add(product)} disabled={browseOnly || product.availability.toLowerCase().includes('out of')}>{browseOnly ? 'Ordering opens soon' : <><Plus size={18} /> Add to cart</>}</button>
+      <button className="add-btn" onClick={() => add(product)} disabled={!browseOnly && product.availability.toLowerCase().includes('out of')}>{browseOnly ? 'Add to WhatsApp request' : <><Plus size={18} /> Add to cart</>}</button>
     </div>
   </article>;
 }
 export function Quantity({ id, qty }: { id: string; qty: number }) { const { change } = useShop(); return <div className="quantity"><button onClick={() => change(id, -1)} aria-label="Decrease quantity"><Minus size={16} /></button><span>{qty}</span><button onClick={() => change(id, 1)} aria-label="Increase quantity"><Plus size={16} /></button></div>; }
-export function CartButton() { const { items, setDrawer, browseOnly } = useShop(); if (browseOnly) return null; const count = items.reduce((n, item) => n + item.qty, 0); return <button className="nav-action" onClick={() => setDrawer(true)} aria-label={`Cart with ${count} items`}><ShoppingCart /><span>Cart</span>{count ? <i>{count}</i> : null}</button>; }
+export function CartButton() { const { items, setDrawer } = useShop(); const count = items.reduce((n, item) => n + item.qty, 0); return <button className="nav-action" onClick={() => setDrawer(true)} aria-label={`Cart with ${count} items`}><ShoppingCart /><span>Cart</span>{count ? <i>{count}</i> : null}</button>; }
 function CartDrawer() {
-  const { items, drawer, setDrawer, authenticated, pricingQuote, pricingBusy, pricingError } = useShop();
+  const { items, drawer, setDrawer, authenticated, pricingQuote, pricingBusy, pricingError, browseOnly } = useShop();
   const subtotal = pricingQuote ? Number(pricingQuote.finalTotal) : authenticated === false ? items.reduce((n, item) => n + item.product.price * item.qty, 0) : 0;
   const quoteLines = new Map(pricingQuote?.items.map((line) => [line.sku, line]) || []);
   const dialogRef = useRef<HTMLElement>(null);
@@ -251,7 +259,7 @@ function CartDrawer() {
   }, [drawer, setDrawer]);
 
   if (!drawer) return null;
-  return <><button className="drawer-backdrop" onClick={() => setDrawer(false)} aria-label="Close cart" /><aside className="cart-drawer open" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title" ref={dialogRef}><header><div><p className="eyebrow">Your basket</p><h2 id="cart-drawer-title">Cart ({items.length})</h2></div><button onClick={() => setDrawer(false)} aria-label="Close" ref={closeRef}><X /></button></header>{items.length ? <><div className="drawer-items">{items.map((item) => { const line = item.product.sku ? quoteLines.get(item.product.sku) : undefined; return <div className="drawer-item" key={item.product.id}><Image src={item.product.image} width={80} height={80} alt="" /><div><b>{item.product.name}</b><strong>{line ? formatPrice(Number(line.lineTotal)) : authenticated === false ? formatPrice(item.product.price * item.qty) : pricingBusy ? 'Updating price…' : 'Price unavailable'}</strong>{line && <small className="block text-slate-500">Regular {formatPrice(Number(line.regularUnitPrice))} · Applied {formatPrice(Number(line.appliedUnitPrice))}</small>}<Quantity id={item.product.id} qty={item.qty} /></div></div>; })}</div><div className="drawer-summary"><p><span>Payable</span><strong>{pricingBusy ? 'Updating price…' : pricingQuote || authenticated === false ? formatPrice(subtotal) : 'Price unavailable'}</strong></p>{pricingQuote && <p className="text-sm text-emerald-800">Member savings {formatPrice(Number(pricingQuote.discountTotal))}</p>}{pricingError && <p role="alert" className="text-sm text-red-700">{pricingError}</p>}<Link href="/cart" onClick={() => setDrawer(false)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white"><ShoppingCart size={19} /> Review cart & checkout</Link><Link href="/whatsapp-order" onClick={() => setDrawer(false)} className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-bold text-emerald-800"><MessageCircle size={17} /> Order through WhatsApp</Link></div></> : <div className="empty-cart"><ShoppingCart size={48} /><h3>Your cart is ready for good things</h3><button className="primary-btn" onClick={() => setDrawer(false)}>Start shopping</button></div>}</aside></>;
+  return <><button className="drawer-backdrop" onClick={() => setDrawer(false)} aria-label="Close cart" /><aside className="cart-drawer open" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title" ref={dialogRef}><header><div><p className="eyebrow">Your basket</p><h2 id="cart-drawer-title">Cart ({items.length})</h2></div><button onClick={() => setDrawer(false)} aria-label="Close" ref={closeRef}><X /></button></header>{items.length ? <><div className="drawer-items">{items.map((item) => { const line = item.product.sku ? quoteLines.get(item.product.sku) : undefined; return <div className="drawer-item" key={item.product.id}><Image src={item.product.image} width={80} height={80} alt="" /><div><b>{item.product.name}</b><strong>{line ? formatPrice(Number(line.lineTotal)) : authenticated === false ? formatPrice(item.product.price * item.qty) : pricingBusy ? 'Updating price…' : 'Price unavailable'}</strong>{line && <small className="block text-slate-500">Regular {formatPrice(Number(line.regularUnitPrice))} · Applied {formatPrice(Number(line.appliedUnitPrice))}</small>}<Quantity id={item.product.id} qty={item.qty} /></div></div>; })}</div><div className="drawer-summary"><p><span>{browseOnly ? 'Estimated subtotal' : 'Payable'}</span><strong>{pricingBusy ? 'Updating price…' : pricingQuote || authenticated === false ? formatPrice(subtotal) : 'Price unavailable'}</strong></p>{pricingQuote && <p className="text-sm text-emerald-800">Member savings {formatPrice(Number(pricingQuote.discountTotal))}</p>}{pricingError && <p role="alert" className="text-sm text-red-700">{pricingError}</p>}<Link href="/cart" onClick={() => setDrawer(false)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#168b52] px-5 py-3 font-bold text-white"><ShoppingCart size={19} /> {browseOnly ? 'Review request' : 'Review cart & checkout'}</Link><Link href="/whatsapp-order" onClick={() => setDrawer(false)} className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-bold text-emerald-800"><MessageCircle size={17} /> {browseOnly ? 'Prepare WhatsApp request' : 'Order through WhatsApp'}</Link>{browseOnly && <small className="mt-2 block text-slate-600">The store confirms stock, price, and delivery before accepting.</small>}</div></> : <div className="empty-cart"><ShoppingCart size={48} /><h3>Your cart is ready for good things</h3><button className="primary-btn" onClick={() => setDrawer(false)}>Start shopping</button></div>}</aside></>;
 }
-export function MobileNav() { const { items, setDrawer, browseOnly } = useShop(); return <nav className="mobile-nav"><Link href="/">⌂<span>Home</span></Link><Link href="/shop"><Menu /><span>Categories</span></Link><button onClick={() => document.querySelector<HTMLInputElement>('.search-box input')?.focus()}><Search /><span>Search</span></button>{!browseOnly && <><Link href="/account"><Heart /><span>Wishlist</span></Link><button onClick={() => setDrawer(true)}><ShoppingCart /><span>Cart {items.length ? `(${items.length})` : ''}</span></button></>}</nav>; }
+export function MobileNav() { const { items, setDrawer, browseOnly } = useShop(); return <nav className="mobile-nav"><Link href="/">⌂<span>Home</span></Link><Link href="/shop"><Menu /><span>Categories</span></Link><button onClick={() => document.querySelector<HTMLInputElement>('.search-box input')?.focus()}><Search /><span>Search</span></button>{!browseOnly && <Link href="/account"><Heart /><span>Wishlist</span></Link>}<button onClick={() => setDrawer(true)}><ShoppingCart /><span>Cart {items.length ? `(${items.length})` : ''}</span></button></nav>; }
 export function LocationPicker() { const { stores, selectedStore, setSelectedStore } = useShop(); return <label className="location-picker"><MapPin /><span><small>Showing availability near</small><select value={selectedStore?.id || ''} onChange={(e) => { const store = stores.find((s) => s.id === e.target.value); if (store) setSelectedStore(store); }} aria-label="Choose store"><option value="">Select a store</option>{stores.map((store) => <option key={store.id} value={store.id} disabled={store.is_temporarily_closed}>{store.name}{store.is_temporarily_closed ? ' — temporarily closed' : ''}</option>)}</select></span><ChevronDown /></label>; }
