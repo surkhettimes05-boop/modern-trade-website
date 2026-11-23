@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getPool, query } from "../database/connection.js";
 import { validatePhone } from "../utils/phoneNormalization.js";
 import { creatorReferralLink } from "../utils/creatorReferralLink.js";
+import { creatorPayoutsEnabled } from "../config/releaseFeatures.js";
 
 const createSchema = z.object({
   display_name: z.string().trim().min(2).max(120),
@@ -326,10 +327,13 @@ export async function creatorManagementRoutes(fastify: FastifyInstance) {
          LIMIT 100
       `),
     ]);
-    return { eligible: balances.rows, settlements: payouts.rows };
+    return { eligible: balances.rows, settlements: payouts.rows, payoutsEnabled: creatorPayoutsEnabled() };
   });
 
   fastify.post("/creators/:id/payouts", async (request, reply) => {
+    if (!creatorPayoutsEnabled()) {
+      return reply.status(403).send({ error: "Creator payout recording requires a separately approved procedure", code: "CREATOR_PAYOUTS_DISABLED" });
+    }
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     const input = z.object({
       payment_method: z.enum(["BANK_TRANSFER", "CASH", "WALLET"]),

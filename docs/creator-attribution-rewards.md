@@ -41,6 +41,11 @@ Status: approved implementation contract. Initial reward rate: **1.00%**.
 - Admin: create/pause creator, copy referral URL, download QR, inspect scans, registered customers, first buyers, online/offline sales, net attributed spend, pending/available/paid rewards, refunds and audit trail.
 - Creator self-service portal is a later phase; V1 admin can export/share creator statements.
 - Creator sees aggregate metrics only, never customer phone numbers or personally identifiable purchase details.
+- Creator payout recording remains disabled in production until a separately
+  approved payment, dual-control, evidence, reconciliation and reversal
+  procedure is implemented and tested. The payout route returns
+  `CREATOR_PAYOUTS_DISABLED`; changing an environment flag alone cannot
+  activate it in production. This does not stop earning or liability reports.
 
 ## Acceptance gates
 1. Referral link and QR resolve to same creator and record visit.

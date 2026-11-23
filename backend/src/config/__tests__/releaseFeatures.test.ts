@@ -1,5 +1,6 @@
 import {
   PILOT_FEATURES,
+  creatorPayoutsEnabled,
   memberPricingEnabled,
   stagingCustomerOrdersBlocked,
   validatePilotFeatureEnvironment,
@@ -33,6 +34,12 @@ describe("pilot feature controls", () => {
     expect(memberPricingEnabled({})).toBe(false);
     expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "false" })).toBe(false);
     expect(memberPricingEnabled({ ENABLE_MEMBER_PRICING: "true" })).toBe(true);
+  });
+
+  it("never enables creator payout recording in production", () => {
+    expect(creatorPayoutsEnabled({ NODE_ENV: "production", ENABLE_CREATOR_PAYOUTS: "true" })).toBe(false);
+    expect(creatorPayoutsEnabled({ NODE_ENV: "test" })).toBe(false);
+    expect(creatorPayoutsEnabled({ NODE_ENV: "test", ENABLE_CREATOR_PAYOUTS: "true" })).toBe(true);
   });
 
   it("locks staging COD only on an explicit server-side setting", () => {
