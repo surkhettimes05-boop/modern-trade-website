@@ -4,6 +4,21 @@ import { query } from "../../database/connection.js";
 import { creatorManagementRoutes } from "../creatorManagement.js";
 
 describe("creator analytics reporting", () => {
+  it("denies payout recording before an approved procedure is installed", async () => {
+    const prior = process.env.ENABLE_CREATOR_PAYOUTS;
+    delete process.env.ENABLE_CREATOR_PAYOUTS;
+    const app = Fastify();
+    try {
+      await app.register(creatorManagementRoutes);
+      const response = await app.inject({ method: "POST", url: `/creators/${randomUUID()}/payouts`, payload: {} });
+      expect(response.statusCode).toBe(403);
+      expect(response.json().code).toBe("CREATOR_PAYOUTS_DISABLED");
+    } finally {
+      await app.close();
+      if (prior === undefined) delete process.env.ENABLE_CREATOR_PAYOUTS;
+      else process.env.ENABLE_CREATOR_PAYOUTS = prior;
+    }
+  });
   // Exercise the endpoint against the same PostgreSQL tables used by the service.
   it("reports attributed commerce and POS sales without counting reversed events", async () => {
     const creatorId = randomUUID();

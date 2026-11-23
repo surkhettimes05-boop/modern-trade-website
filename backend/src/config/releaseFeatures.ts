@@ -63,6 +63,14 @@ export function memberPricingEnabled(
   return env.ENABLE_MEMBER_PRICING === "true";
 }
 
+// Recording an external creator payment needs a separate approved procedure.
+// Until that procedure is shipped, production cannot turn this on by env alone.
+export function creatorPayoutsEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.NODE_ENV !== "production" && env.ENABLE_CREATOR_PAYOUTS === "true";
+}
+
 // A public preview must not create real COD orders. This is separate from
 // ENABLE_ELECTRONIC_PAYMENTS, which does not control cash orders.
 export function stagingCustomerOrdersBlocked(
