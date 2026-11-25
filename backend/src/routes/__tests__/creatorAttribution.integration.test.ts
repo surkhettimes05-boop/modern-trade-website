@@ -1,13 +1,28 @@
 import Fastify from "fastify";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { getDatabaseUrl } from "../../config/environment.js";
-import { query } from "../../database/connection.js";
+import pg from "pg";
+import { runMigrations } from "../../database/migrationRunner.js";
+import { closePool, query } from "../../database/connection.js";
 import { creatorAttributionRoutes } from "../creatorAttribution.js";
 
 describe("creator POS financial integration", () => {
   // Exercise the endpoint against the same PostgreSQL tables used by the service.
   it("retries early refunds and reverses inactive customer rewards exactly once", async () => {
     if (process.env.NODE_ENV !== "test" || !["localhost","127.0.0.1"].includes(new URL(getDatabaseUrl()).hostname)) throw new Error("Local test PostgreSQL required");
+    const originalUrl = process.env.TEST_DATABASE_URL!;
+    const isolated = new URL(getDatabaseUrl());
+    const dbName = "creator_test_" + randomBytes(12).toString("hex");
+    isolated.pathname = "/" + dbName;
+    const admin = new pg.Client({connectionString: originalUrl});
+    await closePool();
+    await admin.connect();
+    let created = false;
+    try {
+      await admin.query('CREATE DATABASE "' + dbName + '"');
+      created = true;
+      await runMigrations(isolated.toString());
+      process.env.TEST_DATABASE_URL = isolated.toString();
     const creatorId = randomUUID();
     const customerId = randomUUID();
     const visitId = randomUUID();
@@ -80,14 +95,15 @@ describe("creator POS financial integration", () => {
     } finally {
       if(previousSecret===undefined) delete process.env.CREATOR_ATTRIBUTION_HMAC_SECRET; else process.env.CREATOR_ATTRIBUTION_HMAC_SECRET=previousSecret;
       await app.close();
-      await query("DELETE FROM creator_reward_ledger WHERE creator_id=$1",[creatorId]);
-      await query("DELETE FROM creator_purchase_events WHERE creator_id=$1 AND reversal_of_event_id IS NOT NULL",[creatorId]);
-      await query("DELETE FROM creator_purchase_events WHERE creator_id=$1",[creatorId]);
-      await query("DELETE FROM creator_integration_events WHERE event_key=ANY($1::text[])",[[`pos-sale:${eventIds[0]}`,`pos-return:${eventIds[1]}`,`pos-return:${eventIds[2]}`,`pos-sale:${eventIds[3]}`]]);
-      await query("DELETE FROM creator_customer_attributions WHERE customer_id=$1",[customerId]);
-      await query("DELETE FROM creator_referral_visits WHERE id=$1",[visitId]);
-      await query("DELETE FROM customers WHERE id=$1",[customerId]);
-      await query("DELETE FROM creators WHERE id=$1",[creatorId]);
     }
-  });
+    } finally {
+      try {
+        await closePool();
+        process.env.TEST_DATABASE_URL = originalUrl;
+        if (created) await admin.query('DROP DATABASE "' + dbName + '"');
+      } finally {
+        await admin.end();
+      }
+    }
+  }, 120000);
 });
