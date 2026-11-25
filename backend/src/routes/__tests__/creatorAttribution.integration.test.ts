@@ -1,4 +1,8 @@
 import Fastify from "fastify";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { resolve } from "node:path";
+const execute = promisify(execFile);
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { getDatabaseUrl } from "../../config/environment.js";
 import pg from "pg";
@@ -60,6 +64,7 @@ describe("creator POS financial integration", () => {
       );
 
       await app.register(creatorAttributionRoutes);
+      const address = await app.listen({host:"127.0.0.1",port:0});
       const base = {schemaVersion:1,sourceSystem:"POS",customerPhoneHash:phoneHash,currency:"NPR",completedAt:new Date().toISOString()};
       const sale = {...base,eventType:"POS_SALE_COMPLETED",sourceTransactionId:eventIds[0],sourceTransactionNumber:"QA-sale",eligibleSpendNpr:"1000.00"};
       const refund = {...base,eventType:"POS_SALE_RETURNED",sourceTransactionId:eventIds[1],originalSourceTransactionId:eventIds[0],sourceTransactionNumber:"QA-refund",refundAmountNpr:"400.00"};
@@ -67,6 +72,10 @@ describe("creator POS financial integration", () => {
       async function send(payload: typeof sale | typeof refund) {
         const returning = payload.eventType === "POS_SALE_RETURNED";
         const timestamp = String(Math.floor(Date.now()/1000));
+        if (process.env.LITE_CREATOR_TEST_ROOT) {
+          const root = resolve(process.env.LITE_CREATOR_TEST_ROOT);
+          await execute(process.execPath, ["--conditions=react-server","--import","tsx","scripts/creator-worker-e2e.ts"], {cwd:root,timeout:30000,env:{...process.env,APP_ENV:"test",DATABASE_URL:process.env.LITE_CREATOR_TEST_DATABASE_URL,CREATOR_ATTRIBUTION_API_URL:address+"/creator-attribution/pos-sales",CREATOR_TEST_PAYLOAD:JSON.stringify(payload),CREATOR_TEST_EXPECT_HTTP:payload===refund && !(await query("SELECT 1 FROM creator_purchase_events WHERE source_transaction_id=$1",[eventIds[0]])).rowCount?"503":"200"}});
+        }
         return app.inject({method:"POST",url: "/creator-attribution/"+(returning?"pos-returns":"pos-sales"),payload,headers:{"x-pasalho-timestamp":timestamp,"x-pasalho-signature":createHmac("sha256",secret).update(timestamp+"."+JSON.stringify(payload)).digest("hex"),"x-pasalho-event-key":(returning?"pos-return:":"pos-sale:")+payload.sourceTransactionId}});
       }
       async function reward() {
