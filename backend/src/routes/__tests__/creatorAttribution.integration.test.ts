@@ -1,12 +1,13 @@
 import Fastify from "fastify";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { getDatabaseUrl } from "../../config/environment.js";
 import { query } from "../../database/connection.js";
 import { creatorAttributionRoutes } from "../creatorAttribution.js";
 
 describe("creator POS financial integration", () => {
   // Exercise the endpoint against the same PostgreSQL tables used by the service.
   it("retries early refunds and reverses inactive customer rewards exactly once", async () => {
-    if (process.env.NODE_ENV !== "test" || !["localhost","127.0.0.1"].includes(new URL(process.env.DATABASE_URL ?? "postgres://invalid").hostname)) throw new Error("Local test PostgreSQL required");
+    if (process.env.NODE_ENV !== "test" || !["localhost","127.0.0.1"].includes(new URL(getDatabaseUrl()).hostname)) throw new Error("Local test PostgreSQL required");
     const creatorId = randomUUID();
     const customerId = randomUUID();
     const visitId = randomUUID();
