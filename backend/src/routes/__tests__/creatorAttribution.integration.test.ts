@@ -14,7 +14,7 @@ describe("creator POS financial integration", () => {
     const phoneHash = createHash("sha256").update(randomBytes(32)).digest("hex");
     const slug = `qa-${randomBytes(8).toString("hex")}`;
     const code = `QA-${randomBytes(6).toString("hex").toUpperCase()}`;
-    const eventIds = [randomUUID(), randomUUID(), randomUUID()];
+    const eventIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
     const secret = randomBytes(32).toString('hex');
     const previousSecret = process.env.CREATOR_ATTRIBUTION_HMAC_SECRET;
     process.env.CREATOR_ATTRIBUTION_HMAC_SECRET = secret;
@@ -69,13 +69,20 @@ describe("creator POS financial integration", () => {
       expect(await reward()).toBe(6);
       expect((await send(full)).statusCode).toBe(200);
       expect(await reward()).toBe(0);
+      const denied = await send({...sale,sourceTransactionId:eventIds[3]});
+      expect(denied.statusCode).toBe(200);
+      expect(denied.json()).toMatchObject({attributed:false,reason:"CUSTOMER_UNVERIFIED"});
+      const count = await query("SELECT count(*)::int AS n FROM creator_purchase_events WHERE source_transaction_id=$1",[eventIds[3]]);
+      expect(count.rows[0].n).toBe(0);
+      const balance = await query("SELECT sum(amount_npr) AS total FROM creator_reward_ledger WHERE creator_id=$1",[creatorId]);
+      expect(Number(balance.rows[0].total)).toBe(0);
     } finally {
       if(previousSecret===undefined) delete process.env.CREATOR_ATTRIBUTION_HMAC_SECRET; else process.env.CREATOR_ATTRIBUTION_HMAC_SECRET=previousSecret;
       await app.close();
       await query("DELETE FROM creator_reward_ledger WHERE creator_id=$1",[creatorId]);
       await query("DELETE FROM creator_purchase_events WHERE creator_id=$1 AND reversal_of_event_id IS NOT NULL",[creatorId]);
       await query("DELETE FROM creator_purchase_events WHERE creator_id=$1",[creatorId]);
-      await query("DELETE FROM creator_integration_events WHERE event_key=ANY($1::text[])",[[`pos-sale:${eventIds[0]}`,`pos-return:${eventIds[1]}`,`pos-return:${eventIds[2]}`]]);
+      await query("DELETE FROM creator_integration_events WHERE event_key=ANY($1::text[])",[[`pos-sale:${eventIds[0]}`,`pos-return:${eventIds[1]}`,`pos-return:${eventIds[2]}`,`pos-sale:${eventIds[3]}`]]);
       await query("DELETE FROM creator_customer_attributions WHERE customer_id=$1",[customerId]);
       await query("DELETE FROM creator_referral_visits WHERE id=$1",[visitId]);
       await query("DELETE FROM customers WHERE id=$1",[customerId]);
