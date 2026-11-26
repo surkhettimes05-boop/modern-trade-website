@@ -316,8 +316,7 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
       }
 
       const customer = await client.query(
-        `SELECT id FROM customers WHERE phone_hash = $1 AND status = 'ACTIVE'
-          AND verification_status = 'VERIFIED' AND deleted_at IS NULL LIMIT 1`,
+        `SELECT id FROM customers WHERE phone_hash = $1 LIMIT 1`,
         [event.customerPhoneHash],
       );
       if (!customer.rowCount) {
@@ -340,6 +339,14 @@ export async function creatorAttributionRoutes(fastify: FastifyInstance) {
         [event.originalSourceTransactionId, customer.rows[0].id],
       );
       if (!original.rowCount) {
+        const sale = await client.query(
+          "SELECT processing_status FROM creator_integration_events WHERE event_key = $1",
+          [`pos-sale:${event.originalSourceTransactionId}`],
+        );
+        if (!sale.rowCount) {
+          await client.query("ROLLBACK");
+          return reply.status(503).send({ error: "Original sale not received; retry refund" });
+        }
         await client.query(
           `UPDATE creator_integration_events SET processing_status = 'PROCESSED',
             processed_at = NOW() WHERE event_key = $1`,

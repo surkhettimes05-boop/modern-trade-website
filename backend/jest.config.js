@@ -9,6 +9,8 @@ export default {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transform: {
+    // Keep runtime entry points in coverage without compiling ESM as CommonJS.
+    '^.+/src/(index|start|worker|database/(bootstrapAdmin|deployMigrate|migrate|seed|verifyDatabaseRole))\\.ts$': '<rootDir>/test/entrypoint-transform.cjs',
     '^.+\\.tsx?$': [
       'ts-jest',
       {
