@@ -11,6 +11,8 @@ import { closePool, query } from "../../database/connection.js";
 import { memberPricingServiceRoutes } from "../memberPricingService.js";
 import { MembershipService } from "../../services/membershipService.js";
 import { MemberPricingService } from "../../services/memberPricingService.js";
+import { customerMemberPricingRoutes } from "../customerMemberPricing.js";
+import { SessionService } from "../../services/sessionService.js";
 import { creatorAttributionRoutes } from "../creatorAttribution.js";
 
 describe("creator POS financial integration", () => {
@@ -85,6 +87,7 @@ describe("creator POS financial integration", () => {
       const promotion = await pricing.createPromotion({organization_id:org,name:"CI member discount",starts_at:new Date(Date.now()-60000),ends_at:new Date(Date.now()+3600000),reason:"Isolated financial test",products:[{sku,member_price:"500.00"}],category_ids:[category],tiers:[member.tier_key],channels:["POS"]},actor);
       await pricing.transitionPromotion(promotion.id,"ACTIVATED","CI test",actor,[org]);
       await app.register(memberPricingServiceRoutes,{prefix:"/api/internal/member-pricing"});
+      await app.register(customerMemberPricingRoutes);
       await app.register(creatorAttributionRoutes);
       const address = await app.listen({host:"127.0.0.1",port:0});
       const quote = async (customerReference: string, customerPhoneReference: string) => app.inject({
@@ -97,6 +100,28 @@ describe("creator POS financial integration", () => {
       const registered = await quote(registeredId,registeredPhone);
       expect(registered.statusCode).toBe(201);
       expect(registered.json().quote).toMatchObject({membershipStatus:"NOT_MEMBER",subtotal:"1010.00",discountTotal:"0.00",finalTotal:"1010.00"});
+      const sessions = new SessionService();
+      const session = await sessions.createSession({customer_id:registeredId});
+      const webPayload = {store_id:store,items:[{sku,quantity:2}]};
+      const webUrl = "/customer-pricing/web/quotes";
+      const anonymous = await app.inject({method:"POST",url:webUrl,payload:webPayload});
+      expect(anonymous.statusCode).toBe(401);
+      const headers = {authorization:"Bearer "+session.session_token};
+      const own = await app.inject({method:"POST",url:webUrl,headers,payload:webPayload});
+      expect(own.statusCode).toBe(201);
+      expect(own.headers["cache-control"]).toBe("private, no-store");
+      expect(own.json().quote.membershipStatus).toBe("NOT_MEMBER");
+      const spoof = await app.inject({method:"POST",url:webUrl,headers,payload:{...webPayload,customerReference:customerId}});
+      expect(spoof.statusCode).toBe(400);
+      expect(spoof.body).not.toContain(phone);
+      const mismatch = await quote(customerId,registeredPhone);
+      expect(mismatch.statusCode).toBe(409);
+      expect(mismatch.json().code).toBe("CUSTOMER_MISMATCH");
+      const denied = await app.inject({method:"POST",url:"/api/internal/member-pricing/quotes",headers,payload:{channel:"POS",storeReference:store,customerReference:customerId,customerPhoneReference:phone,items:[{sku,quantity:"2"}]}});
+      expect(denied.statusCode).toBe(401);
+      await sessions.revokeSession(session.session_token);
+      expect((await app.inject({method:"POST",url:webUrl,headers,payload:webPayload})).statusCode).toBe(401);
+      console.log("PRIVACY_GATE: anonymous, spoofed identity, mismatched phone, customer-to-service access and revoked session denied");
       const active = await quote(customerId,phone);
       expect(active.statusCode).toBe(201);
       expect(active.json().quote).toMatchObject({membershipStatus:"ACTIVE",subtotal:"1010.00",discountTotal:"10.00",finalTotal:"1000.00"});
