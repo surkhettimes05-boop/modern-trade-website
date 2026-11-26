@@ -66,7 +66,7 @@ describe("creator POS financial integration", () => {
         [customerId, creatorId, visitId],
       );
 
-      const store = randomUUID(), org = randomUUID(), category = randomUUID(), product = randomUUID(), staff = randomUUID(), sku = "CASHIER-"+randomUUID();
+      const store = randomUUID(), org = randomUUID(), category = randomUUID(), product = randomUUID(), staff = randomUUID(), sku = ("CASHIER-"+randomUUID()).toUpperCase();
       const pricingToken = randomBytes(32).toString("hex");
       process.env.MEMBER_PRICING_SERVICE_TOKEN = pricingToken;
       process.env.MEMBER_PRICING_QUOTE_SECRET = randomBytes(32).toString("hex");
@@ -87,6 +87,35 @@ describe("creator POS financial integration", () => {
       await app.register(memberPricingServiceRoutes,{prefix:"/api/internal/member-pricing"});
       await app.register(creatorAttributionRoutes);
       const address = await app.listen({host:"127.0.0.1",port:0});
+      const quote = async (customerReference: string, customerPhoneReference: string) => app.inject({
+        method:"POST",url:"/api/internal/member-pricing/quotes",
+        headers:{authorization:"Bearer "+pricingToken},
+        payload:{channel:"POS",storeReference:store,customerReference,customerPhoneReference,items:[{sku,quantity:"2"}]}
+      });
+      const registeredId = randomUUID(), registeredPhone = "97"+phone.slice(2);
+      await query("INSERT INTO customers (id,phone_normalized,phone_hash,status,verification_status,home_store_id) VALUES ($1,$2,$3,'ACTIVE','VERIFIED',$4)",[registeredId,registeredPhone,createHash("sha256").update(registeredPhone).digest("hex"),store]);
+      const registered = await quote(registeredId,registeredPhone);
+      expect(registered.statusCode).toBe(201);
+      expect(registered.json().quote).toMatchObject({membershipStatus:"NOT_MEMBER",subtotal:"1010.00",discountTotal:"0.00",finalTotal:"1010.00"});
+      const active = await quote(customerId,phone);
+      expect(active.statusCode).toBe(201);
+      expect(active.json().quote).toMatchObject({membershipStatus:"ACTIVE",subtotal:"1010.00",discountTotal:"10.00",finalTotal:"1000.00"});
+      await query("UPDATE customer_memberships SET status='SUSPENDED' WHERE customer_id=$1",[customerId]);
+      const suspended = await quote(customerId,phone);
+      expect(suspended.statusCode).toBe(201);
+      expect(suspended.json().quote).toMatchObject({membershipStatus:"SUSPENDED",discountTotal:"0.00",finalTotal:"1010.00"});
+      await query("UPDATE customer_memberships SET status='ACTIVE' WHERE customer_id=$1",[customerId]);
+      await query("UPDATE customers SET status='INACTIVE' WHERE id=$1",[customerId]);
+      const inactive = await quote(customerId,phone);
+      expect(inactive.statusCode).toBe(409);
+      expect(inactive.json().code).toBe("CUSTOMER_NOT_AVAILABLE");
+      await query("UPDATE customers SET status='ACTIVE' WHERE id=$1",[customerId]);
+      await query("UPDATE customers SET verification_status='UNVERIFIED' WHERE id=$1",[customerId]);
+      const unverified = await quote(customerId,phone);
+      expect(unverified.statusCode).toBe(409);
+      expect(unverified.json().code).toBe("CUSTOMER_NOT_AVAILABLE");
+      await query("UPDATE customers SET verification_status='VERIFIED' WHERE id=$1",[customerId]);
+      console.log("MEMBERSHIP_GATE: registered nonmember, active, suspended, inactive and unverified eligibility verified");
       const base = {schemaVersion:1,sourceSystem:"POS",customerPhoneHash:phoneHash,currency:"NPR",completedAt:new Date().toISOString()};
       const sale = {...base,eventType:"POS_SALE_COMPLETED",sourceTransactionId:eventIds[0],sourceTransactionNumber:"QA-sale",eligibleSpendNpr:"1000.00"};
       const refund = {...base,eventType:"POS_SALE_RETURNED",sourceTransactionId:eventIds[1],originalSourceTransactionId:eventIds[0],sourceTransactionNumber:"QA-refund",refundAmountNpr:"400.00"};
