@@ -9,6 +9,33 @@ export default {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transform: {
+    // These runtime entry points use ESM/top-level await. Keep them in coverage.
+    '^.+/src/(index|start|worker|database/(bootstrapAdmin|deployMigrate|migrate|seed|verifyDatabaseRole))\\\\.ts
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        useESM: false,
+        tsconfig: { module: "CommonJS", moduleResolution: "node" },
+      },
+    ],
+  },
+  testMatch: ['**/__tests__/**/*.test.ts'],
+  maxWorkers: 1,
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.test.ts',
+    '!src/**/__tests__/**',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70,
+    },
+  },
+};
+: '<rootDir>/test/entrypoint-transform.cjs',
     '^.+\\.tsx?$': [
       'ts-jest',
       {
