@@ -84,8 +84,31 @@ describe("creator POS financial integration", () => {
         const result = await query("SELECT reward_amount_npr FROM creator_purchase_events WHERE source_system='POS' AND source_transaction_id=$1",[eventIds[0]]);
         return Number(result.rows[0]?.reward_amount_npr);
       }
+      // Security regression: rejected requests must not mutate financial state.
+      const signed = (payload: typeof sale, timestamp: string) => createHmac("sha256",secret).update(timestamp+"."+JSON.stringify(payload)).digest("hex");
+      const now = String(Math.floor(Date.now()/1000));
+      const stale = String(Number(now)-600);
+      const url = "/creator-attribution/pos-sales";
+      const key = "pos-sale:"+sale.sourceTransactionId;
+      for (const [timestamp, signature, payload, eventKey, status] of [
+        [now, "0".repeat(64), sale, key, 401],
+        [stale, signed(sale,stale), sale, key, 401],
+        [now, signed(sale,now), {...sale,eligibleSpendNpr:"9999.00"}, key, 401],
+        [now, signed(sale,now), sale, "pos-sale:"+randomUUID(), 409],
+      ] as const) {
+        const response = await app.inject({method:"POST",url,payload,headers:{"x-pasalho-timestamp":timestamp,"x-pasalho-signature":signature,"x-pasalho-event-key":eventKey}});
+        expect(response.statusCode).toBe(status);
+      }
+      expect(Number((await query("SELECT count(*) AS n FROM creator_integration_events")).rows[0].n)).toBe(0);
+      expect(Number((await query("SELECT count(*) AS n FROM creator_reward_ledger")).rows[0].n)).toBe(0);
+      console.log("SECURITY_GATE: invalid signature, stale timestamp, tampered payload and mismatched event key rejected without financial mutation");
       expect((await send(refund)).statusCode).toBe(503);
       expect((await send(sale)).statusCode).toBe(200);
+      expect(await reward()).toBe(10);
+      const changed = {...sale,eligibleSpendNpr:"2000.00"};
+      const conflictTime = String(Math.floor(Date.now()/1000));
+      const conflict = await app.inject({method:"POST",url,payload:changed,headers:{"x-pasalho-timestamp":conflictTime,"x-pasalho-signature":signed(changed,conflictTime),"x-pasalho-event-key":key}});
+      expect(conflict.statusCode).toBe(409);
       expect(await reward()).toBe(10);
       const saleReplay = await send(sale);
       if (!process.env.LITE_CREATOR_TEST_ROOT) expect(saleReplay.json().replay).toBe(true);
@@ -118,6 +141,7 @@ describe("creator POS financial integration", () => {
           expect(Number(purchase.rows[0]?.reward_amount_npr)).toBe(expected);
           const ledger = await query("SELECT sum(amount_npr) AS total FROM creator_reward_ledger WHERE creator_id=$1",[creatorId]);
           expect(Number(ledger.rows[0].total)).toBe(expected);
+          console.log("CASHIER_LEDGER_GATE: "+phase+" verified NPR "+expected);
         }
       }
       const balance = await query("SELECT sum(amount_npr) AS total FROM creator_reward_ledger WHERE creator_id=$1",[creatorId]);
