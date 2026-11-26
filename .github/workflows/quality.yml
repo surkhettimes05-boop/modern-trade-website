@@ -68,8 +68,10 @@ jobs:
         run: npm ci --prefix frontend
       - name: Backend type-check
         run: npm run type-check --prefix backend
-      - name: Backend tests
-        run: npm run test:ci --prefix backend
+      - name: Backend worker type-check
+        run: npm run worker:type-check --prefix backend
+      - name: Backend tests and coverage
+        run: npm run test:coverage --prefix backend -- --coverageReporters=text-summary --coverageReporters=json-summary
       - name: Backend lint baseline
         run: npm run lint:ci --prefix backend
       - name: Frontend type-check
