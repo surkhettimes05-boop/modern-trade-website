@@ -103,6 +103,23 @@ describe("creator POS financial integration", () => {
       if (!process.env.LITE_CREATOR_TEST_ROOT) expect(denied.json()).toMatchObject({attributed:false,reason:"CUSTOMER_UNVERIFIED"});
       const count = await query("SELECT count(*)::int AS n FROM creator_purchase_events WHERE source_transaction_id=$1",[eventIds[3]]);
       expect(count.rows[0].n).toBe(0);
+      if (process.env.LITE_CREATOR_TEST_ROOT) {
+        await query("UPDATE customers SET status='ACTIVE' WHERE id=$1",[customerId]);
+        let cashierSaleId = "";
+        for (const [phase, expected] of [["sale",10],["partial",5],["full",0]] as const) {
+          const result = await execute(process.execPath, ["--conditions=react-server","--import","tsx","scripts/cashier-creator-e2e.ts"], {
+            cwd:resolve(process.env.LITE_CREATOR_TEST_ROOT),timeout:30000,
+            env:{...process.env,APP_ENV:"test",DATABASE_URL:process.env.LITE_CREATOR_TEST_DATABASE_URL,CREATOR_ATTRIBUTION_API_URL:address+"/creator-attribution/pos-sales",CASHIER_TEST_PHASE:phase,CASHIER_TEST_PHONE:phone,CASHIER_TEST_IDENTITY:customerId,CASHIER_TEST_SALE_ID:cashierSaleId}
+          });
+          const id = result.stdout.match(/CASHIER_EVENT_ID=([a-f0-9-]+)/)?.[1];
+          expect(id).toBeDefined();
+          if (phase === "sale") cashierSaleId = id!;
+          const purchase = await query("SELECT reward_amount_npr FROM creator_purchase_events WHERE source_system='POS' AND source_transaction_id=$1",[cashierSaleId]);
+          expect(Number(purchase.rows[0]?.reward_amount_npr)).toBe(expected);
+          const ledger = await query("SELECT sum(amount_npr) AS total FROM creator_reward_ledger WHERE creator_id=$1",[creatorId]);
+          expect(Number(ledger.rows[0].total)).toBe(expected);
+        }
+      }
       const balance = await query("SELECT sum(amount_npr) AS total FROM creator_reward_ledger WHERE creator_id=$1",[creatorId]);
       expect(Number(balance.rows[0].total)).toBe(0);
     } finally {
