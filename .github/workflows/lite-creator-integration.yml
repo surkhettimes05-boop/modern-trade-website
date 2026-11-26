@@ -51,5 +51,8 @@ jobs:
       - name: Run actual cross-repository financial worker
         working-directory: backend
         run: |
+          AUTH_SECRET="$(openssl rand -hex 32)"
+          echo "::add-mask::$AUTH_SECRET"
+          export AUTH_SECRET
           export LITE_CREATOR_TEST_ROOT="$GITHUB_WORKSPACE/lite"
           npm run test:ci -- --runTestsByPath src/routes/__tests__/creatorAttribution.integration.test.ts
