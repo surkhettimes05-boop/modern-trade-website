@@ -61,5 +61,19 @@ describe("pilot feature controls", () => {
       }),
     ).toBe(true);
     expect(realCustomerOrdersEnabled({ NODE_ENV: "test" })).toBe(true);
+    expect(realCustomerOrdersEnabled({ NODE_ENV: "development" })).toBe(false);
+    expect(realCustomerOrdersEnabled({ NODE_ENV: "preview" })).toBe(false);
+    expect(
+      realCustomerOrdersEnabled({
+        NODE_ENV: "development",
+        ENABLE_REAL_CUSTOMER_ORDERS: "false",
+      }),
+    ).toBe(false);
+    expect(
+      realCustomerOrdersEnabled({
+        NODE_ENV: "development",
+        ENABLE_REAL_CUSTOMER_ORDERS: "true",
+      }),
+    ).toBe(true);
   });
 });
