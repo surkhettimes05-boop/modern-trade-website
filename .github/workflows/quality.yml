@@ -71,7 +71,20 @@ jobs:
       - name: Backend worker type-check
         run: npm run worker:type-check --prefix backend
       - name: Backend tests and coverage
-        run: npm run test:coverage --prefix backend -- --coverageReporters=text-summary --coverageReporters=json-summary
+        run: npm run test:coverage --prefix backend -- --coverageReporters=text-summary --coverageReporters=text --coverageReporters=json-summary --coverageReporters=lcov
+      - name: Publish file-level coverage to job summary
+        if: always()
+        run: |
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          const path = 'backend/coverage/coverage-summary.json';
+          if (!fs.existsSync(path)) { console.log('Coverage report unavailable'); process.exit(0); }
+          const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const rows = Object.entries(data).filter(([name]) => name !== 'total').sort((a,b) => b[1].statements.total-b[1].statements.covered-(a[1].statements.total-a[1].statements.covered));
+          const lines = ['## File-level backend coverage', '| File | Statements | Branches | Functions | Lines | Uncovered statements |', '|---|---:|---:|---:|---:|---:|'];
+          for (const [name, m] of rows) lines.push('| '+name.replace(/^.*\/backend\//,'')+' | '+m.statements.pct+'% | '+m.branches.pct+'% | '+m.functions.pct+'% | '+m.lines.pct+'% | '+(m.statements.total-m.statements.covered)+' |');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n')+'\n');
+          NODE
       - name: Backend lint baseline
         run: npm run lint:ci --prefix backend
       - name: Frontend type-check
