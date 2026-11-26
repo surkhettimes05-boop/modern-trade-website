@@ -117,8 +117,8 @@ describe("creator POS financial integration", () => {
       const mismatch = await quote(customerId,registeredPhone);
       expect(mismatch.statusCode).toBe(409);
       expect(mismatch.json().code).toBe("CUSTOMER_MISMATCH");
-      const denied = await app.inject({method:"POST",url:"/api/internal/member-pricing/quotes",headers,payload:{channel:"POS",storeReference:store,customerReference:customerId,customerPhoneReference:phone,items:[{sku,quantity:"2"}]}});
-      expect(denied.statusCode).toBe(401);
+      const serviceAccessDenied = await app.inject({method:"POST",url:"/api/internal/member-pricing/quotes",headers,payload:{channel:"POS",storeReference:store,customerReference:customerId,customerPhoneReference:phone,items:[{sku,quantity:"2"}]}});
+      expect(serviceAccessDenied.statusCode).toBe(401);
       await sessions.revokeSession(session.session_token);
       expect((await app.inject({method:"POST",url:webUrl,headers,payload:webPayload})).statusCode).toBe(401);
       console.log("PRIVACY_GATE: anonymous, spoofed identity, mismatched phone, customer-to-service access and revoked session denied");
