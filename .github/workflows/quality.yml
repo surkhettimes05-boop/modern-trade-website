@@ -62,53 +62,12 @@ jobs:
             frontend/package-lock.json
       - name: Security static checks
         run: npm run security:static
-      - name: Baseline coverage comparison
-        working-directory: backend
-        continue-on-error: true
-        run: |
-          npm ci
-          npm run test:coverage -- --coverageReporters=text-summary
-        env:
-          NODE_ENV: test
-      - name: Recreate disposable PostgreSQL database
-        run: |
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE storesync_jest_test WITH (FORCE)'
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE storesync_jest_test'
-      - name: Validate candidate patched development lock
-        working-directory: backend
-        run: |
-          npm pkg set 'overrides.@jest/reporters.glob=14.0.3' 'overrides.jest-config.glob=14.0.3' 'overrides.jest-runtime.glob=14.0.3' 'overrides.test-exclude.glob=14.0.3' 'overrides.test-exclude.minimatch=11.0.9'
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          npm ci --ignore-scripts
-          npm ls glob minimatch
-          npm audit --audit-level=moderate
-          echo 'PATCHED_LOCK_BEGIN'
-          gzip -c package-lock.json | base64 -w0
-          echo
-          echo 'PATCHED_LOCK_END'
-          npm run test:ci
-        env:
-          NODE_ENV: test
-      - name: Recreate disposable PostgreSQL database
-        run: |
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE storesync_jest_test WITH (FORCE)'
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE storesync_jest_test'
-      - name: Patched coverage comparison
-        working-directory: backend
-        continue-on-error: true
-        run: npm run test:coverage -- --coverageReporters=text-summary
-        env:
-          NODE_ENV: test
       - name: Install backend
         run: npm ci --prefix backend
       - name: Install frontend
         run: npm ci --prefix frontend
       - name: Backend type-check
         run: npm run type-check --prefix backend
-      - name: Recreate disposable PostgreSQL database
-        run: |
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE storesync_jest_test WITH (FORCE)'
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE storesync_jest_test'
       - name: Backend tests
         run: npm run test:ci --prefix backend
       - name: Backend lint baseline
@@ -123,8 +82,8 @@ jobs:
         run: |
           npm audit --prefix backend --audit-level=high --omit=dev
           npm audit --prefix frontend --audit-level=high --omit=dev
-      - name: Development dependency advisory report
+      - name: Backend development dependency security gate
+        run: npm audit --prefix backend --audit-level=moderate
+      - name: Frontend development dependency advisory report
         continue-on-error: true
-        run: |
-          npm audit --prefix backend --audit-level=high
-          npm audit --prefix frontend --audit-level=high
+        run: npm audit --prefix frontend --audit-level=high
