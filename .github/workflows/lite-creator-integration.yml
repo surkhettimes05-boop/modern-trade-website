@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: surkhettimes05-boop/Pasalho-lite
-          ref: afeaa18b9701a2d911fe601f9a022fee981dbfce
+          ref: a681021721e87a2083626b990b661912fe4e17ff
           path: lite
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
