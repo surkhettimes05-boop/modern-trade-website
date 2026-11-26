@@ -70,6 +70,10 @@ jobs:
           npm run test:coverage -- --coverageReporters=text-summary
         env:
           NODE_ENV: test
+      - name: Recreate disposable PostgreSQL database
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE storesync_jest_test WITH (FORCE)'
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE storesync_jest_test'
       - name: Validate candidate patched development lock
         working-directory: backend
         run: |
@@ -78,13 +82,17 @@ jobs:
           npm ci --ignore-scripts
           npm ls glob minimatch
           npm audit --audit-level=moderate
-          npm run test:ci
           echo 'PATCHED_LOCK_BEGIN'
           gzip -c package-lock.json | base64 -w0
           echo
           echo 'PATCHED_LOCK_END'
+          npm run test:ci
         env:
           NODE_ENV: test
+      - name: Recreate disposable PostgreSQL database
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE storesync_jest_test WITH (FORCE)'
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE storesync_jest_test'
       - name: Patched coverage comparison
         working-directory: backend
         continue-on-error: true
@@ -97,6 +105,10 @@ jobs:
         run: npm ci --prefix frontend
       - name: Backend type-check
         run: npm run type-check --prefix backend
+      - name: Recreate disposable PostgreSQL database
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE storesync_jest_test WITH (FORCE)'
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE storesync_jest_test'
       - name: Backend tests
         run: npm run test:ci --prefix backend
       - name: Backend lint baseline
