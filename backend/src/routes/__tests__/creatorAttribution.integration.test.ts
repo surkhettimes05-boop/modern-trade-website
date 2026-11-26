@@ -8,6 +8,9 @@ import { getDatabaseUrl } from "../../config/environment.js";
 import pg from "pg";
 import { runMigrations } from "../../database/migrationRunner.js";
 import { closePool, query } from "../../database/connection.js";
+import { memberPricingServiceRoutes } from "../memberPricingService.js";
+import { MembershipService } from "../../services/membershipService.js";
+import { MemberPricingService } from "../../services/memberPricingService.js";
 import { creatorAttributionRoutes } from "../creatorAttribution.js";
 
 describe("creator POS financial integration", () => {
@@ -63,6 +66,25 @@ describe("creator POS financial integration", () => {
         [customerId, creatorId, visitId],
       );
 
+      const store = randomUUID(), org = randomUUID(), category = randomUUID(), product = randomUUID(), staff = randomUUID(), sku = "CASHIER-"+randomUUID();
+      const pricingToken = randomBytes(32).toString("hex");
+      process.env.MEMBER_PRICING_SERVICE_TOKEN = pricingToken;
+      process.env.MEMBER_PRICING_QUOTE_SECRET = randomBytes(32).toString("hex");
+      await query("INSERT INTO organizations (id,organization_name,country_code,default_currency_code,default_locale,default_timezone,tax_regime,status) VALUES ($1,'CI pricing','NP','NPR','en-NP','Asia/Kathmandu','IRD','ACTIVE')",[org]);
+      await query("INSERT INTO stores (id,name_en,address_en,phone,status,organization_id,country_code,currency_code,locale,timezone) VALUES ($1,'CI store','Surkhet',$2,'PUBLISHED',$3,'NP','NPR','en-NP','Asia/Kathmandu')",[store,phone,org]);
+      await query("INSERT INTO categories (id,name_en,slug,status,published_at) VALUES ($1,'CI category',$2,'PUBLISHED',NOW())",[category,sku]);
+      await query("INSERT INTO products (id,sku,name_en,category_id,status,published_at) VALUES ($1,$2,'CI product',$3,'PUBLISHED',NOW())",[product,sku,category]);
+      await query("INSERT INTO product_prices (product_id,store_id,price,currency_code,active,valid_from) VALUES ($1,$2,505,'NPR',TRUE,NOW()-INTERVAL '1 day')",[product,store]);
+      await query("INSERT INTO batch_inventory (store_id,product_id,batch_id,expiry_date,quantity,unit_cost,total_cost,received_date) VALUES ($1,$2,$3,CURRENT_DATE+180,10,300,3000,CURRENT_DATE)",[store,product,sku]);
+      await query("UPDATE customers SET home_store_id=$1 WHERE id=$2",[store,customerId]);
+      const member = await new MembershipService().enrollCustomer(customerId);
+      const role = await query("SELECT id::text FROM roles WHERE role_key='head_office_admin'");
+      await query(`INSERT INTO staff (id,staff_number,first_name,last_name,role,username,status,role_id,capabilities,scope_type,scope_store_ids,scope_organization_id) VALUES ($1,$2,'CI','Admin','ADMIN',$2,'ACTIVE',$3,'["pricing.read","pricing.write","pricing.approve"]','ORGANIZATION','{}',$4)`,[staff,sku,role.rows[0].id,org]);
+      const actor = {id:staff,roleKey:"head_office_admin",capabilities:["pricing.read","pricing.write","pricing.approve"],scopeType:"ORGANIZATION" as const,scopeStoreIds:[]};
+      const pricing = new MemberPricingService();
+      const promotion = await pricing.createPromotion({organization_id:org,name:"CI member discount",starts_at:new Date(Date.now()-60000),ends_at:new Date(Date.now()+3600000),reason:"Isolated financial test",products:[{sku,member_price:"500.00"}],category_ids:[category],tiers:[member.tier_key],channels:["POS"]},actor);
+      await pricing.transitionPromotion(promotion.id,"ACTIVATED","CI test",actor,[org]);
+      await app.register(memberPricingServiceRoutes,{prefix:"/api/internal/member-pricing"});
       await app.register(creatorAttributionRoutes);
       const address = await app.listen({host:"127.0.0.1",port:0});
       const base = {schemaVersion:1,sourceSystem:"POS",customerPhoneHash:phoneHash,currency:"NPR",completedAt:new Date().toISOString()};
@@ -132,7 +154,7 @@ describe("creator POS financial integration", () => {
         for (const [phase, expected] of [["sale",10],["partial",5],["full",0]] as const) {
           const result = await execute(process.execPath, ["--conditions=react-server","--import","tsx","scripts/cashier-creator-e2e.ts"], {
             cwd:resolve(process.env.LITE_CREATOR_TEST_ROOT),timeout:30000,
-            env:{...process.env,APP_ENV:"test",DATABASE_URL:process.env.LITE_CREATOR_TEST_DATABASE_URL,CREATOR_ATTRIBUTION_API_URL:address+"/creator-attribution/pos-sales",CASHIER_TEST_PHASE:phase,CASHIER_TEST_PHONE:phone,CASHIER_TEST_IDENTITY:customerId,CASHIER_TEST_SALE_ID:cashierSaleId}
+            env:{...process.env,APP_ENV:"test",DATABASE_URL:process.env.LITE_CREATOR_TEST_DATABASE_URL,CREATOR_ATTRIBUTION_API_URL:address+"/creator-attribution/pos-sales",MODERN_PRICING_API_URL:address,MODERN_PRICING_SERVICE_TOKEN:pricingToken,MODERN_PRICING_STORE_REFERENCE:store,CASHIER_TEST_SKU:sku,CASHIER_TEST_PHASE:phase,CASHIER_TEST_PHONE:phone,CASHIER_TEST_IDENTITY:customerId,CASHIER_TEST_SALE_ID:cashierSaleId}
           });
           const id = result.stdout.match(/CASHIER_EVENT_ID=([a-f0-9-]+)/)?.[1];
           expect(id).toBeDefined();
