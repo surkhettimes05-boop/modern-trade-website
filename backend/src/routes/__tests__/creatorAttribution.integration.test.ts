@@ -119,6 +119,36 @@ describe("creator POS financial integration", () => {
       expect(mismatch.json().code).toBe("CUSTOMER_MISMATCH");
       const serviceAccessDenied = await app.inject({method:"POST",url:"/api/internal/member-pricing/quotes",headers,payload:{channel:"POS",storeReference:store,customerReference:customerId,customerPhoneReference:phone,items:[{sku,quantity:"2"}]}});
       expect(serviceAccessDenied.statusCode).toBe(401);
+      // Reject malformed carts and identity injection on both customer channels.
+      for (const channel of ["web", "app"]) {
+        const base = "/customer-pricing/"+channel;
+        for (const items of [[], [{sku,quantity:0}], [{sku,quantity:1000}], [{sku,quantity:1.5}], [{sku,quantity:1},{sku,quantity:1}], [{sku,quantity:1,price:1}]]) {
+          const invalid = await app.inject({method:"POST",url:base+"/quotes",headers,payload:{store_id:store,items}});
+          expect(invalid.statusCode).toBe(400);
+          expect(invalid.json().code).toBe("INVALID_QUOTE_REQUEST");
+        }
+        for (const skus of [[], [sku,sku]]) {
+          const invalid = await app.inject({method:"POST",url:base+"/prices",headers,payload:{store_id:store,skus}});
+          expect(invalid.statusCode).toBe(400);
+          expect(invalid.json().code).toBe("INVALID_QUOTE_REQUEST");
+        }
+        const invalidValidation = await app.inject({method:"POST",url:base+"/quotes/validate",headers,payload:{...webPayload,signed_quote_token:"invalid",sale_reference:"qa-sale-reference"}});
+        expect(invalidValidation.statusCode).toBe(400);
+        for (const [suffix,payload] of [["/prices",{store_id:store,skus:[sku]}],["/quotes/validate",{...webPayload,signed_quote_token:"x".repeat(32),sale_reference:"qa-sale-reference"}]] as const) {
+          const denied = await app.inject({method:"POST",url:base+suffix,payload});
+          expect(denied.statusCode).toBe(401);
+        }
+      }
+      for (const suffix of ["/quotes","/quotes/validate","/customers/verify","/catalog"]) {
+        for (const token of ["", "x", "0".repeat(pricingToken.length)]) {
+          const denied = await app.inject({method:suffix==="/catalog"?"GET":"POST",url:"/api/internal/member-pricing"+suffix,headers:{authorization:"Bearer "+token}});
+          expect(denied.statusCode).toBe(401);
+          expect(denied.json().code).toBe("SERVICE_AUTH_REQUIRED");
+        }
+      }
+      const invalidCatalog = await app.inject({method:"GET",url:"/api/internal/member-pricing/catalog",headers:{authorization:"Bearer "+pricingToken}});
+      expect(invalidCatalog.statusCode).toBe(400);
+      expect(invalidCatalog.json().code).toBe("INVALID_STORE_REFERENCE");
       await sessions.revokeSession(session.session_token);
       expect((await app.inject({method:"POST",url:webUrl,headers,payload:webPayload})).statusCode).toBe(401);
       console.log("PRIVACY_GATE: anonymous, spoofed identity, mismatched phone, customer-to-service access and revoked session denied");
