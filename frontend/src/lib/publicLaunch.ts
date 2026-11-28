@@ -21,6 +21,7 @@ export function isClosedCustomerRoute(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   if (isWebsiteCheckoutEnabled(env) && /^\/(?:checkout|account)(?:\/|$)/.test(pathname)) return false;
+  if (isMembershipPortalEnabled(env) && pathname === '/account') return false;
   if (isMembershipPortalEnabled(env) && /^\/membership(?:\/|$)/.test(pathname)) return false;
   if (isCreatorPortalEnabled(env) && /^\/creator(?:\/|$)/.test(pathname)) return false;
   return /^\/(?:checkout|account|membership|creator|founders|loyalty|r)(?:\/|$)/.test(pathname);
@@ -57,7 +58,7 @@ export function shouldBlockBrowseOnlyMutation(
     (method === 'PUT' &&
       /^\/api\/shopping-cart\/[0-9a-f-]+\/items$/i.test(pathname));
   const membershipApi = isMembershipPortalEnabled(env) &&
-    method === 'POST' && pathname === '/api/membership/enroll';
+    method === 'POST' && /^\/api\/(?:membership\/enroll|auth\/otp\/(?:request|verify))$/.test(pathname);
   const creatorPortalApi = isCreatorPortalEnabled(env) &&
     method === 'POST' &&
     /^\/api\/creator-portal\/(?:otp\/(?:request|verify)|logout)$/.test(pathname);
