@@ -22,6 +22,9 @@ function csrfToken() {
 export default function MembershipPage() {
   const { selectedStore, items, reloadMemberPricing, refreshPricingQuote } = useShop();
   const [lang, setLang] = useState<'ne' | 'en'>('ne');
+  const [name, setName] = useState('');
+  const [ward, setWard] = useState('');
+  const [consent, setConsent] = useState(false);
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -97,7 +100,7 @@ export default function MembershipPage() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() },
-        body: JSON.stringify(selectedStore ? { store_id: selectedStore.id } : {}),
+        body: JSON.stringify({ ...(selectedStore ? { store_id: selectedStore.id } : {}), profile: { name: name.trim(), ward: ward.trim(), language: lang, consent, policy_version: 'membership-v1' } }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Enrollment failed.');
@@ -151,7 +154,10 @@ export default function MembershipPage() {
           <p className="text-xs font-bold tracking-wider">03 / 03</p>
           <h2 className="text-2xl font-bold">{t('सदस्यता पुष्टि गर्नुहोस्', 'Confirm membership')}</h2>
           <p>{t('संस्थापक स्थान बाँकी भए संस्थापक सदस्यता, नभए नियमित निःशुल्क सदस्यता प्राप्त हुनेछ।', 'You will receive founding membership if a place remains, otherwise free regular membership.')}</p>
-          <button className={button} disabled={busy} onClick={enroll}>{busy ? t('दर्ता हुँदैछ…', 'Enrolling…') : t('सदस्यता लिनुहोस्', 'Confirm free membership')}</button>
+          <label className="block text-sm font-semibold">{t('पूरा नाम', 'Full name')}<input className={field} autoComplete="name" maxLength={100} value={name} onChange={e => setName(e.target.value)} /></label>
+          <label className="block text-sm font-semibold">{t('टोल / वडा (वैकल्पिक)', 'Neighbourhood / ward (optional)')}<input className={field} maxLength={100} value={ward} onChange={e => setWard(e.target.value)} /></label>
+          <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-[#1E382B]" checked={consent} onChange={e => setConsent(e.target.checked)} /><span>{t('म निःशुल्क सदस्यता लिन र सदस्यता व्यवस्थापनका लागि मेरो प्रमाणित मोबाइल नम्बर, नाम र दिएको टोल / वडा प्रयोग गर्न सहमत छु। विशेष मूल्य हाल सक्रिय छैन।', 'I agree to free membership and the use of my verified mobile number, name and supplied neighbourhood / ward to administer it. Member prices are not active yet.')}</span></label>
+          <button className={button} disabled={busy || name.trim().length < 2 || !consent} onClick={enroll}>{busy ? t('दर्ता हुँदैछ…', 'Enrolling…') : t('सदस्यता लिनुहोस्', 'Confirm free membership')}</button>
         </section>}
         {!loading && membership && <section className="space-y-5 rounded-3xl bg-white p-6 shadow-sm">
           <h2 className="text-2xl font-bold">{active ? t('पासलहो परिवारमा स्वागत छ!', 'Welcome to the PASALHO family!') : t('तपाईंको सदस्यता', 'Your membership')}</h2>
@@ -163,6 +169,7 @@ export default function MembershipPage() {
             {active && <div className="mt-6 inline-block rounded-xl bg-white p-3"><QRCodeSVG value={membership.id} size={144} level="M" aria-label={t('सदस्यता QR कोड', 'Membership QR code')} /></div>}
           </div>
           <p className="text-sm">{active ? t('यो कार्ड पछि पनि यही पृष्ठमा हेर्न सक्नुहुन्छ।', 'Return to this page anytime to view your card.') : t('सहयोगका लागि पासलहोसँग सम्पर्क गर्नुहोस्।', 'Contact PASALHO for assistance.')}</p>
+          {active && <div className="rounded-xl border border-[#1E382B]/20 p-4 space-y-3"><h3 className="font-bold">{t('हाम्रो समुदायमा जोडिनुहोस्', 'Join our community')}</h3><p className="text-sm">{t('उद्घाटन र किनमेलसम्बन्धी जानकारीका लागि WhatsApp समुदायमा जोडिन सक्नुहुन्छ। यो वैकल्पिक हो।', 'Join our WhatsApp community for opening and shopping updates. This is optional.')}</p><a className={button + ' block text-center'} href="https://chat.whatsapp.com/LbyJYpCXxWT3RJ6aQ6Ln99" target="_blank" rel="noopener noreferrer">{t('WhatsApp समुदायमा जोडिनुहोस्', 'Join WhatsApp community')}</a></div>}
         </section>}
         <footer className="py-3 text-center text-xs">{t('सुर्खेतबाट सुरु भएको हाम्रो यात्रा।', 'Our journey begins in Surkhet.')}</footer>
       </div>
