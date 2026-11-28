@@ -918,7 +918,7 @@ export async function getMemberPricingCatalog(storeReference: string) {
              FROM batch_inventory bi
             WHERE bi.store_id = $1 AND bi.product_id = p.id AND bi.quantity > 0
          ) cost ON TRUE
-        WHERE p.status IN ('PUBLISHED', 'DRAFT', 'ARCHIVED')
+        WHERE p.status IN ('PUBLISHED', 'DRAFT')
         ORDER BY p.sku, p.id`,
       [store.id],
     );

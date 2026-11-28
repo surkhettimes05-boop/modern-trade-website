@@ -232,6 +232,25 @@ afterAll(async () => {
 });
 
 describe("authenticated member pricing quote API", () => {
+  it("serves the catalog using only valid product publication enum values", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/internal/member-pricing/catalog?storeReference=${ids.store}`,
+      headers: { authorization: `Bearer ${serviceToken}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      storeReference: ids.store,
+      currency: "NPR",
+    });
+    expect(response.json().products).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sku: ids.sku, active: true }),
+      ]),
+    );
+  });
+
   it("accepts and preserves the explicit COD channel", async () => {
     const { response, quote } = await issueQuote({ channel: "COD" });
 
