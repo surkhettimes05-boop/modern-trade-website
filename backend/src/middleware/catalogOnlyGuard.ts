@@ -38,6 +38,14 @@ export async function catalogOnlyGuard(request: FastifyRequest, reply: FastifyRe
   if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
   if (isStaffManagementMutationPath(request.url)) return;
   if (isWebCheckoutMutation(request.method, request.url)) return;
+  // Internal POS pricing remains available in catalogue-only mode.
+  // The registered pricing routes enforce their own service-token authentication.
+  if (
+    request.method === "POST" &&
+    /^\/api\/internal\/member-pricing\/(?:quotes(?:\/validate)?|customers\/verify)$/.test(
+      request.url.split("?", 1)[0],
+    )
+  ) return;
   return reply.status(503).header("cache-control", "no-store").send({
     code: "CATALOG_ONLY",
     error: "PASALHO is browse-only while registration and ordering are closed",
