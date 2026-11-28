@@ -135,7 +135,7 @@ export async function membershipRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       const body = z
-        .object({ store_id: z.string().uuid().optional() })
+        .object({ store_id: z.string().uuid().optional(), profile: z.object({ name: z.string().trim().min(2).max(100), ward: z.string().trim().max(100), language: z.enum(["ne", "en"]), consent: z.literal(true), policy_version: z.literal("membership-v1") }).strict().optional() })
         .strict()
         .safeParse(request.body ?? {});
       if (!body.success) {
@@ -145,10 +145,13 @@ export async function membershipRoutes(fastify: FastifyInstance) {
         });
       }
 
+      if (process.env.PRELAUNCH_MEMBERSHIP_ORGANIZATION_ID && !body.data.profile) {
+        return reply.status(400).send({ error: "Profile and membership consent required", code: "PROFILE_REQUIRED" });
+      }
       try {
         const membership = await membershipService.enrollCustomer(
           customerId(request),
-          { storeId: body.data.store_id },
+          { storeId: body.data.store_id, profile: body.data.profile },
         );
         return reply.status(201).send({ membership });
       } catch (error) {
