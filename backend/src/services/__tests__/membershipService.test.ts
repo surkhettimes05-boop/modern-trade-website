@@ -142,6 +142,16 @@ describe("Pasalho membership foundation", () => {
     }
   });
 
+  it("persists profile and versioned consent atomically with membership", async () => {
+    const member = await service.enrollCustomer(CUSTOMERS[0], { profile: { name: "Test Member", ward: "Ward 6", language: "ne", consent: true, policy_version: "membership-v1" } });
+    const profile = await query("SELECT preferred_name FROM customers WHERE id = $1", [CUSTOMERS[0]]);
+    expect(profile.rows[0].preferred_name).toBe("Test Member");
+    const history = await query("SELECT metadata FROM membership_status_history WHERE membership_id = $1", [member.id]);
+    expect(history.rows[0].metadata).toMatchObject({ enrollment_profile: { ward: "Ward 6", language: "ne" }, membership_consent: { accepted: true, policy_version: "membership-v1" } });
+    expect(history.rows[0].metadata.membership_consent.accepted_at).toBeTruthy();
+    expect((await service.enrollCustomer(CUSTOMERS[0])).id).toBe(member.id);
+  });
+
   it("rejects enrollment until the authenticated customer is OTP verified", async () => {
     await query(
       `UPDATE customers SET verification_status = 'UNVERIFIED' WHERE id = $1`,
