@@ -1,6 +1,8 @@
 import { getPool } from "../database/connection.js";
 import { normalizePhone } from "../utils/phoneNormalization.js";
 
+type EnrollmentProfile = { name: string; ward: string; language: "ne" | "en"; consent: true; policy_version: "membership-v1" };
+
 export type MembershipTier = "REGISTERED_MEMBER" | "FOUNDING_1000";
 export type MembershipStatus = "ACTIVE" | "SUSPENDED" | "CANCELLED";
 
@@ -135,6 +137,7 @@ export class MembershipService {
       requireFounding: boolean;
       actorId?: string;
       storeId?: string;
+      profile?: EnrollmentProfile;
     },
   ): Promise<CustomerMembershipRow> {
     const client = await getPool().connect();
@@ -261,6 +264,9 @@ export class MembershipService {
         return membership;
       }
 
+      if (options.profile) {
+        await client.query("UPDATE customers SET preferred_name = $2, updated_at = NOW() WHERE id = $1", [customerId, options.profile.name]);
+      }
       const campaign = await client.query(
         `SELECT capacity, allocated_count, active
            FROM membership_campaign_state
@@ -371,6 +377,7 @@ export class MembershipService {
           reason,
           JSON.stringify({
             source: options.source,
+            ...(options.profile ? { enrollment_profile: { ward: options.profile.ward, language: options.profile.language }, membership_consent: { accepted: true, policy_version: options.profile.policy_version, accepted_at: new Date().toISOString() } } : {}),
             ...(foundingNumber === null ? {} : { founding_number: foundingNumber }),
           }),
         ],
@@ -399,13 +406,14 @@ export class MembershipService {
 
   async enrollCustomer(
     customerId: string,
-    input: { source?: string; reason?: string; storeId?: string } = {},
+    input: { source?: string; reason?: string; storeId?: string; profile?: EnrollmentProfile } = {},
   ): Promise<CustomerMembershipRow> {
     return this.createMembership(customerId, {
       source: input.source ?? "CUSTOMER_SELF_SERVICE",
       reason: input.reason ?? "Customer requested free registration",
       requireFounding: false,
       storeId: input.storeId,
+      profile: input.profile,
     });
   }
 
