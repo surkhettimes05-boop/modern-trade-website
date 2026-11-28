@@ -121,6 +121,37 @@ describe("Pasalho membership foundation", () => {
     expect(Number(state.rows[0].allocated_count)).toBe(1);
   });
 
+  it("enrolls a verified pre-launch customer without publishing or assigning a store", async () => {
+    const previous = process.env.PRELAUNCH_MEMBERSHIP_ORGANIZATION_ID;
+    try {
+      await query("UPDATE customers SET home_store_id = NULL WHERE id = $1", [CUSTOMERS[0]]);
+      delete process.env.PRELAUNCH_MEMBERSHIP_ORGANIZATION_ID;
+      await expect(service.enrollCustomer(CUSTOMERS[0])).rejects.toMatchObject({ code: "STORE_REQUIRED" });
+      process.env.PRELAUNCH_MEMBERSHIP_ORGANIZATION_ID = ORG;
+      const first = await service.enrollCustomer(CUSTOMERS[0]);
+      expect(first.organization_id).toBe(ORG);
+      expect(first.founding_number).toBe(1);
+      expect((await service.enrollCustomer(CUSTOMERS[0])).id).toBe(first.id);
+      const customer = await query("SELECT home_store_id FROM customers WHERE id = $1", [CUSTOMERS[0]]);
+      expect(customer.rows[0].home_store_id).toBeNull();
+      await query("UPDATE customers SET verification_status = 'UNVERIFIED', home_store_id = NULL WHERE id = $1", [CUSTOMERS[1]]);
+      await expect(service.enrollCustomer(CUSTOMERS[1])).rejects.toMatchObject({ code: "OTP_REQUIRED" });
+    } finally {
+      if (previous === undefined) delete process.env.PRELAUNCH_MEMBERSHIP_ORGANIZATION_ID;
+      else process.env.PRELAUNCH_MEMBERSHIP_ORGANIZATION_ID = previous;
+    }
+  });
+
+  it("persists profile and versioned consent atomically with membership", async () => {
+    const member = await service.enrollCustomer(CUSTOMERS[0], { profile: { name: "Test Member", ward: "Ward 6", language: "ne", consent: true, policy_version: "membership-v1" } });
+    const profile = await query("SELECT preferred_name FROM customers WHERE id = $1", [CUSTOMERS[0]]);
+    expect(profile.rows[0].preferred_name).toBe("Test Member");
+    const history = await query("SELECT metadata FROM membership_status_history WHERE membership_id = $1", [member.id]);
+    expect(history.rows[0].metadata).toMatchObject({ enrollment_profile: { ward: "Ward 6", language: "ne" }, membership_consent: { accepted: true, policy_version: "membership-v1" } });
+    expect(history.rows[0].metadata.membership_consent.accepted_at).toBeTruthy();
+    expect((await service.enrollCustomer(CUSTOMERS[0])).id).toBe(member.id);
+  });
+
   it("rejects enrollment until the authenticated customer is OTP verified", async () => {
     await query(
       `UPDATE customers SET verification_status = 'UNVERIFIED' WHERE id = $1`,

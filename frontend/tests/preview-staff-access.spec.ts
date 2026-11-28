@@ -61,3 +61,12 @@ test('membership and approved creator portal open only with their production fla
   expect(shouldBlockBrowseOnlyMutation('/api/creator-portal/logout', 'POST', creator)).toBe(false);
   expect(shouldBlockBrowseOnlyMutation('/api/creator-portal/overview', 'POST', creator)).toBe(true);
 });
+
+test('membership-only launch allows OTP but not checkout mutations', () => {
+  const env = { ...process.env, VERCEL_ENV: 'production', NEXT_PUBLIC_ENABLE_MEMBERSHIP: 'true', NEXT_PUBLIC_ENABLE_WEB_CHECKOUT: 'false' };
+  expect(isClosedCustomerRoute('/account', env)).toBe(false);
+  expect(isClosedCustomerRoute('/account/dashboard', env)).toBe(true);
+  expect(isClosedCustomerRoute('/checkout', env)).toBe(true);
+  for (const path of ['/api/auth/otp/request', '/api/auth/otp/verify', '/api/membership/enroll']) expect(shouldBlockBrowseOnlyMutation(path, 'POST', env)).toBe(false);
+  for (const path of ['/api/checkout/cod', '/api/auth/google/link', '/api/shopping-cart']) expect(shouldBlockBrowseOnlyMutation(path, 'POST', env)).toBe(true);
+});
