@@ -188,7 +188,20 @@ export class MembershipService {
           "Customer phone identity is not normalized",
         );
       }
-      if (!customerRow.home_store_id) {
+      if (!customerRow.home_store_id && !options.storeId && options.source === "CUSTOMER_SELF_SERVICE" && process.env.PRELAUNCH_MEMBERSHIP_ORGANIZATION_ID) {
+        const configuredId = process.env.PRELAUNCH_MEMBERSHIP_ORGANIZATION_ID;
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(configuredId)) {
+          throw new MembershipServiceError("ORGANIZATION_REQUIRED", "Pre-launch membership is unavailable");
+        }
+        const organization = await client.query(
+          "SELECT id FROM organizations WHERE id = $1 AND status = 'ACTIVE' AND country_code = 'NP' FOR SHARE",
+          [configuredId],
+        );
+        if (!organization.rowCount) {
+          throw new MembershipServiceError("ORGANIZATION_REQUIRED", "Pre-launch membership is unavailable");
+        }
+        customerRow.organization_id = organization.rows[0].id;
+      } else if (!customerRow.home_store_id) {
         if (!options.storeId) {
           throw new MembershipServiceError(
             "STORE_REQUIRED",
